@@ -1,0 +1,89 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import {
+  listStudents,
+  getStudent,
+  createStudent,
+  createStudentWithFamily,
+  mergeSiblings,
+  updateStudent,
+  createEnrollment,
+  upsertMedical,
+  createStudentLogin,
+} from "@/server/services/student.service";
+import { listClasses } from "@/server/services/class.service";
+import { getCurrentSession, listSessions } from "@/server/services/session.service";
+import type {
+  CreateEnrollmentInput,
+  CreateStudentInput,
+  CreateStudentWithFamilyInput,
+  MergeSiblingsInput,
+  UpdateStudentInput,
+  UpsertMedicalInput,
+} from "@/server/validators/student.validator";
+
+export async function listStudentsAction(input?: Parameters<typeof listStudents>[0]) {
+  return listStudents(input);
+}
+
+export async function getStudentAction(id: string) {
+  return getStudent(id);
+}
+
+export async function createStudentAction(input: CreateStudentInput) {
+  const result = await createStudent(input);
+  revalidatePath("/students");
+  revalidatePath("/families");
+  return result;
+}
+
+export async function createStudentWithFamilyAction(input: CreateStudentWithFamilyInput) {
+  const result = await createStudentWithFamily(input);
+  revalidatePath("/students");
+  revalidatePath("/families");
+  return result;
+}
+
+export async function mergeSiblingsAction(input: MergeSiblingsInput) {
+  const result = await mergeSiblings(input);
+  revalidatePath("/students");
+  revalidatePath("/families");
+  revalidatePath(`/families/${result.familyId}`);
+  return result;
+}
+
+export async function updateStudentAction(input: UpdateStudentInput) {
+  const result = await updateStudent(input);
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.id}`);
+  return result;
+}
+
+export async function createEnrollmentAction(input: CreateEnrollmentInput) {
+  const result = await createEnrollment(input);
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.studentId}`);
+  return result;
+}
+
+export async function upsertMedicalAction(input: UpsertMedicalInput) {
+  const result = await upsertMedical(input);
+  revalidatePath(`/students/${input.studentId}`);
+  return result;
+}
+
+export async function createStudentLoginAction(studentId: string) {
+  const result = await createStudentLogin(studentId);
+  revalidatePath(`/students/${studentId}`);
+  return result;
+}
+
+export async function getStudentFormOptionsAction() {
+  const [classes, sessions, currentSession] = await Promise.all([
+    listClasses({ pageSize: 100 }),
+    listSessions({ pageSize: 50 }),
+    getCurrentSession(),
+  ]);
+  return { classes, sessions, currentSession };
+}
