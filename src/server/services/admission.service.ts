@@ -29,8 +29,8 @@ import {
 
 async function generateAdmissionNo(schoolId: string): Promise<string> {
   const year = new Date().getFullYear();
-  const count = await prisma.admissionApplication.count({
-    where: { session: { schoolId }, admissionNo: { not: null } },
+  const count = await prisma.student.count({
+    where: { schoolId },
   });
   return generateSequentialNo("ADM", year, count);
 }

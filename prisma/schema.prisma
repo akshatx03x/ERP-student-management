@@ -244,10 +244,10 @@ model User {
   school             School?  @relation(fields: [schoolId], references: [id])
 
   staffProfileId String?       @unique
-  staffProfile   StaffProfile? @relation(fields: [staffProfileId], references: [id])
+  staffProfile   StaffProfile? @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
 
   studentId String?  @unique
-  student   Student? @relation(fields: [studentId], references: [id])
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   sessions Session[]
   accounts Account[]
@@ -1025,9 +1025,9 @@ model FeePaymentAllocation {
   paymentId    String
   payment      FamilyPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   studentId    String
-  student      Student       @relation(fields: [studentId], references: [id])
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   studentFeeId String?
-  studentFee   StudentFee?   @relation(fields: [studentFeeId], references: [id])
+  studentFee   StudentFee?   @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
   amount       Decimal       @db.Decimal(12, 2)
 
   @@index([studentId])
@@ -1127,7 +1127,7 @@ model AuditLog {
   schoolId   String?
   school     School? @relation(fields: [schoolId], references: [id])
   userId     String?
-  user       User?   @relation(fields: [userId], references: [id])
+  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   action     String
   module     String
   entityType String

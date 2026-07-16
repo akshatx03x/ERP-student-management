@@ -82,12 +82,12 @@ export async function listStudents(input?: {
   const enrollmentFilter =
     params.sessionId || params.classId || params.sectionId
       ? {
-          some: {
-            ...(params.sessionId ? { sessionId: params.sessionId } : {}),
-            ...(params.classId ? { classId: params.classId } : {}),
-            ...(params.sectionId ? { sectionId: params.sectionId } : {}),
-          },
-        }
+        some: {
+          ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+          ...(params.classId ? { classId: params.classId } : {}),
+          ...(params.sectionId ? { sectionId: params.sectionId } : {}),
+        },
+      }
       : undefined;
 
   const where = {
@@ -98,12 +98,12 @@ export async function listStudents(input?: {
     ...(enrollmentFilter ? { enrollments: enrollmentFilter } : {}),
     ...(params.search
       ? {
-          OR: [
-            { fullName: { contains: params.search, mode: "insensitive" as const } },
-            { admissionNo: { contains: params.search, mode: "insensitive" as const } },
-            { aadhaar: { contains: params.search } },
-          ],
-        }
+        OR: [
+          { fullName: { contains: params.search, mode: "insensitive" as const } },
+          { admissionNo: { contains: params.search, mode: "insensitive" as const } },
+          { aadhaar: { contains: params.search } },
+        ],
+      }
       : {}),
   };
 
@@ -154,7 +154,21 @@ export async function getStudent(studentId: string) {
 
   const siblings = await prisma.student.findMany({
     where: { familyId: student.familyId, id: { not: studentId }, schoolId },
-    select: { id: true, fullName: true, admissionNo: true, status: true },
+    select: {
+      id: true,
+      fullName: true,
+      admissionNo: true,
+      status: true,
+      gender: true,
+      enrollments: {
+        include: { class: true, section: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+      studentFees: {
+        include: { allocations: true },
+      },
+    },
     orderBy: { fullName: "asc" },
   });
 
@@ -431,10 +445,10 @@ export async function updateStudent(input: UpdateStudentInput) {
   const fullName =
     data.firstName || data.middleName !== undefined || data.lastName !== undefined
       ? buildFullName(
-          data.firstName ?? existing.firstName,
-          data.middleName !== undefined ? data.middleName : existing.middleName,
-          data.lastName !== undefined ? data.lastName : existing.lastName,
-        )
+        data.firstName ?? existing.firstName,
+        data.middleName !== undefined ? data.middleName : existing.middleName,
+        data.lastName !== undefined ? data.lastName : existing.lastName,
+      )
       : undefined;
 
   const { id, ...rest } = data;

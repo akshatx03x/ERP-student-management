@@ -316,11 +316,32 @@ export async function listFeeStructures(sessionId?: string, classId?: string) {
   });
 
   return structures.map((s) => ({
-    ...s,
+    id: s.id,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    sessionId: s.sessionId,
+    classId: s.classId,
+    name: s.name,
+    class: {
+      id: s.class.id,
+      name: s.class.name,
+    },
+    session: {
+      id: s.session.id,
+      name: s.session.name,
+    },
     totalAnnualFee: s.items.reduce((sum, item) => sum + decimalToNumber(item.amount), 0),
     items: s.items.map((item) => ({
-      ...item,
+      id: item.id,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      feeStructureId: item.feeStructureId,
+      feeHeadId: item.feeHeadId,
       amount: decimalToNumber(item.amount),
+      feeHead: {
+        id: item.feeHead.id,
+        name: item.feeHead.name,
+      },
     })),
   }));
 }
@@ -493,10 +514,37 @@ export async function listStudentFees(input?: {
 
   return {
     items: items.map((f) => ({
-      ...f,
+      id: f.id,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt,
+      studentId: f.studentId,
+      feeHeadId: f.feeHeadId,
+      sessionId: f.sessionId,
+      dueDate: f.dueDate,
+      status: f.status,
+      remarks: f.remarks,
       amount: decimalToNumber(f.amount),
+      student: {
+        id: f.student.id,
+        fullName: f.student.fullName,
+        admissionNo: f.student.admissionNo,
+        familyId: f.student.familyId,
+      },
+      feeHead: {
+        id: f.feeHead.id,
+        name: f.feeHead.name,
+      },
+      session: {
+        id: f.session.id,
+        name: f.session.name,
+      },
       allocations: f.allocations.map((a) => ({
-        ...a,
+        id: a.id,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+        paymentId: a.paymentId,
+        studentId: a.studentId,
+        studentFeeId: a.studentFeeId,
         amount: decimalToNumber(a.amount),
       })),
       paidAmount: decimalToNumber(sumDecimals(f.allocations.map((a) => a.amount))),
@@ -845,16 +893,59 @@ export async function listPayments(input?: {
   ]);
 
   const mapped = items.map((p) => ({
-    ...p,
+    id: p.id,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    familyId: p.familyId,
     amount: decimalToNumber(p.amount),
+    method: p.method,
+    referenceNo: p.referenceNo,
+    paidAt: p.paidAt,
+    receiptNo: p.receiptNo,
+    notes: p.notes,
+    recordedById: p.recordedById,
+    family: {
+      id: p.family.id,
+      fatherName: p.family.fatherName,
+      motherName: p.family.motherName,
+      primaryPhone: p.family.primaryPhone,
+    },
+    recordedBy: user.role === Role.STUDENT ? null : p.recordedBy ? {
+      id: p.recordedBy.id,
+      name: p.recordedBy.name,
+    } : null,
     allocations: p.allocations.map((a) => ({
-      ...a,
+      id: a.id,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      paymentId: a.paymentId,
+      studentId: a.studentId,
+      studentFeeId: a.studentFeeId,
       amount: decimalToNumber(a.amount),
+      student: {
+        id: a.student.id,
+        fullName: a.student.fullName,
+        admissionNo: a.student.admissionNo,
+      },
       studentFee: a.studentFee
-        ? { ...a.studentFee, amount: decimalToNumber(a.studentFee.amount) }
+        ? {
+            id: a.studentFee.id,
+            createdAt: a.studentFee.createdAt,
+            updatedAt: a.studentFee.updatedAt,
+            studentId: a.studentFee.studentId,
+            feeHeadId: a.studentFee.feeHeadId,
+            sessionId: a.studentFee.sessionId,
+            amount: decimalToNumber(a.studentFee.amount),
+            dueDate: a.studentFee.dueDate,
+            status: a.studentFee.status,
+            remarks: a.studentFee.remarks,
+            feeHead: {
+              id: a.studentFee.feeHead.id,
+              name: a.studentFee.feeHead.name,
+            },
+          }
         : null,
     })),
-    recordedBy: user.role === Role.STUDENT ? null : p.recordedBy,
   }));
 
   return {
@@ -977,6 +1068,7 @@ export async function recordFamilyPayment(input: RecordPaymentInput) {
         phone: branding.phone,
         email: branding.email,
         receiptFooter: branding.receiptFooter,
+        logoDocumentId: branding.logoDocumentId,
       },
       allocations: payment.allocations.map((a) => ({
         studentName: a.student.fullName,

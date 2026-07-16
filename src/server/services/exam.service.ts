@@ -407,6 +407,7 @@ export async function generateReportCard(input: GenerateReportCardInput) {
       schoolName: branding.schoolName,
       address: branding.address,
       reportCardFooter: branding.reportCardFooter,
+      logoDocumentId: branding.logoDocumentId,
     },
     subjects,
     summary: {

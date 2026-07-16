@@ -97,6 +97,23 @@ export async function createTimetableSlot(input: CreateTimetableSlotInput) {
     throw new Error("A slot already exists for this section, day, and period");
   }
 
+  const teacherConflict = await prisma.timetableSlot.findFirst({
+    where: {
+      sessionId: data.sessionId,
+      staffProfileId: data.staffProfileId,
+      dayOfWeek: data.dayOfWeek,
+      periodNumber: data.periodNumber,
+    },
+    include: {
+      section: { include: { class: true } },
+    },
+  });
+  if (teacherConflict) {
+    throw new Error(
+      `Teacher ${staff.fullName} is already scheduled in ${teacherConflict.section.class.name} - ${teacherConflict.section.name} at this day and period`
+    );
+  }
+
   return prisma.$transaction(async (tx) => {
     const slot = await tx.timetableSlot.create({ data });
     await writeAuditLog(

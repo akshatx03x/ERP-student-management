@@ -8,6 +8,7 @@ import {
   createStudentWithFamily,
   mergeSiblings,
   updateStudent,
+  deleteStudent,
   createEnrollment,
   upsertMedical,
   createStudentLogin,
@@ -86,4 +87,11 @@ export async function getStudentFormOptionsAction() {
     getCurrentSession(),
   ]);
   return { classes, sessions, currentSession };
+}
+
+export async function deleteStudentAction(studentId: string) {
+  const result = await deleteStudent(studentId);
+  revalidatePath("/students");
+  revalidatePath("/families");
+  return result;
 }

@@ -40,7 +40,13 @@ export async function listFamilies(input?: {
   const [items, total] = await Promise.all([
     prisma.family.findMany({
       where,
-      include: { _count: { select: { students: true } } },
+      include: {
+        _count: { select: { students: true } },
+        students: {
+          select: { id: true, fullName: true, admissionNo: true },
+          orderBy: { fullName: "asc" },
+        },
+      },
       orderBy: { createdAt: "desc" },
       skip,
       take,
@@ -52,6 +58,7 @@ export async function listFamilies(input?: {
     items: items.map((f) => ({
       ...f,
       childrenCount: f._count.students,
+      students: f.students,
     })),
     total,
     page,

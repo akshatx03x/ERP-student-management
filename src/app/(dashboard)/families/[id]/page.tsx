@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { decimalToNumber } from "@/server/lib/helpers";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { FamilyProfileCards } from "./family-profile-cards";
 
 export default async function FamilyDetailPage({
   params,
@@ -49,47 +50,7 @@ export default async function FamilyDetailPage({
       />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Parent information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>
-              <span className="text-muted-foreground">Father:</span> {family.fatherName || "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Mother:</span> {family.motherName || "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Guardian:</span>{" "}
-              {family.guardianName || "—"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Contact & address</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>
-              <span className="text-muted-foreground">Mobile:</span> {family.primaryPhone || "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Secondary phone:</span>{" "}
-              {family.secondaryPhone || "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Email:</span> {family.email || "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Address:</span>{" "}
-              {[family.addressLine1, family.addressLine2, family.city, family.state, family.pincode]
-                .filter(Boolean)
-                .join(", ") || "—"}
-            </p>
-          </CardContent>
-        </Card>
+        <FamilyProfileCards family={family} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

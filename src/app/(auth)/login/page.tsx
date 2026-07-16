@@ -4,8 +4,8 @@ import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in with your email to continue.">
-      <Suspense fallback={<p className="text-sm text-stone-500">Loading…</p>}>
+    <AuthShell title="Login to your account" subtitle="">
+      <Suspense fallback={<p className="text-sm text-slate-400">Loading…</p>}>
         <LoginForm />
       </Suspense>
     </AuthShell>

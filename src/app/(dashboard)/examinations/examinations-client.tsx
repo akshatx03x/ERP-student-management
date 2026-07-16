@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,38 @@ export function ExaminationsClient(props: {
 }) {
   const [pending, startTransition] = useTransition();
   const [sessionId, setSessionId] = useState(props.currentSessionId ?? "");
+  const [selectedReportCard, setSelectedReportCard] = useState<any>(null);
+  const [batchReportCards, setBatchReportCards] = useState<any[]>([]);
+
+  const handleBatchGenerate = () => {
+    if (!sessionId) {
+      toast.error("Academic session is required");
+      return;
+    }
+    if (props.students.length === 0) {
+      toast.error("No students found to generate report cards for");
+      return;
+    }
+    startTransition(async () => {
+      const generated = [];
+      let count = 0;
+      for (const s of props.students) {
+        try {
+          const card = await generateReportCardAction({
+            studentId: s.id,
+            sessionId,
+            examId: marksExamId || null,
+          });
+          generated.push(card);
+          count++;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      setBatchReportCards(generated);
+      toast.success(`Generated ${count} report cards successfully.`);
+    });
+  };
   const [typeName, setTypeName] = useState("");
   const [examForm, setExamForm] = useState({
     examTypeId: props.examTypes[0]?.id ?? "",
@@ -160,30 +193,212 @@ export function ExaminationsClient(props: {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Report card</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Select id="rc-student" defaultValue={props.students[0]?.id}>
-            {props.students.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}
-          </Select>
-          <Button disabled={pending || !sessionId} onClick={() => startTransition(async () => {
-            try {
-              const select = document.getElementById("rc-student") as HTMLSelectElement;
-              await generateReportCardAction({
-                studentId: select.value,
-                sessionId,
-                examId: marksExamId || null,
-              });
-              toast.success("Report card generated");
-            } catch (e) { toast.error(e instanceof Error ? e.message : "Failed"); }
-          })}>Generate</Button>
+        <CardHeader>
+          <CardTitle>Report Cards & Grading</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Select id="rc-student" defaultValue={props.students[0]?.id} className="max-w-xs">
+              {props.students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.fullName}
+                </option>
+              ))}
+            </Select>
+            <Button
+              disabled={pending || !sessionId}
+              onClick={() =>
+                startTransition(async () => {
+                  try {
+                    const select = document.getElementById("rc-student") as HTMLSelectElement;
+                    const card = await generateReportCardAction({
+                      studentId: select.value,
+                      sessionId,
+                      examId: marksExamId || null,
+                    });
+                    setSelectedReportCard(card);
+                    toast.success("Report card generated");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Failed");
+                  }
+                })
+              }
+            >
+              Generate & View
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending || !sessionId}
+              onClick={handleBatchGenerate}
+            >
+              Batch Generate Class
+            </Button>
+          </div>
+
+          {selectedReportCard && (
+            <div className="border rounded-lg p-4 bg-stone-50 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold">Report card generated for {selectedReportCard.snapshot?.student?.fullName || "student"}</span>
+                <Button size="sm" onClick={() => window.print()}>
+                  Print Report Card
+                </Button>
+              </div>
+              <div className="bg-white border rounded p-4 shadow-inner max-h-96 overflow-auto">
+                <ReportCardPreview card={selectedReportCard} />
+              </div>
+            </div>
+          )}
+
+          {batchReportCards.length > 0 && (
+            <div className="border rounded-lg p-4 bg-stone-50 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold">Batch generated {batchReportCards.length} report cards</span>
+                <Button size="sm" onClick={() => window.print()}>
+                  Print All Class Cards
+                </Button>
+              </div>
+              <div className="space-y-4 max-h-96 overflow-auto p-2 bg-stone-200 rounded border">
+                {batchReportCards.map((card, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded border shadow-sm">
+                    <ReportCardPreview card={card} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <div className="space-y-2 text-sm">
+        <h3 className="font-semibold text-stone-700">Scheduled Examinations</h3>
         {props.exams.map((e) => (
-          <div key={e.id} className="rounded border px-3 py-2">{e.name} · {e.examType.name} · {e.class.name}</div>
+          <div key={e.id} className="rounded border bg-card px-3 py-2">
+            {e.name} · {e.examType.name} · {e.class.name}
+          </div>
         ))}
       </div>
+
+      {/* Printable Report Cards (Only shown during printing) */}
+      <div className="print-only">
+        {selectedReportCard ? (
+          <ReportCardPreview card={selectedReportCard} />
+        ) : batchReportCards.length > 0 ? (
+          batchReportCards.map((card, idx) => (
+            <div key={idx} style={{ pageBreakAfter: "always" }}>
+              <ReportCardPreview card={card} />
+            </div>
+          ))
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ReportCardPreview({ card }: { card: any }) {
+  if (!card) return null;
+  const snap = card.snapshot || card;
+  return (
+    <div className="bg-white p-8 text-black border border-stone-200 rounded-md font-sans max-w-2xl mx-auto shadow-sm my-4 break-inside-avoid">
+      {/* Header */}
+      <div className="text-center border-b pb-4 mb-4">
+        {snap.branding?.logoDocumentId && (
+          <img
+            src={`/api/documents/${snap.branding.logoDocumentId}`}
+            className="mx-auto h-16 w-auto object-contain mb-3"
+            alt="School Logo"
+          />
+        )}
+        <h1 className="text-xl font-bold tracking-wide uppercase text-stone-800">
+          {snap.branding?.schoolName || "Vidhyanjali Public School"}
+        </h1>
+        {snap.branding?.address && (
+          <p className="text-xs text-stone-500">{snap.branding.address}</p>
+        )}
+        <div className="mt-2 inline-block border border-stone-800 px-4 py-1 text-xs font-bold uppercase tracking-wider">
+          Student Progress Report (Session {snap.session})
+        </div>
+      </div>
+
+      {/* Student Details */}
+      <div className="grid grid-cols-2 gap-4 text-xs mb-6 border-b pb-4">
+        <div className="space-y-1">
+          <p><span className="text-stone-500 font-medium">Student Name:</span> <span className="font-bold text-stone-900">{snap.student?.fullName}</span></p>
+          <p><span className="text-stone-500 font-medium">Admission No:</span> <span className="font-mono">{snap.student?.admissionNo}</span></p>
+          <p><span className="text-stone-500 font-medium">Roll No:</span> <span>{snap.student?.rollNo ?? "—"}</span></p>
+        </div>
+        <div className="text-right space-y-1">
+          <p><span className="text-stone-500 font-medium">Class:</span> <span className="font-semibold">{snap.student?.class}</span></p>
+          <p><span className="text-stone-500 font-medium">Section:</span> <span className="font-semibold">{snap.student?.section}</span></p>
+        </div>
+      </div>
+
+      {/* Marks Table */}
+      <table className="w-full text-xs border-collapse mb-6">
+        <thead>
+          <tr className="border-b border-stone-800 bg-stone-50 text-left font-bold text-stone-700">
+            <th className="py-2 px-3">Subject / Exam</th>
+            <th className="py-2 px-3 text-center">Max Marks</th>
+            <th className="py-2 px-3 text-center">Pass Marks</th>
+            <th className="py-2 px-3 text-center">Marks Obtained</th>
+            <th className="py-2 px-3 text-center">Grade</th>
+            <th className="py-2 px-3 text-right">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(snap.subjects || []).map((sub: any, idx: number) => (
+            <tr key={idx} className="border-b border-stone-200">
+              <td className="py-2 px-3">
+                <span className="font-semibold text-stone-800">{sub.subject}</span>
+                <span className="text-[10px] text-stone-400 block">{sub.exam} ({sub.examType})</span>
+              </td>
+              <td className="py-2 px-3 text-center font-mono">{sub.maxMarks}</td>
+              <td className="py-2 px-3 text-center font-mono text-stone-600">{sub.passMarks}</td>
+              <td className="py-2 px-3 text-center font-mono font-bold text-stone-900">{sub.marksObtained}</td>
+              <td className="py-2 px-3 text-center font-semibold text-stone-800">{sub.grade || "—"}</td>
+              <td className="py-2 px-3 text-right">
+                <span className={sub.passed ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>
+                  {sub.passed ? "Pass" : "Fail"}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Summary Matrix */}
+      <div className="grid grid-cols-3 gap-2 border border-stone-300 rounded p-3 text-center text-xs mb-6">
+        <div>
+          <p className="text-stone-500 mb-0.5">Total Marks</p>
+          <p className="font-bold text-sm font-mono">{snap.summary?.totalObtained} / {snap.summary?.totalMax}</p>
+        </div>
+        <div>
+          <p className="text-stone-500 mb-0.5">Percentage</p>
+          <p className="font-bold text-sm font-mono">{snap.summary?.overallPercent}%</p>
+        </div>
+        <div>
+          <p className="text-stone-500 mb-0.5">Overall Grade</p>
+          <p className="font-bold text-sm text-stone-800">{snap.summary?.overallGrade || "—"}</p>
+        </div>
+      </div>
+
+      {/* Signatures */}
+      <div className="mt-12 grid grid-cols-2 gap-4 text-center text-[10px] text-stone-400">
+        <div className="pt-8 border-t border-dashed border-stone-200">
+          <p className="h-4"></p>
+          <p>Class Teacher Signature</p>
+        </div>
+        <div className="pt-8 border-t border-dashed border-stone-200">
+          <p className="h-4"></p>
+          <p>Principal Signature</p>
+        </div>
+      </div>
+
+      {/* Footer */}
+      {snap.branding?.reportCardFooter && (
+        <div className="text-center mt-8 pt-4 border-t border-stone-100 text-[10px] text-stone-400">
+          <p>{snap.branding.reportCardFooter}</p>
+        </div>
+      )}
     </div>
   );
 }

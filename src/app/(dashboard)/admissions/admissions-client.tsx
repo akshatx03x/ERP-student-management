@@ -85,11 +85,22 @@ export function AdmissionsClient({
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState(() => emptyForm(sessions, classes, currentSessionId));
   const [matchDialog, setMatchDialog] = useState<MatchedFamily | null>(null);
+  const [approvingApp, setApprovingApp] = useState<Admission | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>("");
+
+  const [familySearchPhone, setFamilySearchPhone] = useState("");
+  const [foundSearchFamily, setFoundSearchFamily] = useState<MatchedFamily | null>(null);
+  const [searchAttempted, setSearchAttempted] = useState(false);
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
 
   function resetForm() {
     setForm(emptyForm(sessions, classes, currentSessionId));
     setStep(1);
     setMatchDialog(null);
+    setFamilySearchPhone("");
+    setFoundSearchFamily(null);
+    setSearchAttempted(false);
+    setSelectedFamilyId(null);
   }
 
   function studentStepValid() {
@@ -118,6 +129,31 @@ export function AdmissionsClient({
     resetForm();
   }
 
+  function handleSearchFamily() {
+    if (!familySearchPhone.trim()) return;
+    startTransition(async () => {
+      try {
+        const existing = await findFamilyByPhoneAction(familySearchPhone.trim());
+        setFoundSearchFamily(existing);
+        setSearchAttempted(true);
+      } catch (e) {
+        toast.error("Lookup failed");
+      }
+    });
+  }
+
+  function applySearchFamily() {
+    if (!foundSearchFamily) return;
+    setForm((f) => ({
+      ...f,
+      fatherName: foundSearchFamily.fatherName ?? "",
+      motherName: foundSearchFamily.motherName ?? "",
+      phone: foundSearchFamily.primaryPhone ?? f.phone,
+    }));
+    setSelectedFamilyId(foundSearchFamily.id);
+    toast.success("Family linked and fields pre-filled!");
+  }
+
   function handleSave() {
     if (!parentStepValid()) {
       toast.error("Enter mobile number and at least one parent/guardian name");
@@ -126,6 +162,10 @@ export function AdmissionsClient({
 
     startTransition(async () => {
       try {
+        if (selectedFamilyId) {
+          await submitAdmission(selectedFamilyId);
+          return;
+        }
         const existing = await findFamilyByPhoneAction(form.phone.trim());
         if (existing) {
           setMatchDialog(existing);
@@ -240,6 +280,33 @@ export function AdmissionsClient({
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-3">
+              <div className="md:col-span-3 rounded-md border border-stone-200 bg-stone-50 p-3 space-y-2">
+                <Label className="font-semibold text-xs">Is this student a sibling of an existing student?</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter parent mobile number to look up family..."
+                    value={familySearchPhone}
+                    onChange={(e) => setFamilySearchPhone(e.target.value)}
+                    className="max-w-xs bg-white h-9"
+                  />
+                  <Button type="button" size="sm" variant="secondary" onClick={handleSearchFamily} disabled={pending}>
+                    Search Family
+                  </Button>
+                </div>
+                {foundSearchFamily ? (
+                  <div className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200 flex justify-between items-center mt-1">
+                    <span>
+                      Found Sibling Family: {foundSearchFamily.fatherName} & {foundSearchFamily.motherName} ({foundSearchFamily.primaryPhone})
+                    </span>
+                    <Button type="button" size="sm" onClick={applySearchFamily}>
+                      Link & Autofill
+                    </Button>
+                  </div>
+                ) : searchAttempted ? (
+                  <p className="text-xs text-destructive">No family found with this phone number.</p>
+                ) : null}
+              </div>
+
               <div className="space-y-2">
                 <Label>Father name</Label>
                 <Input
@@ -363,9 +430,60 @@ export function AdmissionsClient({
         </div>
       ) : null}
 
+      {approvingApp ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <Card className="w-full max-w-md shadow-lg">
+            <CardHeader>
+              <CardTitle>Approve Admission — {approvingApp.applicantName}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Select Section</Label>
+                <Select
+                  value={selectedSectionId}
+                  onChange={(e) => setSelectedSectionId(e.target.value)}
+                >
+                  {(classes.find((c) => c.name === approvingApp.appliedClass.name)?.sections ?? []).map((sec) => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setApprovingApp(null)}
+                  disabled={pending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={pending || !selectedSectionId}
+                  onClick={() => {
+                    startTransition(async () => {
+                      try {
+                        await approveAdmissionAction({ id: approvingApp.id, sectionId: selectedSectionId });
+                        toast.success("Approved — admission number assigned");
+                        setApprovingApp(null);
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : "Failed");
+                      }
+                    });
+                  }}
+                >
+                  {pending ? "Approving..." : "Confirm Approval"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         {admissions.map((a) => {
-          const sectionId = classes.find((c) => c.name === a.appliedClass.name)?.sections[0]?.id;
           return (
             <div
               key={a.id}
@@ -382,11 +500,11 @@ export function AdmissionsClient({
               <div className="flex items-center gap-2">
                 <Badge
                   variant={
-                    a.status === "APPROVED"
-                      ? "success"
-                      : a.status === "REJECTED"
-                        ? "destructive"
-                        : "warning"
+                     a.status === "APPROVED"
+                       ? "success"
+                       : a.status === "REJECTED"
+                         ? "destructive"
+                         : "warning"
                   }
                 >
                   {a.status}
@@ -396,16 +514,12 @@ export function AdmissionsClient({
                     <Button
                       size="sm"
                       disabled={pending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          try {
-                            await approveAdmissionAction({ id: a.id, sectionId });
-                            toast.success("Approved — admission number assigned");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Failed");
-                          }
-                        })
-                      }
+                      onClick={() => {
+                        const clsInfo = classes.find((c) => c.name === a.appliedClass.name);
+                        const secs = clsInfo?.sections ?? [];
+                        setApprovingApp(a);
+                        setSelectedSectionId(secs[0]?.id ?? "");
+                      }}
                     >
                       Approve
                     </Button>

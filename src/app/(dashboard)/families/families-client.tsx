@@ -15,6 +15,7 @@ type FamilyRow = {
   guardianName: string | null;
   primaryPhone: string | null;
   childrenCount: number;
+  students: Array<{ id: string; fullName: string; admissionNo: string }>;
 };
 
 function parentsLabel(f: {
@@ -78,7 +79,27 @@ export function FamiliesClient({
                 <tr key={f.id} className="border-b last:border-0">
                   <td className="px-4 py-3">{parentsLabel(f)}</td>
                   <td className="px-4 py-3">{f.primaryPhone || "—"}</td>
-                  <td className="px-4 py-3">{f.childrenCount}</td>
+                  <td className="px-4 py-3">
+                    {f.students.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {f.students.map((s) => (
+                          <div key={s.id}>
+                            <Link
+                              href={`/students/${s.id}`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              {s.fullName}
+                            </Link>
+                            <span className="ml-1.5 text-xs text-muted-foreground">
+                              {s.admissionNo}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/families/${f.id}`} className="text-primary hover:underline">
                       View
@@ -112,3 +133,4 @@ export function FamiliesClient({
     </div>
   );
 }
+

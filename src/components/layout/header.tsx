@@ -25,29 +25,64 @@ export function Header({
     router.refresh();
   }
 
+  // Get initials for user avatar
+  const initials = userName
+    ? userName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+    : "U";
+
   return (
-    <header className="no-print flex h-14 items-center gap-3 border-b border-border bg-card px-5">
+    <header className="no-print flex h-16 items-center gap-4 border-b border-border bg-card px-6 shadow-sm shadow-slate-100/50">
       <div className="max-w-md flex-1">
         <GlobalSearch />
       </div>
-      <div className="ml-auto hidden text-right sm:block">
-        <p className="text-sm font-medium leading-none">{userName}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{role}</p>
+
+      <div className="ml-auto flex items-center gap-4">
+        {/* User Info & Avatar */}
+        <div className="flex items-center gap-3">
+          <div className="hidden text-right sm:block">
+            <p className="text-sm font-semibold text-slate-800 leading-none">{userName}</p>
+            <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground leading-none">
+              {role}
+            </p>
+          </div>
+          <div className="h-9 w-9 bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold flex items-center justify-center rounded-full text-[13px] uppercase select-none shadow-sm">
+            {initials}
+          </div>
+        </div>
+
+        <div className="h-4 w-[1px] bg-slate-200 hidden sm:block" />
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Toggle theme"
+            className="h-9 w-9 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            <Sun className="h-4.5 w-4.5 dark:hidden" />
+            <Moon className="hidden h-4.5 w-4.5 dark:block" />
+          </Button>
+
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="sm" 
+            className="h-9 gap-2 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+            onClick={signOut}
+          >
+            <LogOut className="h-[17px] w-[17px]" />
+            <span className="hidden sm:inline">Sign out</span>
+          </Button>
+        </div>
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label="Toggle theme"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      >
-        <Sun className="h-4 w-4 dark:hidden" />
-        <Moon className="hidden h-4 w-4 dark:block" />
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={signOut}>
-        <LogOut className="h-4 w-4" />
-        Sign out
-      </Button>
     </header>
   );
 }
+

@@ -46,7 +46,7 @@ export async function recordPaymentAction(input: RecordPaymentInput) {
   revalidatePath("/families");
   revalidatePath(`/families/${input.familyId}`);
   revalidatePath("/students");
-  return r;
+  return { success: true, paymentId: r.payment.id };
 }
 
 export async function getReceiptAction(paymentId: string) {
@@ -56,13 +56,13 @@ export async function getReceiptAction(paymentId: string) {
 export async function createFeeStructureAction(input: CreateFeeStructureInput) {
   const r = await createFeeStructure(input);
   revalidatePath("/fees");
-  return r;
+  return { success: true, id: r.id };
 }
 
 export async function updateFeeStructureAction(input: UpdateFeeStructureInput) {
   const r = await updateFeeStructure(input);
   revalidatePath("/fees");
-  return r;
+  return { success: true, id: r.id };
 }
 
 export async function listFeeStructuresAction(sessionId?: string, classId?: string) {

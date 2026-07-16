@@ -2,10 +2,14 @@ import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/register", "/change-password"];
+const PUBLIC_PATHS = ["/login", "/change-password"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname === "/register" || pathname.startsWith("/register/")) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   if (
     pathname.startsWith("/api/auth") ||
@@ -17,7 +21,7 @@ export function middleware(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
   if (!sessionCookie) {
     const loginUrl = new URL("/login", request.url);
-    if (pathname !== "/" && pathname !== "/register") {
+    if (pathname !== "/") {
       loginUrl.searchParams.set("redirect", pathname);
     }
     return NextResponse.redirect(loginUrl);

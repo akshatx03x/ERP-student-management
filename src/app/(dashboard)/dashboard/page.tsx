@@ -4,17 +4,35 @@ import { prisma } from "@/server/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/states";
 
+import { LucideIcon, GraduationCap, CalendarCheck, Coins, AlertCircle, BookOpen } from "lucide-react";
+
 function Metric({
   label,
   value,
+  subtext,
+  icon: Icon,
+  borderClass,
+  iconColorClass,
+  iconBgClass,
 }: {
   label: string;
   value: string | number;
+  subtext: string;
+  icon: LucideIcon;
+  borderClass: string;
+  iconColorClass: string;
+  iconBgClass: string;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+    <div className={`rounded-xl border-l-4 ${borderClass} border-y border-r border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between`}>
+      <div className="space-y-1">
+        <p className="text-[13px] font-semibold text-slate-500">{label}</p>
+        <p className="text-2xl font-bold text-slate-800 tracking-tight">{value}</p>
+        <p className="text-[11px] text-slate-400 font-medium">{subtext}</p>
+      </div>
+      <div className={`p-3 rounded-xl ${iconBgClass}`}>
+        <Icon className={`h-5 w-5 ${iconColorClass}`} />
+      </div>
     </div>
   );
 }
@@ -47,18 +65,39 @@ export default async function DashboardPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">My Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-800">My Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">Your academic overview</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Metric label="Admission No" value={student?.admissionNo ?? "—"} />
+          <Metric 
+            label="Admission Number" 
+            value={student?.admissionNo ?? "—"} 
+            subtext="Unique student identifier"
+            icon={GraduationCap}
+            borderClass="border-l-indigo-500"
+            iconBgClass="bg-indigo-50"
+            iconColorClass="text-indigo-600"
+          />
           <Metric
-            label="Class"
+            label="Class / Section"
             value={
               enrollment ? `${enrollment.class.name} - ${enrollment.section.name}` : "—"
             }
+            subtext="Assigned class group"
+            icon={BookOpen}
+            borderClass="border-l-teal-500"
+            iconBgClass="bg-teal-50"
+            iconColorClass="text-teal-600"
           />
-          <Metric label="Fees Remaining" value={formatCurrency(due)} />
+          <Metric 
+            label="Outstanding Dues" 
+            value={formatCurrency(due)} 
+            subtext="Pending fee payment amount"
+            icon={Coins}
+            borderClass="border-l-rose-500"
+            iconBgClass="bg-rose-50"
+            iconColorClass="text-rose-600"
+          />
         </div>
       </div>
     );
@@ -94,15 +133,47 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Welcome back, {user.name}</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-800">Dashboard</h1>
+        <p className="mt-1 text-sm text-slate-500">Welcome back, {user.name}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Students" value={students} />
-        <Metric label="Attendance today" value={attendanceToday} />
-        <Metric label="Fees collected" value={formatCurrency(collected)} />
-        <Metric label="Fees pending" value={formatCurrency(pending)} />
+        <Metric 
+          label="Active Students" 
+          value={students} 
+          subtext="Currently enrolled in sessions"
+          icon={GraduationCap}
+          borderClass="border-l-emerald-500"
+          iconBgClass="bg-emerald-50"
+          iconColorClass="text-emerald-600"
+        />
+        <Metric 
+          label="Today's Attendance" 
+          value={attendanceToday} 
+          subtext="Student daily records entered"
+          icon={CalendarCheck}
+          borderClass="border-l-indigo-500"
+          iconBgClass="bg-indigo-50"
+          iconColorClass="text-indigo-600"
+        />
+        <Metric 
+          label="Fees Collected" 
+          value={formatCurrency(collected)} 
+          subtext="All-time payment collection"
+          icon={Coins}
+          borderClass="border-l-amber-500"
+          iconBgClass="bg-amber-50"
+          iconColorClass="text-amber-600"
+        />
+        <Metric 
+          label="Fees Pending" 
+          value={formatCurrency(pending)} 
+          subtext="Awaiting invoice payments"
+          icon={AlertCircle}
+          borderClass="border-l-rose-500"
+          iconBgClass="bg-rose-50"
+          iconColorClass="text-rose-600"
+        />
       </div>
 
       {students === 0 ? (

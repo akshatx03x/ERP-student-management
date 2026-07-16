@@ -15,6 +15,7 @@ import {
   toggleUserActiveAction,
   getUserOverridesAction,
 } from "@/server/actions/settings.actions";
+import { uploadDocumentAction } from "@/server/actions/platform.actions";
 
 type Branding = {
   schoolName: string;
@@ -25,6 +26,7 @@ type Branding = {
   principalName: string | null;
   receiptFooter: string | null;
   reportCardFooter: string | null;
+  logoDocumentId: string | null;
 };
 
 type UserRow = {
@@ -49,12 +51,14 @@ export function SettingsClient({
   permissions,
   initialOverrides,
   initialSelectedUserId,
+  schoolId,
 }: {
   branding: Branding;
   users: UserRow[];
   permissions: PermissionRow[];
   initialOverrides: Array<{ userId: string; permissionKey: string; allowed: boolean }>;
   initialSelectedUserId: string | null;
+  schoolId: string;
 }) {
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState({
@@ -66,6 +70,7 @@ export function SettingsClient({
     principalName: branding.principalName ?? "",
     receiptFooter: branding.receiptFooter ?? "",
     reportCardFooter: branding.reportCardFooter ?? "",
+    logoDocumentId: branding.logoDocumentId ?? "",
   });
 
   const [selectedUserId, setSelectedUserId] = useState(initialSelectedUserId);
@@ -94,6 +99,7 @@ export function SettingsClient({
           principalName: form.principalName || null,
           receiptFooter: form.receiptFooter || null,
           reportCardFooter: form.reportCardFooter || null,
+          logoDocumentId: form.logoDocumentId || null,
         });
         toast.success("Branding saved");
       } catch (e) {
@@ -170,6 +176,61 @@ export function SettingsClient({
               value={form.address}
               onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
             />
+          </div>
+          <div className="space-y-2 md:col-span-2 border-t pt-3 mt-1">
+            <Label>School Logo</Label>
+            <div className="flex flex-wrap items-center gap-4 mt-1">
+              {form.logoDocumentId ? (
+                <img
+                  src={`/api/documents/${form.logoDocumentId}`}
+                  className="h-16 w-auto object-contain border rounded p-1 bg-stone-50"
+                  alt="School Logo"
+                />
+              ) : (
+                <div className="h-16 w-16 bg-stone-100 border border-dashed rounded flex items-center justify-center text-xs text-stone-400">
+                  No Logo
+                </div>
+              )}
+              <div className="space-y-1">
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={pending}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 5 * 1024 * 1024) {
+                      toast.error("Logo must be less than 5MB");
+                      return;
+                    }
+                    startTransition(async () => {
+                      try {
+                        const buffer = await file.arrayBuffer();
+                        const bytes = new Uint8Array(buffer);
+                        let binary = "";
+                        for (let i = 0; i < bytes.length; i++) {
+                          binary += String.fromCharCode(bytes[i]!);
+                        }
+                        const doc = await uploadDocumentAction({
+                          ownerType: "SCHOOL",
+                          ownerId: schoolId,
+                          type: "OTHER",
+                          fileName: file.name,
+                          mimeType: file.type || "image/png",
+                          base64: btoa(binary),
+                        });
+                        setForm((f) => ({ ...f, logoDocumentId: doc.id }));
+                        toast.success("Logo uploaded successfully");
+                      } catch (err) {
+                        toast.error("Failed to upload logo image");
+                      }
+                    });
+                  }}
+                  className="text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground">Upload school logo (max 5MB)</p>
+              </div>
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Phone</Label>

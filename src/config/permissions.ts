@@ -127,20 +127,21 @@ export type NavItem = {
 
 export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
-    label: "Core Operations",
+    label: "School Office",
     items: [
       { title: "Dashboard", href: "/dashboard", resource: "dashboard", icon: "LayoutDashboard" },
       { title: "Admissions", href: "/admissions", resource: "admission", icon: "ClipboardList" },
       { title: "Students", href: "/students", resource: "student", icon: "GraduationCap" },
       { title: "Families", href: "/families", resource: "family", icon: "Users" },
+      { title: "Staff", href: "/staff", resource: "user", icon: "Contact" },
       { title: "Classes", href: "/classes", resource: "class", icon: "School" },
       { title: "Fees", href: "/fees", resource: "fee", icon: "Wallet" },
     ],
   },
   {
-    label: "Academic Control",
+    label: "Academics",
     items: [
-      { title: "Academics", href: "/academics", resource: "session", icon: "BookOpen" },
+      { title: "Academic Sessions", href: "/academics", resource: "session", icon: "BookOpen" },
       { title: "Timetable", href: "/timetable", resource: "timetable", icon: "CalendarDays" },
       { title: "Attendance", href: "/attendance", resource: "attendance", icon: "CalendarCheck" },
       { title: "Holidays", href: "/holidays", resource: "holiday", icon: "Palmtree" },
@@ -149,10 +150,10 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "School Office",
+    label: "Administration",
     items: [
       { title: "Documents", href: "/documents", resource: "document", icon: "FolderOpen" },
-      { title: "Reports", href: "/reports", resource: "report", icon: "BarChart3" },
+      { title: "Reports & Audits", href: "/reports", resource: "report", icon: "BarChart3" },
       { title: "Notices", href: "/notices", resource: "notice", icon: "Megaphone" },
       { title: "Settings", href: "/settings", resource: "settings", icon: "Settings" },
     ],

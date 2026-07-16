@@ -124,24 +124,80 @@ export function TimetableClient(props: {
         </CardContent>
       </Card>
 
-      <div className="space-y-2">
-        {slots.map((s) => (
-          <div key={s.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-            <span>
-              {s.dayOfWeek} P{s.periodNumber} · {s.startTime}-{s.endTime} · {s.subject.name} · {s.staffProfile.fullName}
-            </span>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => startTransition(async () => {
-              try {
-                await deleteTimetableSlotAction(s.id);
-                toast.success("Deleted");
-                load();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Failed");
-              }
-            })}>Remove</Button>
-          </div>
-        ))}
-      </div>
+      {slots.length > 0 ? (
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>Schedule Matrix</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full min-w-[800px] border-collapse text-xs">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200">
+                  <th className="p-3 border-r font-semibold text-stone-600 text-left w-24">Day</th>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((p) => (
+                    <th key={p} className="p-3 border-r font-semibold text-stone-600 text-center">
+                      Period {p}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((day) => (
+                  <tr key={day} className="border-b last:border-0 hover:bg-stone-50/40">
+                    <td className="p-3 border-r font-bold bg-stone-50 text-stone-700 uppercase tracking-wider">{day.slice(0, 3)}</td>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((period) => {
+                      const slot = slots.find((s) => s.dayOfWeek === day && s.periodNumber === period);
+                      return (
+                        <td key={period} className="p-3 border-r text-center align-top relative min-h-[90px]">
+                          {slot ? (
+                            <div className="space-y-1">
+                              <p className="font-semibold text-stone-900">{slot.subject.name}</p>
+                              <p className="text-[10px] text-stone-500">{slot.staffProfile.fullName}</p>
+                              <p className="text-[9px] font-mono text-stone-400">{slot.startTime} - {slot.endTime}</p>
+                              <button
+                                type="button"
+                                disabled={pending}
+                                onClick={() =>
+                                  startTransition(async () => {
+                                    try {
+                                      await deleteTimetableSlotAction(slot.id);
+                                      toast.success("Deleted");
+                                      load();
+                                    } catch (e) {
+                                      toast.error(e instanceof Error ? e.message : "Failed");
+                                    }
+                                  })
+                                }
+                                className="mt-1.5 text-[10px] text-rose-500 hover:text-rose-700 hover:underline"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setForm((f) => ({ ...f, dayOfWeek: day, periodNumber: String(period) }))}
+                              className="text-[10px] text-stone-400 hover:text-primary transition-colors py-4 w-full h-full block"
+                            >
+                              + Add
+                            </button>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            No schedule slots found. Select section and click Load to view or add slots.
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

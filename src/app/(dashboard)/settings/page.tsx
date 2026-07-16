@@ -36,6 +36,7 @@ export default async function SettingsPage() {
           allowed: o.allowed,
         }))}
         initialSelectedUserId={firstStaffUser?.id ?? null}
+        schoolId={branding.schoolId}
       />
     </div>
   );

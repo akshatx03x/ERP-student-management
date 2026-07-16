@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,21 +108,36 @@ export function AttendanceClient({
           </div>
           <div className="space-y-2">
             {rows.map((r, idx) => (
-              <div key={r.studentId} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                <span>{r.fullName}</span>
-                <Select
-                  value={r.status}
-                  onChange={(e) =>
-                    setRows((all) => all.map((x, i) => (i === idx ? { ...x, status: e.target.value } : x)))
-                  }
-                  className="w-40"
-                >
-                  <option value="PRESENT">Present</option>
-                  <option value="ABSENT">Absent</option>
-                  <option value="LATE">Late</option>
-                  <option value="HALF_DAY">Half day</option>
-                  <option value="EXCUSED">Excused</option>
-                </Select>
+              <div key={r.studentId} className="flex items-center justify-between rounded-lg border p-3 text-sm bg-card hover:bg-stone-50">
+                <span className="font-medium text-stone-700">{r.fullName}</span>
+                <div className="flex flex-wrap gap-1">
+                  {["PRESENT", "ABSENT", "LATE", "EXCUSED"].map((st) => {
+                    const active = r.status === st;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() =>
+                          setRows((all) => all.map((x, i) => (i === idx ? { ...x, status: st } : x)))
+                        }
+                        className={cn(
+                          "rounded-md px-3 py-1 text-xs font-semibold border transition-all select-none",
+                          active
+                            ? st === "PRESENT"
+                              ? "bg-emerald-600 border-emerald-600 text-white"
+                              : st === "ABSENT"
+                                ? "bg-rose-600 border-rose-600 text-white"
+                                : st === "LATE"
+                                  ? "bg-amber-500 border-amber-500 text-white"
+                                  : "bg-blue-500 border-blue-500 text-white"
+                            : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                        )}
+                      >
+                        {st === "PRESENT" ? "Present" : st === "ABSENT" ? "Absent" : st === "LATE" ? "Late" : "Excused"}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
@@ -155,9 +171,40 @@ export function AttendanceClient({
             Load month for selected section
           </Button>
           {summary ? (
-            <pre className="max-h-64 overflow-auto rounded border bg-muted/30 p-3 text-xs">
-              {JSON.stringify(summary, null, 2)}
-            </pre>
+            <div className="overflow-x-auto rounded-lg border bg-card">
+              <table className="w-full text-sm">
+                <thead className="bg-stone-50 border-b text-left">
+                  <tr>
+                    <th className="px-4 py-2.5 font-semibold text-stone-600">Student Name (Admn No)</th>
+                    <th className="px-4 py-2.5 font-semibold text-stone-600 text-center">Present</th>
+                    <th className="px-4 py-2.5 font-semibold text-stone-600 text-center">Absent</th>
+                    <th className="px-4 py-2.5 font-semibold text-stone-600 text-center">Late</th>
+                    <th className="px-4 py-2.5 font-semibold text-stone-600 text-center">Excused</th>
+                    <th className="px-4 py-2.5 font-semibold text-stone-600 text-right">Attendance %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(summary as any).summaries.map((s: any) => (
+                    <tr key={s.studentId} className="border-b last:border-0 hover:bg-stone-50/50">
+                      <td className="px-4 py-2.5 font-medium text-stone-700">
+                        {s.studentName} <span className="text-xs text-muted-foreground font-mono">({s.admissionNo})</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center text-emerald-600 font-semibold">{s.present}</td>
+                      <td className="px-4 py-2.5 text-center text-rose-600 font-semibold">{s.absent}</td>
+                      <td className="px-4 py-2.5 text-center text-amber-500 font-semibold">{s.late}</td>
+                      <td className="px-4 py-2.5 text-center text-blue-500 font-semibold">{s.excused}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold">
+                        <span className={cn(
+                          s.percentage >= 75 ? "text-emerald-600" : "text-rose-600"
+                        )}>
+                          {s.percentage}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : null}
         </CardContent>
       </Card>

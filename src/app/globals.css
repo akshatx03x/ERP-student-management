@@ -1,50 +1,50 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f6f3;
-  --foreground: #1c1917;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #1c1917;
-  --primary: #1f3a2e;
-  --primary-foreground: #f5f5f4;
-  --secondary: #ebe8e2;
-  --secondary-foreground: #1c1917;
-  --muted: #f0eeea;
-  --muted-foreground: #78716c;
-  --accent: #f0eeea;
-  --accent-foreground: #1c1917;
-  --destructive: #b91c1c;
-  --destructive-foreground: #fafafa;
-  --border: #e7e5e4;
-  --input: #e7e5e4;
-  --ring: #1f3a2e;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #44403c;
-  --sidebar-muted: #a8a29e;
+  --card-foreground: #0f172a;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  --accent: #e0e7ff;
+  --accent-foreground: #4338ca;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #6366f1;
+  --sidebar: #1e1b4b;
+  --sidebar-foreground: #e0e7ff;
+  --sidebar-muted: #818cf8;
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: #0c0a09;
-  --foreground: #f5f5f4;
-  --card: #1c1917;
-  --card-foreground: #f5f5f4;
-  --primary: #a7c4b5;
-  --primary-foreground: #0c0a09;
-  --secondary: #292524;
-  --secondary-foreground: #f5f5f4;
-  --muted: #292524;
-  --muted-foreground: #a8a29e;
-  --accent: #292524;
-  --accent-foreground: #f5f5f4;
-  --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
-  --border: #292524;
-  --input: #292524;
-  --ring: #a7c4b5;
-  --sidebar: #141210;
-  --sidebar-foreground: #e7e5e4;
-  --sidebar-muted: #a8a29e;
+  --background: #0b0f19;
+  --foreground: #f8fafc;
+  --card: #111827;
+  --card-foreground: #f8fafc;
+  --primary: #818cf8;
+  --primary-foreground: #0b0f19;
+  --secondary: #1f2937;
+  --secondary-foreground: #f8fafc;
+  --muted: #1f2937;
+  --muted-foreground: #94a3b8;
+  --accent: #312e81;
+  --accent-foreground: #e0e7ff;
+  --destructive: #f87171;
+  --destructive-foreground: #ffffff;
+  --border: #374151;
+  --input: #374151;
+  --ring: #818cf8;
+  --sidebar: #0f0b29;
+  --sidebar-foreground: #e0e7ff;
+  --sidebar-muted: #818cf8;
 }
 
 @theme inline {
