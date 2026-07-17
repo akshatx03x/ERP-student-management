@@ -112,7 +112,7 @@ export function AdmissionsClient({
   }
 
   async function submitAdmission(familyId: string | null) {
-    await createAdmissionAction({
+    const result = await createAdmissionAction({
       sessionId: form.sessionId,
       appliedClassId: form.appliedClassId,
       applicantName: form.applicantName.trim(),
@@ -125,6 +125,11 @@ export function AdmissionsClient({
       address: form.address.trim() || null,
       familyId,
     });
+    
+    if (!result.success) {
+      throw new Error(result.error || "Failed to save admission");
+    }
+    
     toast.success("Admission saved");
     resetForm();
   }
@@ -467,7 +472,11 @@ export function AdmissionsClient({
                   onClick={() => {
                     startTransition(async () => {
                       try {
-                        await approveAdmissionAction({ id: approvingApp.id, sectionId: selectedSectionId });
+                        const result = await approveAdmissionAction({ id: approvingApp.id, sectionId: selectedSectionId });
+                        if (!result.success) {
+                          toast.error(result.error || "Failed to approve admission");
+                          return;
+                        }
                         toast.success("Approved — admission number assigned");
                         setApprovingApp(null);
                       } catch (e) {
@@ -532,7 +541,11 @@ export function AdmissionsClient({
                       onClick={() =>
                         startTransition(async () => {
                           try {
-                            await rejectAdmissionAction({ id: a.id, remarks: "Rejected" });
+                            const result = await rejectAdmissionAction({ id: a.id, remarks: "Rejected" });
+                            if (!result.success) {
+                              toast.error(result.error || "Failed to reject admission");
+                              return;
+                            }
                             toast.success("Rejected");
                           } catch (e) {
                             toast.error(e instanceof Error ? e.message : "Failed");

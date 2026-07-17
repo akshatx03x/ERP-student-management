@@ -71,7 +71,7 @@ export function NewStudentForm({
   }
 
   async function save(familyId: string | null) {
-    await createStudentWithFamilyAction({
+    const result = await createStudentWithFamilyAction({
       admissionNo: form.admissionNo.trim(),
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim() || null,
@@ -91,6 +91,11 @@ export function NewStudentForm({
       sectionId: form.enroll ? form.sectionId : null,
       rollNo: form.rollNo.trim() || null,
     });
+    
+    if (!result.success) {
+      throw new Error(result.error || "Failed to add student");
+    }
+    
     toast.success("Student added");
     router.push("/students");
     router.refresh();

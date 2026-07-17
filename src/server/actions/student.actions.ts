@@ -43,10 +43,14 @@ export async function createStudentAction(input: CreateStudentInput) {
 }
 
 export async function createStudentWithFamilyAction(input: CreateStudentWithFamilyInput) {
-  const result = await createStudentWithFamily(input);
-  revalidatePath("/students");
-  revalidatePath("/families");
-  return result;
+  try {
+    const result = await createStudentWithFamily(input);
+    revalidatePath("/students");
+    revalidatePath("/families");
+    return { success: true, data: result, error: null };
+  } catch (error) {
+    return { success: false, data: null, error: error instanceof Error ? error.message : "Failed to create student" };
+  }
 }
 
 export async function mergeSiblingsAction(input: MergeSiblingsInput) {
