@@ -15,19 +15,23 @@ export default async function FamilyDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  let family;
-  try {
-    family = await getFamily(id);
-  } catch {
+
+  console.time("[perf] FamilyDetailPage");
+
+  // ── Fire both queries in parallel — they are independent of each other. ──
+  const [familyResult, duesResult] = await Promise.allSettled([
+    getFamily(id),
+    getFamilyFeeDues(id),
+  ]);
+
+  console.timeEnd("[perf] FamilyDetailPage");
+
+  if (familyResult.status === "rejected") {
     notFound();
   }
 
-  let dues: Awaited<ReturnType<typeof getFamilyFeeDues>> = [];
-  try {
-    dues = await getFamilyFeeDues(id);
-  } catch {
-    dues = [];
-  }
+  const family = familyResult.value;
+  const dues = duesResult.status === "fulfilled" ? duesResult.value : [];
 
   const title =
     [family.fatherName, family.motherName].filter(Boolean).join(" & ") ||

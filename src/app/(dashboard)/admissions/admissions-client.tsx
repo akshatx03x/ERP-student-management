@@ -289,7 +289,7 @@ export function AdmissionsClient({
                     onChange={(e) => setFamilySearchPhone(e.target.value)}
                     className="max-w-xs bg-white h-9"
                   />
-                  <Button type="button" size="sm" variant="secondary" onClick={handleSearchFamily} disabled={pending}>
+                  <Button type="button" size="sm" variant="secondary" onClick={handleSearchFamily} loading={pending}>
                     Search Family
                   </Button>
                 </div>
@@ -351,7 +351,8 @@ export function AdmissionsClient({
                 </Button>
                 <Button
                   type="button"
-                  disabled={pending || !parentStepValid()}
+                  loading={pending}
+                  disabled={!parentStepValid()}
                   onClick={handleSave}
                 >
                   Save admission
@@ -405,13 +406,13 @@ export function AdmissionsClient({
               <p>Do you want to add this student to the same family?</p>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" disabled={pending} onClick={confirmUseExisting}>
+                <Button type="button" loading={pending} onClick={confirmUseExisting}>
                   Use existing family
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={pending}
+                  loading={pending}
                   onClick={confirmCreateNew}
                 >
                   Create new family
@@ -461,7 +462,8 @@ export function AdmissionsClient({
                 </Button>
                 <Button
                   type="button"
-                  disabled={pending || !selectedSectionId}
+                  loading={pending}
+                  disabled={!selectedSectionId}
                   onClick={() => {
                     startTransition(async () => {
                       try {
@@ -474,7 +476,7 @@ export function AdmissionsClient({
                     });
                   }}
                 >
-                  {pending ? "Approving..." : "Confirm Approval"}
+                  Confirm Approval
                 </Button>
               </div>
             </CardContent>

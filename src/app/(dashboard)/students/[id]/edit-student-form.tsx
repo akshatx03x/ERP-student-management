@@ -172,8 +172,8 @@ export function EditStudentForm({
         <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending}>
-          {pending ? "Saving..." : "Save changes"}
+        <Button type="submit" loading={pending}>
+          Save changes
         </Button>
       </div>
     </form>

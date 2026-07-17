@@ -15,38 +15,34 @@ export default async function StudentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+
+  console.time(`[perf] StudentDetailPage ${id}`);
+
+  // requirePermission is cache()-wrapped — resolves from the layout's already
+  // cached call. resolveEffectivePermissions is also cache()-wrapped.
   const { user } = await requirePermission("student.view");
   const isStudentSelf = user.role === "STUDENT" && user.studentId === id;
   const perms = await resolveEffectivePermissions(user.id, user.role);
   const canDelete = perms.has("student.delete") && !isStudentSelf;
 
-  let student;
-  try {
-    student = await getStudent(id);
-  } catch {
-    notFound();
-  }
+  // ── Fire all independent data queries simultaneously ──────────────────────
+  const [studentResult, ledgerResult, portalResult] = await Promise.allSettled([
+    getStudent(id),
+    getStudentFeeLedger(id),
+    isStudentSelf ? getStudentPortalFees() : Promise.resolve(null),
+  ]);
 
-  let ledger: Awaited<ReturnType<typeof getStudentFeeLedger>> | null = null;
-  try {
-    ledger = await getStudentFeeLedger(id);
-  } catch {
-    ledger = null;
-  }
+  console.timeEnd(`[perf] StudentDetailPage ${id}`);
 
-  let portalSiblings: Array<{
-    fullName: string;
-    classLabel: string;
-    remainingFee: number;
-  }> = [];
-  if (isStudentSelf) {
-    try {
-      const portal = await getStudentPortalFees();
-      portalSiblings = portal.siblings;
-    } catch {
-      portalSiblings = [];
-    }
-  }
+  if (studentResult.status === "rejected") notFound();
+
+  const student = studentResult.value;
+  const ledger = ledgerResult.status === "fulfilled" ? ledgerResult.value : null;
+  const portalSiblings =
+    portalResult.status === "fulfilled" && portalResult.value
+      ? portalResult.value.siblings
+      : [];
+
 
   // Address assembly
   const family = student.family;

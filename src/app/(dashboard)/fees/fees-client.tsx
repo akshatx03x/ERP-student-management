@@ -369,7 +369,8 @@ export function FeesClient(props: {
                 placeholder="Admission Fee"
               />
               <Button
-                disabled={pending || !headName.trim()}
+                loading={pending}
+                disabled={!headName.trim()}
                 onClick={() =>
                   run(async () => {
                     await createFeeHeadAction({
@@ -531,7 +532,8 @@ export function FeesClient(props: {
 
               <div className="flex gap-2">
                 <Button
-                  disabled={pending || !canSaveStructure}
+                  loading={pending}
+                  disabled={!canSaveStructure}
                   onClick={() => {
                     const activeItems = structureItems.map((i) => ({
                       feeHeadId: i.feeHeadId,
@@ -764,7 +766,8 @@ export function FeesClient(props: {
             </div>
 
             <Button
-              disabled={pending || !canRecordPayment}
+              loading={pending}
+              disabled={!canRecordPayment}
               onClick={() => {
                 if (!canRecordPayment) {
                   toast.error(

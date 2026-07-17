@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
+  const _t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
 
   // cache()-wrapped — this result is shared with the page and any services
   // that also call getCurrentUser() within this same request.
@@ -16,17 +16,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   // cache()-wrapped — shared with requirePermission() calls in pages/services.
+  // For PRINCIPAL: zero DB queries (computed from constants).
   const permissions = await resolveEffectivePermissions(user.id, user.role);
   const allowedResources = [
     ...new Set([...permissions].map((key) => key.split(".")[0])),
   ];
 
   // Branding is already included via getCurrentUser → school: { include: { branding: true } }
-  // No extra DB query needed.
+  // No extra DB query needed here.
   const branding = user.school?.branding;
 
   if (process.env.NODE_ENV === "development") {
-    console.log(`[perf] DashboardLayout total: ${(performance.now() - t0).toFixed(1)}ms`);
+    console.log(`[perf] DashboardLayout: ${(performance.now() - _t0).toFixed(1)}ms`);
   }
 
   return (

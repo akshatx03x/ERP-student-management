@@ -38,6 +38,7 @@ function Metric({
 }
 
 export default async function DashboardPage() {
+  const _t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
   const { user } = await requirePermission("dashboard.view");
   const schoolId = schoolIdFromUser(user);
 
@@ -54,6 +55,9 @@ export default async function DashboardPage() {
       },
     });
 
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[perf] DashboardPage (student): ${(performance.now() - _t0).toFixed(1)}ms`);
+    }
     const due =
       student?.studentFees.reduce((sum, f) => {
         const paid = f.allocations.reduce((s, a) => s + Number(a.amount), 0);
@@ -123,6 +127,9 @@ export default async function DashboardPage() {
       include: { allocations: true },
     }),
   ]);
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[perf] DashboardPage: ${(performance.now() - _t0).toFixed(1)}ms`);
+  }
 
   const collected = Number(feesCollected._sum.amount ?? 0);
   const pending = pendingFeeRows.reduce((sum, f) => {

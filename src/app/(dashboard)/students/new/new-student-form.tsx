@@ -320,7 +320,7 @@ export function NewStudentForm({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={pending}
+                loading={pending}
                 onClick={() =>
                   startTransition(async () => {
                     try {
@@ -336,7 +336,7 @@ export function NewStudentForm({
               <Button
                 type="button"
                 variant="outline"
-                disabled={pending}
+                loading={pending}
                 onClick={() =>
                   startTransition(async () => {
                     try {
@@ -356,7 +356,7 @@ export function NewStudentForm({
       ) : null}
 
       {!match ? (
-        <Button type="button" disabled={pending || !canSave()} onClick={handleSave}>
+        <Button type="button" loading={pending} disabled={!canSave()} onClick={handleSave}>
           Save student
         </Button>
       ) : null}

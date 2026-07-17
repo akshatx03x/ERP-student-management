@@ -81,8 +81,8 @@ export function RegisterForm() {
           className="h-11"
         />
       </div>
-      <Button type="submit" className="h-11 w-full text-base" disabled={loading}>
-        {loading ? "Creating account…" : "Create account"}
+      <Button type="submit" className="h-11 w-full text-base" loading={loading}>
+        Create account
       </Button>
       <p className="text-center text-sm text-stone-500">
         Already have an account?{" "}

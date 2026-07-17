@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 import {
   deleteStudentAction,
   exportStudentsAction,
@@ -76,7 +78,9 @@ export function StudentsClient({
     if (sectionIdVal) params.set("sectionId", sectionIdVal);
     
     const queryStr = params.toString();
-    router.push(queryStr ? `/students?${queryStr}` : "/students");
+    startTransition(() => {
+      router.push(queryStr ? `/students?${queryStr}` : "/students");
+    });
   };
 
   const handleExport = () => {
@@ -199,6 +203,7 @@ export function StudentsClient({
           <Button
             type="button"
             variant="outline"
+            loading={pending}
             onClick={() => applyFilters(search, selectedClassId, selectedSectionId)}
           >
             Search
@@ -208,17 +213,21 @@ export function StudentsClient({
             <Button
               type="button"
               variant="ghost"
+              disabled={pending}
               onClick={() => {
                 setSearch("");
                 setSelectedClassId("");
                 setSelectedSectionId("");
-                router.push("/students");
+                startTransition(() => {
+                  router.push("/students");
+                });
               }}
             >
               Clear Filters
             </Button>
           )}
         </div>
+
 
         <div className="flex items-center gap-2">
           <input
@@ -250,8 +259,14 @@ export function StudentsClient({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className={cn("overflow-hidden rounded-lg border bg-card transition-opacity duration-200 relative", pending && "opacity-60 pointer-events-none")}>
+        {pending && (
+          <div className="absolute inset-0 bg-background/10 backdrop-blur-[0.5px] flex items-center justify-center z-10">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        )}
         <table className="w-full text-sm">
+
           <thead className="border-b bg-muted/40 text-left">
             <tr>
               <th className="px-4 py-3 font-medium">Admission</th>

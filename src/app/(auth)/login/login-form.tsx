@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { safeRedirectPath } from "@/lib/auth-redirect";
+import { Loader2 } from "lucide-react";
 
 export function LoginForm() {
   const router = useRouter();
@@ -90,8 +91,9 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-lg bg-[#1a1a2e] py-3 text-sm font-semibold text-white hover:bg-[#16213e] disabled:opacity-60 transition-colors"
+        className="w-full rounded-lg bg-[#1a1a2e] py-3 text-sm font-semibold text-white hover:bg-[#16213e] disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
       >
+        {loading && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
         {loading ? "Signing in…" : "Login"}
       </button>
 

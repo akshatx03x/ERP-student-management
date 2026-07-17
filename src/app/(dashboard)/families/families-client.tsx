@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deleteFamilyAction } from "@/server/actions/family.actions";
+import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 type FamilyRow = {
   id: string;
@@ -49,15 +51,23 @@ export function FamiliesClient({
         <Button
           type="button"
           variant="outline"
+          loading={pending}
           onClick={() =>
-            router.push(search ? `/families?q=${encodeURIComponent(search)}` : "/families")
+            startTransition(() => {
+              router.push(search ? `/families?q=${encodeURIComponent(search)}` : "/families");
+            })
           }
         >
           Search
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className={cn("overflow-hidden rounded-lg border bg-card transition-opacity duration-200 relative", pending && "opacity-60 pointer-events-none")}>
+        {pending && (
+          <div className="absolute inset-0 bg-background/10 backdrop-blur-[0.5px] flex items-center justify-center z-10">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40 text-left">
             <tr>
