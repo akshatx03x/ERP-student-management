@@ -107,12 +107,31 @@ export function FeesClient(props: {
   ]);
   const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
   const [payForm, setPayForm] = useState({
-    familyId: props.families[0]?.id ?? "",
+    familyId: "",
     amount: "",
     method: "UPI",
     referenceNo: "",
     notes: "",
   });
+  const [familySearch, setFamilySearch] = useState("");
+  const [showFamilyDropdown, setShowFamilyDropdown] = useState(false);
+
+  const filteredFamilies = useMemo(() => {
+    const q = familySearch.trim().toLowerCase();
+    if (!q) return [];
+    return props.families.filter((f) => {
+      const haystack = [
+        f.fatherName,
+        f.motherName,
+        f.primaryPhone,
+        f.familyCode,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    }).slice(0, 10);
+  }, [familySearch, props.families]);
   const [siblingDues, setSiblingDues] = useState<SiblingDue[]>([]);
   const [allocs, setAllocs] = useState<Array<{ studentId: string; amount: string }>>([]);
   const [receipt, setReceipt] = useState<unknown>(null);
@@ -580,23 +599,47 @@ export function FeesClient(props: {
             ) : null}
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-2 lg:col-span-2">
-                <Label>Family</Label>
-                <Select
-                  value={payForm.familyId}
-                  disabled={props.families.length === 0}
-                  onChange={(e) =>
-                    setPayForm((f) => ({ ...f, familyId: e.target.value }))
-                  }
-                >
-                  <option value="" disabled>
-                    Select family
-                  </option>
-                  {props.families.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {familyLabel(f)}
-                    </option>
-                  ))}
-                </Select>
+                <Label>Family (search by parent name or phone)</Label>
+                <div className="relative">
+                  <Input
+                    value={familySearch}
+                    onChange={(e) => {
+                      setFamilySearch(e.target.value);
+                      setShowFamilyDropdown(true);
+                      if (!e.target.value.trim()) {
+                        setPayForm((f) => ({ ...f, familyId: "" }));
+                      }
+                    }}
+                    onFocus={() => setShowFamilyDropdown(true)}
+                    placeholder="Type parent name or phone number…"
+                  />
+                  {showFamilyDropdown && familySearch.trim() && filteredFamilies.length > 0 && (
+                    <div className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-lg max-h-48 overflow-auto">
+                      {filteredFamilies.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b last:border-0"
+                          onClick={() => {
+                            setPayForm((prev) => ({ ...prev, familyId: f.id }));
+                            setFamilySearch(familyLabel(f));
+                            setShowFamilyDropdown(false);
+                          }}
+                        >
+                          <span className="font-medium">{familyLabel(f)}</span>
+                          {f.familyCode && (
+                            <span className="ml-2 text-xs text-muted-foreground">{f.familyCode}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {showFamilyDropdown && familySearch.trim() && filteredFamilies.length === 0 && (
+                    <div className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-lg px-3 py-2 text-sm text-muted-foreground">
+                      No families found
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Payment received</Label>

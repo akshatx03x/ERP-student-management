@@ -182,6 +182,7 @@ export function StudentProfileCard({
             </div>
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             <div>
               <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
@@ -232,6 +233,19 @@ export function StudentProfileCard({
               </div>
             )}
           </div>
+          {canDelete && (
+            <div className="mt-5 pt-4 border-t flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-4 text-xs text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+                onClick={() => setShowConfirmDelete(true)}
+              >
+                Delete Student
+              </Button>
+            </div>
+          )}
+          </>
         )}
       </CardContent>
     </Card>

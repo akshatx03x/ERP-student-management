@@ -9,13 +9,13 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors",
+        "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold",
         variant === "default" && "border-transparent bg-primary text-primary-foreground",
-        variant === "secondary" && "border-transparent bg-secondary text-secondary-foreground",
-        variant === "outline" && "text-foreground",
-        variant === "success" && "border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
-        variant === "warning" && "border-transparent bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
-        variant === "destructive" && "border-transparent bg-destructive text-destructive-foreground",
+        variant === "secondary" && "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
+        variant === "outline" && "border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300",
+        variant === "success" && "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300",
+        variant === "warning" && "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300",
+        variant === "destructive" && "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300",
         className,
       )}
       {...props}

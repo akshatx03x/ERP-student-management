@@ -35,7 +35,7 @@ export function Sidebar({
           </svg>
         </div>
         <div className="truncate">
-          <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-sidebar-muted leading-none">Academia</p>
+          <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-sidebar-muted leading-none"> School ERP</p>
           <h1 className="mt-1 truncate text-[14px] font-bold text-white tracking-tight leading-tight" title={schoolName}>
             {schoolName}
           </h1>

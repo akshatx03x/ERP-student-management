@@ -15,6 +15,17 @@ import {
 
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
 type Session = { id: string; name: string };
+type AttendanceSummaryRow = {
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  percentage: number;
+};
+type AttendanceSummary = { summaries: AttendanceSummaryRow[] };
 
 export function AttendanceClient({
   classes,
@@ -32,7 +43,7 @@ export function AttendanceClient({
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? "");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState<Array<{ studentId: string; fullName: string; status: string }>>([]);
-  const [summary, setSummary] = useState<unknown>(null);
+  const [summary, setSummary] = useState<AttendanceSummary | null>(null);
 
   function load() {
     startTransition(async () => {
@@ -184,7 +195,7 @@ export function AttendanceClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {(summary as any).summaries.map((s: any) => (
+                  {summary.summaries.map((s) => (
                     <tr key={s.studentId} className="border-b last:border-0 hover:bg-stone-50/50">
                       <td className="px-4 py-2.5 font-medium text-stone-700">
                         {s.studentName} <span className="text-xs text-muted-foreground font-mono">({s.admissionNo})</span>

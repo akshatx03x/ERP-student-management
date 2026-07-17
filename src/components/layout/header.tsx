@@ -58,18 +58,6 @@ export function Header({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Toggle theme"
-            className="h-9 w-9 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            <Sun className="h-4.5 w-4.5 dark:hidden" />
-            <Moon className="hidden h-4.5 w-4.5 dark:block" />
-          </Button>
-
           <Button 
             type="button" 
             variant="ghost" 
@@ -80,7 +68,7 @@ export function Header({
             <LogOut className="h-[17px] w-[17px]" />
             <span className="hidden sm:inline">Sign out</span>
           </Button>
-        </div>
+          </div>
       </div>
     </header>
   );

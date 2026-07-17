@@ -136,7 +136,7 @@ export function AdmissionsClient({
         const existing = await findFamilyByPhoneAction(familySearchPhone.trim());
         setFoundSearchFamily(existing);
         setSearchAttempted(true);
-      } catch (e) {
+      } catch (_e) {
         toast.error("Lookup failed");
       }
     });
