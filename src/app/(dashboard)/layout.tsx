@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/server/auth/session";
 import { resolveEffectivePermissions } from "@/server/permissions/guard";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
-
+import NextTopLoader from "nextjs-toploader";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const _t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
 
@@ -32,6 +32,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen bg-background">
+      <NextTopLoader color="#4f46e5" showSpinner={false} />
       <Sidebar
         schoolName={branding?.schoolName ?? school?.name ?? "School ERP"}
         allowedResources={allowedResources}

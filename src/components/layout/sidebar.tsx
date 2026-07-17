@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { NAV_GROUPS } from "@/config/permissions";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,12 @@ export function Sidebar({
   allowedResources: string[];
 }) {
   const pathname = usePathname();
+  const [optimisticPathname, setOptimisticPathname] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Reset optimistic state once the actual navigation completes
+    setOptimisticPathname(null);
+  }, [pathname]);
 
   return (
     <aside className="no-print flex w-60 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-foreground/10 relative overflow-hidden">
@@ -105,8 +112,9 @@ export function Sidebar({
               </p>
               <div className="space-y-1">
                 {items.map((item) => {
+                  const activePath = optimisticPathname ?? pathname;
                   const active =
-                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    activePath === item.href || activePath.startsWith(`${item.href}/`);
 
                   const IconComp = ICON_MAP[item.icon] ?? HelpCircle;
 
@@ -114,6 +122,11 @@ export function Sidebar({
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={() => {
+                        if (pathname !== item.href) {
+                          setOptimisticPathname(item.href);
+                        }
+                      }}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 group",
                         active
