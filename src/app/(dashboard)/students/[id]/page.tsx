@@ -421,7 +421,7 @@ export default async function StudentDetailPage({
                       <td className="py-2.5 px-3">{e.rollNo || "—"}</td>
                       <td className="py-2.5 pl-3 pr-4 text-right">
                         <Badge
-                          variant={e.status === "ACTIVE" ? "default" : "outline"}
+                          variant={e.status === "ACTIVE" ? "success" : "outline"}
                           className="h-5 px-2 text-[10px] font-semibold"
                         >
                           {e.status === "ACTIVE" ? "Current" : e.status}

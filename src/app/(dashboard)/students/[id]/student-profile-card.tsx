@@ -141,8 +141,8 @@ export function StudentProfileCard({
                 </>
               )}
               <Badge
-                variant={student.status === "ACTIVE" ? "default" : "secondary"}
-                className="h-5 px-2 text-[10px] font-semibold tracking-wide"
+                variant={student.status === "ACTIVE" ? "success" : "secondary"}
+                className="h-5 px-2 text-[10px] font-semibold"
               >
                 {student.status}
               </Badge>

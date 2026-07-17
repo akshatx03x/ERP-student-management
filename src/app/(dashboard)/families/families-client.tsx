@@ -88,7 +88,7 @@ export function FamiliesClient({
                           <div key={s.id}>
                             <Link
                               href={`/students/${s.id}`}
-                              className="font-medium text-primary hover:underline"
+                              className="font-medium text-slate-700 hover:text-slate-900 hover:underline"
                             >
                               {s.fullName}
                             </Link>
@@ -101,7 +101,7 @@ export function FamiliesClient({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/families/${f.id}`} className="text-primary hover:underline">
+                    <Link href={`/families/${f.id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline">
                       View
                     </Link>
                     <Button

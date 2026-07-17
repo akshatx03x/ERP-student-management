@@ -83,10 +83,10 @@ export function StudentsClient({
                       : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant="secondary">{s.status}</Badge>
+                    <Badge variant={s.status === "ACTIVE" ? "success" : "secondary"}>{s.status}</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/students/${s.id}`} className="text-primary hover:underline">
+                    <Link href={`/students/${s.id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline">
                       View
                     </Link>
                   </td>

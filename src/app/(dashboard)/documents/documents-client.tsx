@@ -88,7 +88,7 @@ export function DocumentsClient({ students }: { students: Student[] }) {
           <div className="space-y-2">
             {docs.map((d) => (
               <div key={d.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                <a className="text-primary hover:underline" href={`/api/documents/${d.id}`} target="_blank" rel="noreferrer">
+                <a className="font-medium text-slate-700 hover:text-slate-900 hover:underline" href={`/api/documents/${d.id}`} target="_blank" rel="noreferrer">
                   {d.fileName} · {d.type} · {(d.sizeBytes / 1024).toFixed(1)} KB
                 </a>
                 <Button size="sm" variant="ghost" disabled={pending} onClick={() => startTransition(async () => {
