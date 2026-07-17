@@ -112,7 +112,7 @@ export function Sidebar({
               </p>
               <div className="space-y-1">
                 {items.map((item) => {
-                  const activePath = optimisticPathname ?? pathname;
+                  const activePath = optimisticPathname ?? pathname ?? "";
                   const active =
                     activePath === item.href || activePath.startsWith(`${item.href}/`);
 
