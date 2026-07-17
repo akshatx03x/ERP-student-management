@@ -28,6 +28,7 @@ export function RegisterForm() {
 
       if (result.error) {
         toast.error(result.error.message || "Could not create account");
+        setLoading(false);
         return;
       }
 
@@ -36,7 +37,6 @@ export function RegisterForm() {
       router.refresh();
     } catch {
       toast.error("Could not create account");
-    } finally {
       setLoading(false);
     }
   }

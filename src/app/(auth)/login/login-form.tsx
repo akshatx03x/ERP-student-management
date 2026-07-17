@@ -26,6 +26,7 @@ export function LoginForm() {
 
       if (result.error) {
         toast.error(result.error.message || "Invalid email or password");
+        setLoading(false);
         return;
       }
 
@@ -33,7 +34,6 @@ export function LoginForm() {
       router.refresh();
     } catch {
       toast.error("Unable to sign in");
-    } finally {
       setLoading(false);
     }
   }
