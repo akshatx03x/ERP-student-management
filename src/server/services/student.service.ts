@@ -28,7 +28,7 @@ import {
   type UpsertMedicalInput,
 } from "@/server/validators/student.validator";
 
-async function createStudentUser(
+export async function createStudentUser(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   student: { id: string; admissionNo: string; fullName: string; dateOfBirth: Date },
   schoolId: string,

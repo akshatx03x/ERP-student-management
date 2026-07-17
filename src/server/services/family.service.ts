@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
@@ -255,7 +256,7 @@ export async function deleteFamily(familyId: string) {
 
     // 2. Nullify references in AdmissionApplication for both family and students
     const studentIds = existing.students.map((s) => s.id);
-    const orConditions: any[] = [{ familyId }];
+    const orConditions: Prisma.AdmissionApplicationWhereInput[] = [{ familyId }];
     if (studentIds.length > 0) {
       orConditions.push({ studentId: { in: studentIds } });
     }

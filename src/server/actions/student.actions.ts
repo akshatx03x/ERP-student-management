@@ -15,6 +15,9 @@ import {
 } from "@/server/services/student.service";
 import { listClasses } from "@/server/services/class.service";
 import { getCurrentSession, listSessions } from "@/server/services/session.service";
+import { exportStudents, importStudents } from "@/server/services/student-excel.service";
+import { schoolIdFromUser } from "@/server/lib/helpers";
+import { requirePermission } from "@/server/permissions/guard";
 import type {
   CreateEnrollmentInput,
   CreateStudentInput,
@@ -91,6 +94,26 @@ export async function getStudentFormOptionsAction() {
 
 export async function deleteStudentAction(studentId: string) {
   const result = await deleteStudent(studentId);
+  revalidatePath("/students");
+  revalidatePath("/families");
+  return result;
+}
+
+export async function exportStudentsAction(filters: {
+  search?: string;
+  classId?: string;
+  sectionId?: string;
+}) {
+  const { user } = await requirePermission("student.view");
+  const schoolId = schoolIdFromUser(user);
+  const buffer = await exportStudents(schoolId, filters);
+  return buffer.toString("base64");
+}
+
+export async function importStudentsAction(base64: string) {
+  const { user } = await requirePermission("student.create");
+  const schoolId = schoolIdFromUser(user);
+  const result = await importStudents(base64, schoolId, user.id);
   revalidatePath("/students");
   revalidatePath("/families");
   return result;
