@@ -4,7 +4,55 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS } from "@/config/permissions";
 import { cn } from "@/lib/utils";
-import * as Icons from "lucide-react";
+
+// ─── Static icon map ─────────────────────────────────────────────────────────
+// Import only the icons actually used in NAV_GROUPS instead of the entire
+// lucide-react library (1400+ icons). This was the single biggest client-bundle
+// contributor from this component.
+import {
+  LayoutDashboard,
+  ClipboardList,
+  GraduationCap,
+  Users,
+  Contact,
+  School,
+  Wallet,
+  BookOpen,
+  CalendarDays,
+  CalendarCheck,
+  Palmtree,
+  NotebookPen,
+  FileSpreadsheet,
+  FolderOpen,
+  BarChart3,
+  Megaphone,
+  Settings,
+  HelpCircle,
+  type LucideProps,
+} from "lucide-react";
+import type { ComponentType } from "react";
+
+const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
+  LayoutDashboard,
+  ClipboardList,
+  GraduationCap,
+  Users,
+  Contact,
+  School,
+  Wallet,
+  BookOpen,
+  CalendarDays,
+  CalendarCheck,
+  Palmtree,
+  NotebookPen,
+  FileSpreadsheet,
+  FolderOpen,
+  BarChart3,
+  Megaphone,
+  Settings,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function Sidebar({
   schoolName,
@@ -60,8 +108,7 @@ export function Sidebar({
                   const active =
                     pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-                  // Dynamically lookup the Lucide icon, fallback to HelpCircle if not found
-                  const IconComp = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[item.icon] || Icons.HelpCircle;
+                  const IconComp = ICON_MAP[item.icon] ?? HelpCircle;
 
                   return (
                     <Link
@@ -92,4 +139,3 @@ export function Sidebar({
     </aside>
   );
 }
-

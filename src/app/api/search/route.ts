@@ -14,11 +14,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ results: [] });
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { schoolId: true },
-  });
-  const schoolId = dbUser?.schoolId;
+  // better-auth stores custom fields (including schoolId) on the session user
+  // object, so we read it directly instead of making a separate DB query.
+  const schoolId = (session.user as { schoolId?: string | null }).schoolId;
   if (!schoolId) {
     return NextResponse.json({ results: [] });
   }

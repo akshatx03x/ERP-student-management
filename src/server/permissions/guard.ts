@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 import {
@@ -9,10 +10,17 @@ import {
 } from "@/config/permissions";
 import { getCurrentUser, isPrincipal } from "@/server/auth/session";
 
-export async function resolveEffectivePermissions(
+/**
+ * Cached per-request permission resolver.
+ * React cache() deduplicates calls with identical (userId, role) within the
+ * same request — the layout, the page, and the service all share one result.
+ */
+export const resolveEffectivePermissions = cache(async function resolveEffectivePermissions(
   userId: string,
   role: Role,
 ): Promise<Set<PermissionKey>> {
+  const t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
+
   if (isPrincipal(role)) {
     const all = new Set<PermissionKey>();
     for (const resource of PERMISSION_RESOURCES) {
@@ -20,23 +28,31 @@ export async function resolveEffectivePermissions(
         all.add(permissionKey(resource, action));
       }
     }
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[perf] resolveEffectivePermissions (PRINCIPAL, no DB): ${(performance.now() - t0).toFixed(1)}ms`);
+    }
     return all;
   }
 
-  const rolePerms = await prisma.rolePermission.findMany({
-    where: { role, allowed: true },
-    include: { permission: true },
-  });
+  const [rolePerms, overrides] = await Promise.all([
+    prisma.rolePermission.findMany({
+      where: { role, allowed: true },
+      include: { permission: true },
+    }),
+    prisma.userPermission.findMany({
+      where: { userId },
+      include: { permission: true },
+    }),
+  ]);
+
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[perf] resolveEffectivePermissions (DB parallel): ${(performance.now() - t0).toFixed(1)}ms`);
+  }
 
   const map = new Map<string, boolean>();
   for (const rp of rolePerms) {
     map.set(rp.permission.key, true);
   }
-
-  const overrides = await prisma.userPermission.findMany({
-    where: { userId },
-    include: { permission: true },
-  });
   for (const ov of overrides) {
     map.set(ov.permission.key, ov.allowed);
   }
@@ -57,7 +73,7 @@ export async function resolveEffectivePermissions(
   }
 
   return effective;
-}
+});
 
 export async function requirePermission(key: PermissionKey) {
   const user = await getCurrentUser();
