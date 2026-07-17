@@ -3,8 +3,6 @@ import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
 import {
-  buildFullName,
-  generateSequentialNo,
   parsePagination,
   schoolIdFromUser,
 } from "@/server/lib/helpers";

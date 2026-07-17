@@ -1128,7 +1128,9 @@ export async function getPaymentReceipt(paymentId: string) {
   if (payment.receipt) {
     if (user.role === Role.STUDENT) {
       const snap = payment.receipt.snapshot as Record<string, unknown>;
-      const { family: _f, recordedBy: _r, ...safe } = snap;
+      const safe = { ...snap };
+      delete safe.family;
+      delete safe.recordedBy;
       return { ...payment.receipt, snapshot: safe };
     }
     return payment.receipt;

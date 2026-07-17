@@ -9,7 +9,6 @@ import {
   schoolIdFromUser,
   toDecimal,
 } from "@/server/lib/helpers";
-import { formatDate } from "@/lib/utils";
 import { parseOrThrow } from "@/server/validators/common";
 import {
   createExamSchema,
