@@ -108,18 +108,26 @@ export function FamiliesClient({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="ml-2"
+                      className="ml-2 text-red-600 hover:text-red-900 hover:bg-red-50 dark:hover:bg-red-950/20"
                       disabled={pending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          try {
-                            await deleteFamilyAction(f.id);
-                            toast.success("Family deleted");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Failed");
-                          }
-                        })
-                      }
+                      onClick={() => {
+                        const familyName = parentsLabel(f);
+                        let confirmMsg = `Are you sure you want to permanently delete the family "${familyName}"?`;
+                        if (f.students.length > 0) {
+                          confirmMsg += `\n\nWARNING: The following child(ren) associated with this parent will also be deleted:\n• ${f.students.map((s) => s.fullName).join("\n• ")}\n\nThis will remove all their records (attendance, enrollments, etc.).`;
+                        }
+                        if (confirm(confirmMsg)) {
+                          startTransition(async () => {
+                            try {
+                              await deleteFamilyAction(f.id);
+                              toast.success("Family deleted");
+                              router.refresh();
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : "Failed to delete family");
+                            }
+                          });
+                        }
+                      }}
                     >
                       Delete
                     </Button>

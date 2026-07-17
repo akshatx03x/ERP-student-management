@@ -23,6 +23,7 @@ export async function listFamilies(input?: {
 
   const where = {
     schoolId,
+    students: { some: {} },
     ...(params.search
       ? {
           OR: [
@@ -228,15 +229,77 @@ export async function deleteFamily(familyId: string) {
 
   const existing = await prisma.family.findFirst({
     where: { id: familyId, schoolId },
-    include: { _count: { select: { students: true } } },
+    include: {
+      students: {
+        include: {
+          user: true,
+        },
+      },
+      _count: {
+        select: {
+          payments: true,
+        },
+      },
+    },
   });
   if (!existing) throw new Error("Family not found");
-  if (existing._count.students > 0) {
-    throw new Error("Cannot delete family with linked students");
-  }
 
   return prisma.$transaction(async (tx) => {
-    await tx.family.delete({ where: { id: familyId } });
+    // 1. Delete associated users for any students in this family
+    const userIds = existing.students.map((s) => s.user?.id).filter(Boolean) as string[];
+    if (userIds.length > 0) {
+      await tx.user.deleteMany({
+        where: { id: { in: userIds } },
+      });
+    }
+
+    // 2. Nullify references in AdmissionApplication for both family and students
+    const studentIds = existing.students.map((s) => s.id);
+    const orConditions: any[] = [{ familyId }];
+    if (studentIds.length > 0) {
+      orConditions.push({ studentId: { in: studentIds } });
+    }
+    await tx.admissionApplication.updateMany({
+      where: {
+        OR: orConditions,
+      },
+      data: {
+        familyId: null,
+        studentId: null,
+      },
+    });
+
+    // 3. Delete the students
+    if (studentIds.length > 0) {
+      await tx.student.deleteMany({
+        where: { id: { in: studentIds } },
+      });
+    }
+
+    // 4. Delete the family if it has no payments, otherwise clear its personal details (parent history)
+    if (existing._count.payments === 0) {
+      await tx.family.delete({ where: { id: familyId } });
+    } else {
+      await tx.family.update({
+        where: { id: familyId },
+        data: {
+          familyCode: null,
+          fatherName: null,
+          motherName: null,
+          guardianName: null,
+          primaryPhone: null,
+          secondaryPhone: null,
+          email: null,
+          addressLine1: null,
+          addressLine2: null,
+          city: null,
+          state: null,
+          pincode: null,
+        },
+      });
+    }
+
+    // 5. Write audit log
     await writeAuditLog(
       {
         schoolId,
@@ -260,6 +323,7 @@ export async function searchFamilies(query: string, limit = 10) {
   return prisma.family.findMany({
     where: {
       schoolId,
+      students: { some: {} },
       OR: [
         { familyCode: { contains: query, mode: "insensitive" } },
         { fatherName: { contains: query, mode: "insensitive" } },

@@ -152,7 +152,21 @@ export default async function StudentDetailPage({
         <div className="space-y-4">
           {/* Section 1: Student Information */}
           <StudentProfileCard
-            student={student}
+            student={{
+              id: student.id,
+              admissionNo: student.admissionNo,
+              firstName: student.firstName,
+              middleName: student.middleName,
+              lastName: student.lastName,
+              fullName: student.fullName,
+              dateOfBirth: student.dateOfBirth,
+              gender: student.gender,
+              bloodGroup: student.bloodGroup,
+              aadhaar: student.aadhaar,
+              status: student.status,
+              familyId: student.familyId,
+              user: student.user,
+            }}
             isStudentSelf={isStudentSelf}
             currentEnrollment={currentEnrollment}
             canDelete={canDelete}

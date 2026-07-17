@@ -773,21 +773,39 @@ export function FeesClient(props: {
                   return;
                 }
                 const activeAllocs = allocs.filter((a) => Number(a.amount) > 0);
-                run(async () => {
-                  await recordPaymentAction({
-                    familyId: payForm.familyId,
-                    amount: Number(payForm.amount),
-                    method: payForm.method as "CASH" | "UPI" | "CHEQUE" | "BANK_TRANSFER",
-                    referenceNo: payForm.referenceNo || null,
-                    notes: payForm.notes || null,
-                    allocations: activeAllocs.map((a) => ({
-                      studentId: a.studentId,
-                      studentFeeId: null,
-                      amount: Number(a.amount),
-                    })),
-                  });
-                  setPayForm((f) => ({ ...f, amount: "", referenceNo: "", notes: "" }));
-                }, "Payment recorded — ledgers updated");
+                startTransition(async () => {
+                  try {
+                    await recordPaymentAction({
+                      familyId: payForm.familyId,
+                      amount: Number(payForm.amount),
+                      method: payForm.method as "CASH" | "UPI" | "CHEQUE" | "BANK_TRANSFER",
+                      referenceNo: payForm.referenceNo || null,
+                      notes: payForm.notes || null,
+                      allocations: activeAllocs.map((a) => ({
+                        studentId: a.studentId,
+                        studentFeeId: null,
+                        amount: Number(a.amount),
+                      })),
+                    });
+                    toast.success("Payment recorded — ledgers updated");
+                    
+                    // Reset form and states entirely outside the transition to ensure React clears them
+                    setTimeout(() => {
+                      setPayForm({
+                        familyId: "",
+                        amount: "",
+                        method: "UPI",
+                        referenceNo: "",
+                        notes: "",
+                      });
+                      setFamilySearch("");
+                      setSiblingDues([]);
+                      setAllocs([]);
+                    }, 0);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Failed to record payment");
+                  }
+                });
               }}
             >
               Save payment & update ledgers
