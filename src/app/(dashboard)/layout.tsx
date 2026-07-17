@@ -22,9 +22,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ...new Set([...permissions].map((key) => key.split(".")[0])),
   ];
 
-  // Branding is already included via getCurrentUser → school: { include: { branding: true } }
-  // No extra DB query needed here.
-  const branding = user.school?.branding;
+  // Branding is fetched from the cache on the user object getter.
+  const school = await user.school;
+  const branding = school?.branding;
 
   if (process.env.NODE_ENV === "development") {
     console.log(`[perf] DashboardLayout: ${(performance.now() - _t0).toFixed(1)}ms`);
@@ -33,7 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar
-        schoolName={branding?.schoolName ?? user.school?.name ?? "School ERP"}
+        schoolName={branding?.schoolName ?? school?.name ?? "School ERP"}
         allowedResources={allowedResources}
       />
       <div className="flex min-w-0 flex-1 flex-col">

@@ -102,29 +102,31 @@ export async function attachFeeStructureInTx(
     return { attached: 0, structureId: null };
   }
 
-  let attached = 0;
-  for (const item of structure.items) {
-    const existing = await tx.studentFee.findFirst({
-      where: {
-        studentId: opts.studentId,
-        feeHeadId: item.feeHeadId,
-        sessionId: opts.sessionId,
-      },
-    });
-    if (existing) continue;
+  // ── Bulk read existing rows; filter in-memory; bulk insert new ones ─────────
+  // Previously this was a per-item findFirst + create loop — 2 queries × N items.
+  // Now it is 1 findMany + 1 createMany = 2 queries total, regardless of N.
+  const existingFees = await tx.studentFee.findMany({
+    where: { studentId: opts.studentId, sessionId: opts.sessionId },
+    select: { feeHeadId: true },
+  });
+  const existingSet = new Set(existingFees.map((f) => f.feeHeadId));
 
-    await tx.studentFee.create({
-      data: {
-        studentId: opts.studentId,
-        feeHeadId: item.feeHeadId,
-        sessionId: opts.sessionId,
-        amount: item.amount,
-        status: StudentFeeStatus.PENDING,
-        remarks: `Auto-attached from ${structure.name}`,
-      },
-    });
-    attached += 1;
+  const newItems = structure.items
+    .filter((item) => !existingSet.has(item.feeHeadId))
+    .map((item) => ({
+      studentId: opts.studentId,
+      feeHeadId: item.feeHeadId,
+      sessionId: opts.sessionId,
+      amount: item.amount,
+      status: StudentFeeStatus.PENDING,
+      remarks: `Auto-attached from ${structure.name}`,
+    }));
+
+  if (newItems.length > 0) {
+    await tx.studentFee.createMany({ data: newItems });
   }
+
+  const attached = newItems.length;
 
   if (attached > 0) {
     await writeAuditLog(
@@ -148,6 +150,7 @@ export async function attachFeeStructureInTx(
 
   return { attached, structureId: structure.id };
 }
+
 
 /** Distribute an amount across unpaid student fees (FIFO by due date). */
 async function expandAllocationToFees(
@@ -586,18 +589,39 @@ export async function getStudentFeeLedger(studentId: string) {
   const enrollment = student.enrollments[0] ?? null;
   const sessionId = enrollment?.sessionId;
 
-  const fees = await prisma.studentFee.findMany({
-    where: {
-      studentId,
-      ...(sessionId ? { sessionId } : {}),
-    },
-    include: {
-      feeHead: true,
-      session: true,
-      allocations: true,
-    },
-    orderBy: [{ feeHead: { name: "asc" } }],
-  });
+  // ── Parallel: fees + allocations are independent of each other ────────────
+  const [fees, allocations] = await Promise.all([
+    prisma.studentFee.findMany({
+      where: {
+        studentId,
+        ...(sessionId ? { sessionId } : {}),
+      },
+      include: {
+        feeHead: true,
+        session: true,
+        allocations: true,
+      },
+      orderBy: [{ feeHead: { name: "asc" } }],
+    }),
+    prisma.feePaymentAllocation.findMany({
+      where: { studentId },
+      include: {
+        payment: {
+          select: {
+            id: true,
+            receiptNo: true,
+            paidAt: true,
+            method: true,
+            referenceNo: true,
+            notes: true,
+            amount: true,
+          },
+        },
+        studentFee: { include: { feeHead: true } },
+      },
+      orderBy: { payment: { paidAt: "desc" } },
+    }),
+  ]);
 
   const { lines, totalFee, paid, remaining } = ledgerFromFees(fees);
 
@@ -627,25 +651,6 @@ export async function getStudentFeeLedger(studentId: string) {
       };
     }
   }
-
-  const allocations = await prisma.feePaymentAllocation.findMany({
-    where: { studentId },
-    include: {
-      payment: {
-        select: {
-          id: true,
-          receiptNo: true,
-          paidAt: true,
-          method: true,
-          referenceNo: true,
-          notes: true,
-          amount: true,
-        },
-      },
-      studentFee: { include: { feeHead: true } },
-    },
-    orderBy: { payment: { paidAt: "desc" } },
-  });
 
   const paymentMap = new Map<
     string,
@@ -713,6 +718,7 @@ export async function getStudentFeeLedger(studentId: string) {
   };
 }
 
+
 /** Portal-safe view: no parent details, family IDs, or accountant info. */
 export async function getStudentPortalFees() {
   const { user } = await requirePermission("fee.view");
@@ -720,41 +726,42 @@ export async function getStudentPortalFees() {
     throw new Error("Student portal is only available for student accounts");
   }
 
-  const ledger = await getStudentFeeLedger(user.studentId);
   const schoolId = schoolIdFromUser(user);
+  // Await the lazy student getter
+  const student = await user.student;
+  const familyId = student?.familyId ?? student?.family?.id ?? null;
 
-  const me = await prisma.student.findFirst({
-    where: { id: user.studentId, schoolId },
-    select: { familyId: true },
-  });
-
-  const siblings = me
-    ? await prisma.student.findMany({
-        where: {
-          familyId: me.familyId,
-          id: { not: user.studentId },
-          schoolId,
-          status: "ACTIVE",
-        },
-        select: {
-          id: true,
-          fullName: true,
-          enrollments: {
-            include: { class: true, section: true },
-            orderBy: { createdAt: "desc" },
-            take: 1,
+  // ── Parallel: ledger and siblings are independent ─────────────────────────
+  const [ledger, siblings] = await Promise.all([
+    getStudentFeeLedger(user.studentId),
+    familyId
+      ? prisma.student.findMany({
+          where: {
+            familyId,
+            id: { not: user.studentId },
+            schoolId,
+            status: "ACTIVE",
           },
-          studentFees: {
-            include: {
-              allocations: true,
-              feeHead: true,
-              session: true,
+          select: {
+            id: true,
+            fullName: true,
+            enrollments: {
+              include: { class: true, section: true },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+            studentFees: {
+              include: {
+                allocations: true,
+                feeHead: true,
+                session: true,
+              },
             },
           },
-        },
-        orderBy: { fullName: "asc" },
-      })
-    : [];
+          orderBy: { fullName: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const siblingSummary = siblings.map((s) => {
     const { remaining } = ledgerFromFees(s.studentFees);
@@ -793,6 +800,7 @@ export async function getStudentPortalFees() {
     siblings: siblingSummary,
   };
 }
+
 
 /** Per-sibling dues for family payment allocation UI. */
 export async function getFamilyFeeDues(familyId: string) {

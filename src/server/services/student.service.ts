@@ -110,9 +110,29 @@ export async function listStudents(input?: {
   const [items, total] = await Promise.all([
     prisma.student.findMany({
       where,
-      include: {
-        family: true,
-        medical: true,
+      select: {
+        id: true,
+        admissionNo: true,
+        fullName: true,
+        dateOfBirth: true,
+        gender: true,
+        bloodGroup: true,
+        aadhaar: true,
+        status: true,
+        familyId: true,
+        schoolId: true,
+        createdAt: true,
+        updatedAt: true,
+        // Only the 2 fields actually rendered in the list view
+        family: {
+          select: {
+            id: true,
+            fatherName: true,
+            motherName: true,
+            primaryPhone: true,
+          },
+        },
+        // medical excluded: not displayed in the list view
         user: { select: { id: true, email: true, isActive: true } },
         enrollments: {
           include: { class: true, section: true, session: true },
