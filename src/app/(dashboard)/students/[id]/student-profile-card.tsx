@@ -17,7 +17,6 @@ export function StudentProfileCard({
   canDelete,
   isEditing: isEditingProp,
   onEditClose,
-  onDeleteRequest,
 }: {
   student: {
     id: string;
@@ -45,8 +44,6 @@ export function StudentProfileCard({
   /** Controlled from page-level Actions dropdown */
   isEditing?: boolean;
   onEditClose?: () => void;
-  /** Signals page-level to show delete confirmation */
-  onDeleteRequest?: () => void;
 }) {
   const router = useRouter();
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);

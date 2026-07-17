@@ -1,8 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
-import { Moon, Sun, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,6 @@ export function Header({
   role: string;
 }) {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
 
   async function signOut() {
     await authClient.signOut();

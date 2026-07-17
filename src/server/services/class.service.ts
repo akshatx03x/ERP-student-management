@@ -166,8 +166,7 @@ export async function deleteClass(classId: string) {
 // ── Sections ──
 
 export async function listSections(classId: string, input?: { search?: string }) {
-  const { user } = await requirePermission("section.view");
-  const schoolId = schoolIdFromUser(user);
+  await requirePermission("section.view");
   await getClass(classId);
 
   const where = {

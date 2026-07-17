@@ -34,7 +34,6 @@ type StaffRow = {
 export function StaffClient({ initialStaff }: { initialStaff: StaffRow[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [staffList, setStaffList] = useState(initialStaff);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +22,53 @@ type Student = { id: string; fullName: string };
 type ExamType = { id: string; name: string };
 type Exam = { id: string; name: string; class: { name: string }; examType: { name: string } };
 
+type ReportCardSubject = {
+  subject: string;
+  exam: string;
+  examType: string;
+  marksObtained: number;
+  maxMarks: number;
+  grade: string | null;
+  passMarks: number;
+  passed: boolean;
+};
+
+type ReportCardSnapshot = {
+  student?: {
+    id?: string;
+    fullName?: string;
+    admissionNo?: string;
+    class?: string;
+    section?: string;
+    rollNo?: number | null;
+  };
+  session?: string;
+  branding?: {
+    schoolName?: string;
+    address?: string | null;
+    reportCardFooter?: string | null;
+    logoDocumentId?: string | null;
+  } | null;
+  subjects?: ReportCardSubject[];
+  summary?: {
+    totalObtained?: number;
+    totalMax?: number;
+    overallPercent?: number;
+    overallGrade?: string | null;
+  };
+  generatedAt?: string;
+  generatedBy?: string;
+};
+
+type ReportCard = {
+  id: string;
+  studentId: string;
+  sessionId: string;
+  examId: string | null;
+  snapshot: ReportCardSnapshot;
+  publishedAt: Date | string;
+};
+
 export function ExaminationsClient(props: {
   sessions: Session[];
   currentSessionId: string | null;
@@ -34,8 +80,8 @@ export function ExaminationsClient(props: {
 }) {
   const [pending, startTransition] = useTransition();
   const [sessionId, setSessionId] = useState(props.currentSessionId ?? "");
-  const [selectedReportCard, setSelectedReportCard] = useState<any>(null);
-  const [batchReportCards, setBatchReportCards] = useState<any[]>([]);
+  const [selectedReportCard, setSelectedReportCard] = useState<ReportCard | null>(null);
+  const [batchReportCards, setBatchReportCards] = useState<ReportCard[]>([]);
 
   const handleBatchGenerate = () => {
     if (!sessionId) {
@@ -51,11 +97,11 @@ export function ExaminationsClient(props: {
       let count = 0;
       for (const s of props.students) {
         try {
-          const card = await generateReportCardAction({
+          const card = (await generateReportCardAction({
             studentId: s.id,
             sessionId,
             examId: marksExamId || null,
-          });
+          })) as unknown as ReportCard;
           generated.push(card);
           count++;
         } catch (e) {
@@ -211,11 +257,11 @@ export function ExaminationsClient(props: {
                 startTransition(async () => {
                   try {
                     const select = document.getElementById("rc-student") as HTMLSelectElement;
-                    const card = await generateReportCardAction({
+                    const card = (await generateReportCardAction({
                       studentId: select.value,
                       sessionId,
                       examId: marksExamId || null,
-                    });
+                    })) as unknown as ReportCard;
                     setSelectedReportCard(card);
                     toast.success("Report card generated");
                   } catch (e) {
@@ -294,9 +340,9 @@ export function ExaminationsClient(props: {
   );
 }
 
-function ReportCardPreview({ card }: { card: any }) {
+function ReportCardPreview({ card }: { card: ReportCard | ReportCardSnapshot | null }) {
   if (!card) return null;
-  const snap = card.snapshot || card;
+  const snap = (card && "snapshot" in card && card.snapshot) ? card.snapshot : (card as ReportCardSnapshot);
   return (
     <div className="bg-white p-8 text-black border border-stone-200 rounded-md font-sans max-w-2xl mx-auto shadow-sm my-4 break-inside-avoid">
       {/* Header */}
@@ -345,7 +391,7 @@ function ReportCardPreview({ card }: { card: any }) {
           </tr>
         </thead>
         <tbody>
-          {(snap.subjects || []).map((sub: any, idx: number) => (
+          {(snap.subjects || []).map((sub: ReportCardSubject, idx: number) => (
             <tr key={idx} className="border-b border-stone-200">
               <td className="py-2 px-3">
                 <span className="font-semibold text-stone-800">{sub.subject}</span>

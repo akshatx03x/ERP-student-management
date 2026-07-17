@@ -221,7 +221,7 @@ export function SettingsClient({
                         });
                         setForm((f) => ({ ...f, logoDocumentId: doc.id }));
                         toast.success("Logo uploaded successfully");
-                      } catch (err) {
+                      } catch {
                         toast.error("Failed to upload logo image");
                       }
                     });

@@ -61,7 +61,7 @@ export function Sidebar({
                     pathname === item.href || pathname.startsWith(`${item.href}/`);
 
                   // Dynamically lookup the Lucide icon, fallback to HelpCircle if not found
-                  const IconComp = (Icons as any)[item.icon] || Icons.HelpCircle;
+                  const IconComp = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[item.icon] || Icons.HelpCircle;
 
                   return (
                     <Link

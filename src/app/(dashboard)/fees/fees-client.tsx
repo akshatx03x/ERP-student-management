@@ -76,6 +76,41 @@ type SiblingDue = {
   remaining: number;
 };
 
+type ReceiptAllocation = {
+  studentName: string;
+  admissionNo: string;
+  feeHead: string;
+  amount: number;
+};
+
+type ReceiptBranding = {
+  logoDocumentId?: string | null;
+  schoolName?: string;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  receiptFooter?: string | null;
+};
+
+type ReceiptFamily = {
+  fatherName?: string | null;
+  motherName?: string | null;
+  primaryPhone?: string | null;
+};
+
+type ReceiptSnapshot = {
+  branding?: ReceiptBranding | null;
+  receiptNo: string;
+  paidAt: string | Date;
+  method: string;
+  referenceNo?: string | null;
+  family?: ReceiptFamily | null;
+  allocations: ReceiptAllocation[];
+  amount: number;
+  amountFormatted: string;
+  recordedBy?: string | null;
+};
+
 function familyLabel(f: Family) {
   const parents = [f.fatherName, f.motherName].filter(Boolean).join(" / ");
   if (parents && f.primaryPhone) return `${parents} · ${f.primaryPhone}`;
@@ -134,7 +169,7 @@ export function FeesClient(props: {
   }, [familySearch, props.families]);
   const [siblingDues, setSiblingDues] = useState<SiblingDue[]>([]);
   const [allocs, setAllocs] = useState<Array<{ studentId: string; amount: string }>>([]);
-  const [receipt, setReceipt] = useState<unknown>(null);
+  const [receipt, setReceipt] = useState<ReceiptSnapshot | null>(null);
 
   const structureTotal = useMemo(
     () => structureItems.reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
@@ -226,6 +261,7 @@ export function FeesClient(props: {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payForm.familyId]);
 
   function run(fn: () => Promise<unknown>, ok: string) {
@@ -839,7 +875,7 @@ export function FeesClient(props: {
                             startTransition(async () => {
                               try {
                                 const r = await getReceiptAction(p.id);
-                                setReceipt(r.snapshot);
+                                setReceipt(r.snapshot as unknown as ReceiptSnapshot);
                                 toast.success("Receipt loaded");
                                 setTimeout(() => window.print(), 300);
                               } catch (e) {
@@ -864,24 +900,24 @@ export function FeesClient(props: {
         <div className="print-only mx-auto my-4 max-w-xl border border-stone-300 bg-white p-8 text-black shadow-sm font-sans rounded-md">
           {/* Header */}
           <div className="border-b border-stone-200 pb-4 mb-4 text-center">
-            {(receipt as any).branding?.logoDocumentId && (
+            {receipt.branding?.logoDocumentId && (
               <img
-                src={`/api/documents/${(receipt as any).branding.logoDocumentId}`}
+                src={`/api/documents/${receipt.branding.logoDocumentId}`}
                 className="mx-auto h-16 w-auto object-contain mb-3"
                 alt="School Logo"
               />
             )}
             <h1 className="text-xl font-bold tracking-wide uppercase text-stone-800">
-              {(receipt as any).branding?.schoolName || "Vidhyanjali Public School"}
+              {receipt.branding?.schoolName || "Vidhyanjali Public School"}
             </h1>
-            {((receipt as any).branding?.address) && (
-              <p className="text-xs text-stone-500">{(receipt as any).branding.address}</p>
+            {receipt.branding?.address && (
+              <p className="text-xs text-stone-500">{receipt.branding.address}</p>
             )}
-            {((receipt as any).branding?.phone || (receipt as any).branding?.email) && (
+            {(receipt.branding?.phone || receipt.branding?.email) && (
               <p className="text-[10px] text-stone-400 mt-0.5">
                 {[
-                  (receipt as any).branding.phone ? `Ph: ${(receipt as any).branding.phone}` : "",
-                  (receipt as any).branding.email ? `Email: ${(receipt as any).branding.email}` : "",
+                  receipt.branding.phone ? `Ph: ${receipt.branding.phone}` : "",
+                  receipt.branding.email ? `Email: ${receipt.branding.email}` : "",
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -895,22 +931,22 @@ export function FeesClient(props: {
           {/* Details Row */}
           <div className="grid grid-cols-2 gap-4 text-xs mb-6">
             <div className="space-y-1">
-              <p><span className="text-stone-500 font-medium">Receipt No:</span> <span className="font-mono font-semibold">{(receipt as any).receiptNo}</span></p>
-              <p><span className="text-stone-500 font-medium">Date & Time:</span> {formatDate((receipt as any).paidAt)}</p>
-              <p><span className="text-stone-500 font-medium">Mode:</span> <span className="font-semibold">{(receipt as any).method}</span></p>
-              {((receipt as any).referenceNo) && (
-                <p><span className="text-stone-500 font-medium">Ref/Cheque No:</span> <span className="font-mono">{(receipt as any).referenceNo}</span></p>
+              <p><span className="text-stone-500 font-medium">Receipt No:</span> <span className="font-mono font-semibold">{receipt.receiptNo}</span></p>
+              <p><span className="text-stone-500 font-medium">Date & Time:</span> {formatDate(receipt.paidAt)}</p>
+              <p><span className="text-stone-500 font-medium">Mode:</span> <span className="font-semibold">{receipt.method}</span></p>
+              {receipt.referenceNo && (
+                <p><span className="text-stone-500 font-medium">Ref/Cheque No:</span> <span className="font-mono">{receipt.referenceNo}</span></p>
               )}
             </div>
             <div className="text-right space-y-1">
               <p className="font-semibold text-stone-700">Received From (Parent):</p>
               <p className="font-medium text-stone-900">
-                {[(receipt as any).family?.fatherName, (receipt as any).family?.motherName]
+                {[receipt.family?.fatherName, receipt.family?.motherName]
                   .filter(Boolean)
                   .join(" & ") || "Parent/Guardian"}
               </p>
-              {((receipt as any).family?.primaryPhone) && (
-                <p className="text-stone-500">Mob: {(receipt as any).family.primaryPhone}</p>
+              {receipt.family?.primaryPhone && (
+                <p className="text-stone-500">Mob: {receipt.family.primaryPhone}</p>
               )}
             </div>
           </div>
@@ -925,7 +961,7 @@ export function FeesClient(props: {
               </tr>
             </thead>
             <tbody>
-              {((receipt as any).allocations || []).map((alloc: any, idx: number) => (
+              {(receipt.allocations || []).map((alloc: ReceiptAllocation, idx: number) => (
                 <tr key={idx} className="border-b border-stone-100">
                   <td className="py-2 px-3 font-medium text-stone-800">
                     {alloc.studentName} <span className="text-[10px] text-stone-400 font-mono">({alloc.admissionNo})</span>
@@ -941,18 +977,18 @@ export function FeesClient(props: {
           <div className="border-t border-stone-200 pt-4 flex flex-col items-end gap-1.5">
             <div className="flex justify-between w-64 text-xs">
               <span className="text-stone-500">Subtotal:</span>
-              <span className="font-mono text-stone-700">{formatCurrency((receipt as any).amount)}</span>
+              <span className="font-mono text-stone-700">{formatCurrency(receipt.amount)}</span>
             </div>
             <div className="flex justify-between w-64 text-sm font-bold border-t pt-2 mt-1">
               <span>Total Received:</span>
-              <span className="font-mono text-stone-900">{(receipt as any).amountFormatted}</span>
+              <span className="font-mono text-stone-900">{receipt.amountFormatted}</span>
             </div>
           </div>
 
           {/* Signatures */}
           <div className="mt-12 grid grid-cols-2 gap-4 text-center text-[10px] text-stone-400">
             <div className="pt-8 border-t border-dashed border-stone-200">
-              <p className="font-medium text-stone-600">{(receipt as any).recordedBy || "Cashier"}</p>
+              <p className="font-medium text-stone-600">{receipt.recordedBy || "Cashier"}</p>
               <p>Issued By</p>
             </div>
             <div className="pt-8 border-t border-dashed border-stone-200">
@@ -962,9 +998,9 @@ export function FeesClient(props: {
           </div>
 
           {/* Footer */}
-          {((receipt as any).branding?.receiptFooter) && (
+          {receipt.branding?.receiptFooter && (
             <div className="text-center mt-8 pt-4 border-t border-stone-100 text-[10px] text-stone-400">
-              <p>{(receipt as any).branding.receiptFooter}</p>
+              <p>{receipt.branding.receiptFooter}</p>
             </div>
           )}
         </div>

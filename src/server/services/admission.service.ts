@@ -10,7 +10,6 @@ import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
 import { attachFeeStructureInTx } from "@/server/services/fee.service";
 import {
-  buildFullName,
   generateSequentialNo,
   parsePagination,
   schoolIdFromUser,
