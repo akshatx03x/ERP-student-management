@@ -4,6 +4,7 @@ import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
 import { parsePagination, schoolIdFromUser } from "@/server/lib/helpers";
 import { parseOrThrow } from "@/server/validators/common";
+import { revalidateTag } from "next/cache";
 import {
   listUsersSchema,
   toggleUserActiveSchema,
@@ -171,7 +172,6 @@ export async function toggleUserActive(input: ToggleUserActiveInput) {
     return result;
   });
 
-  const { revalidateTag } = require("next/cache");
   revalidateTag(`user-${target.id}`);
 
   return updated;

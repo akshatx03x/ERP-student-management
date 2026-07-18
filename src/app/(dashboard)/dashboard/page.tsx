@@ -3,6 +3,7 @@ import { schoolIdFromUser } from "@/server/lib/helpers";
 import { prisma } from "@/server/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/states";
+import { unstable_cache } from "next/cache";
 
 import { LucideIcon, GraduationCap, CalendarCheck, Coins, AlertCircle, BookOpen } from "lucide-react";
 
@@ -38,7 +39,6 @@ function Metric({
 }
 
 export default async function DashboardPage() {
-  const _t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
   const { user } = await requirePermission("dashboard.view");
   const schoolId = schoolIdFromUser(user);
 
@@ -55,9 +55,6 @@ export default async function DashboardPage() {
       },
     });
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(`[perf] DashboardPage (student): ${(performance.now() - _t0).toFixed(1)}ms`);
-    }
     const due =
       student?.studentFees.reduce((sum, f) => {
         const paid = f.allocations.reduce((s, a) => s + Number(a.amount), 0);
@@ -107,35 +104,48 @@ export default async function DashboardPage() {
     );
   }
 
-  const [students, attendanceToday, feesCollected, pendingFeeRows] = await Promise.all([
-    prisma.student.count({ where: { schoolId, status: "ACTIVE" } }),
-    prisma.attendanceRecord.count({
-      where: {
-        date: new Date(new Date().toISOString().slice(0, 10)),
-        student: { schoolId },
-      },
-    }),
-    prisma.familyPayment.aggregate({
-      where: { family: { schoolId } },
-      _sum: { amount: true },
-    }),
-    prisma.studentFee.findMany({
-      where: {
-        student: { schoolId },
-        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
-      },
-      include: { allocations: true },
-    }),
-  ]);
-  if (process.env.NODE_ENV === "development") {
-    console.log(`[perf] DashboardPage: ${(performance.now() - _t0).toFixed(1)}ms`);
-  }
+  const fetchCachedStats = unstable_cache(
+    async (sId: string) => {
+      const [students, attendanceToday, feesCollected, pendingFeeRows] = await Promise.all([
+        prisma.student.count({ where: { schoolId: sId, status: "ACTIVE" } }),
+        prisma.attendanceRecord.count({
+          where: {
+            date: new Date(new Date().toISOString().slice(0, 10)),
+            student: { schoolId: sId },
+          },
+        }),
+        prisma.familyPayment.aggregate({
+          where: { family: { schoolId: sId } },
+          _sum: { amount: true },
+        }),
+        prisma.studentFee.findMany({
+          where: {
+            student: { schoolId: sId },
+            status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+          },
+          include: { allocations: true },
+        }),
+      ]);
 
-  const collected = Number(feesCollected._sum.amount ?? 0);
-  const pending = pendingFeeRows.reduce((sum, f) => {
-    const paid = f.allocations.reduce((s, a) => s + Number(a.amount), 0);
-    return sum + Math.max(0, Number(f.amount) - paid);
-  }, 0);
+      const collected = Number(feesCollected._sum.amount ?? 0);
+      const pending = pendingFeeRows.reduce((sum, f) => {
+        const paid = f.allocations.reduce((s, a) => s + Number(a.amount), 0);
+        return sum + Math.max(0, Number(f.amount) - paid);
+      }, 0);
+
+      return {
+        students,
+        attendanceToday,
+        collected,
+        pending,
+      };
+    },
+    [`dashboard-stats-${schoolId}`],
+    { revalidate: 15, tags: [`dashboard-stats-${schoolId}`] }
+  );
+
+  const stats = await fetchCachedStats(schoolId);
+  const { students, attendanceToday, collected, pending } = stats;
 
   return (
     <div className="space-y-6">

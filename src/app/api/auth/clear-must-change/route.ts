@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/server/auth/auth";
 import { prisma } from "@/server/lib/prisma";
+import { revalidateTag } from "next/cache";
 
 export async function POST() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -14,7 +15,6 @@ export async function POST() {
     data: { mustChangePassword: false },
   });
 
-  const { revalidateTag } = require("next/cache");
   revalidateTag(`user-${session.user.id}`);
 
   return NextResponse.json({ ok: true });
