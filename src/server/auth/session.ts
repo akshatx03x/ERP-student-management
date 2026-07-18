@@ -91,31 +91,33 @@
    */
   export const getCurrentUser = cache(async function getCurrentUser() {
     const session = await requireSession();
-    const t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        createdAt: true,
-        updatedAt: true,
-        name: true,
-        email: true,
-        emailVerified: true,
-        image: true,
-        role: true,
-        isActive: true,
-        mustChangePassword: true,
-        loginIdentifier: true,
-        schoolId: true,
-        staffProfileId: true,
-        studentId: true,
+    const fetchUser = unstable_cache(
+      async (userId: string) => {
+        return prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            createdAt: true,
+            updatedAt: true,
+            name: true,
+            email: true,
+            emailVerified: true,
+            image: true,
+            role: true,
+            isActive: true,
+            mustChangePassword: true,
+            loginIdentifier: true,
+            schoolId: true,
+            staffProfileId: true,
+            studentId: true,
+          },
+        });
       },
-    });
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(`[perf] getCurrentUser (Optimized Select): ${(performance.now() - t0).toFixed(1)}ms`);
-    }
+      [`user-${session.user.id}`],
+      { revalidate: 15, tags: [`user-${session.user.id}`] }
+    );
+    const user = await fetchUser(session.user.id);
 
     if (!user || !user.isActive) {
       redirect("/login?error=inactive");

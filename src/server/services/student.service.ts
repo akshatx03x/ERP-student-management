@@ -318,7 +318,7 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
 
   return prisma.$transaction(
     async (tx) => {
-      let familyId = data.familyId ?? null;
+      const familyId = data.familyId ?? null;
 
       const student = await tx.student.create({
         data: {

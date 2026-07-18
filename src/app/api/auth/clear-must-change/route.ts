@@ -14,5 +14,8 @@ export async function POST() {
     data: { mustChangePassword: false },
   });
 
+  const { revalidateTag } = require("next/cache");
+  revalidateTag(`user-${session.user.id}`);
+
   return NextResponse.json({ ok: true });
 }

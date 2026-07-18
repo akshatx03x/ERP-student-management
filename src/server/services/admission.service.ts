@@ -240,7 +240,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
 
     familyId = student.familyId;
 
-    let sectionId = data.sectionId ?? null;
+    const sectionId = data.sectionId ?? null;
     let section;
     if (sectionId) {
       section = await tx.section.findUnique({

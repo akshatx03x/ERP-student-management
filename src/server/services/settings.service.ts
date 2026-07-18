@@ -171,6 +171,9 @@ export async function toggleUserActive(input: ToggleUserActiveInput) {
     return result;
   });
 
+  const { revalidateTag } = require("next/cache");
+  revalidateTag(`user-${target.id}`);
+
   return updated;
 }
 
