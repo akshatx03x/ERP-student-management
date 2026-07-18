@@ -37,6 +37,7 @@ export function NewStudentForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [match, setMatch] = useState<MatchedFamily | null>(null);
+  const [checkedPhone, setCheckedPhone] = useState("");
   const [form, setForm] = useState({
     admissionNo: "",
     firstName: "",
@@ -108,12 +109,21 @@ export function NewStudentForm({
     }
     startTransition(async () => {
       try {
-        const existing = await findFamilyByPhoneAction(form.phone.trim());
-        if (existing && !match) {
-          setMatch(existing);
-          return;
+        const phoneTrimmed = form.phone.trim();
+        let familyId: string | null = match?.id ?? null;
+
+        // If we haven't checked this phone number yet, check it now
+        if (checkedPhone !== phoneTrimmed) {
+          const existing = await findFamilyByPhoneAction(phoneTrimmed);
+          setCheckedPhone(phoneTrimmed);
+          if (existing && !match) {
+            setMatch(existing);
+            return;
+          }
+          familyId = existing?.id ?? null;
         }
-        await save(match?.id ?? null);
+
+        await save(familyId);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed");
       }
@@ -208,8 +218,28 @@ export function NewStudentForm({
             <Input
               value={form.phone}
               onChange={(e) => {
+                const val = e.target.value;
                 setMatch(null);
-                setForm((f) => ({ ...f, phone: e.target.value }));
+                setForm((f) => ({ ...f, phone: val }));
+                if (val.trim() !== checkedPhone) {
+                  setCheckedPhone("");
+                }
+              }}
+              onBlur={(e) => {
+                const val = e.target.value.trim();
+                if (val && val !== checkedPhone) {
+                  startTransition(async () => {
+                    try {
+                      const existing = await findFamilyByPhoneAction(val);
+                      setCheckedPhone(val);
+                      if (existing) {
+                        setMatch(existing);
+                      }
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  });
+                }
               }}
               placeholder="Used to find existing family"
             />

@@ -5,6 +5,8 @@ import { writeAuditLog } from "@/server/services/audit.service";
 import { attachFeeStructureInTx } from "@/server/services/fee.service";
 import { createStudentUser } from "@/server/services/student.service";
 import { EnrollmentStatus } from "@prisma/client";
+import { hashPassword } from "better-auth/crypto";
+import { studentDobPassword } from "@/lib/utils";
 
 type RowError = { row: number; message: string };
 
@@ -265,102 +267,107 @@ export async function importStudents(
     }
 
     try {
+      // Precompute login password hash outside the transaction (CPU-bound bcrypt)
+      const dobDate = new Date(row.dateOfBirth);
+      const tempPassword = studentDobPassword(dobDate);
+      const hashedLoginPassword = await hashPassword(tempPassword);
+
       await prisma.$transaction(async (tx) => {
         // Resolve Family
-        const familyKey = getFamilyKey(row);
-        let familyId = createdFamiliesMap.get(familyKey);
+          const familyKey = getFamilyKey(row);
+          let familyId = createdFamiliesMap.get(familyKey);
 
-        if (!familyId) {
-          // Check DB
-          let dbFamily = null;
-          if (row.primaryPhone) {
-            dbFamily = await tx.family.findFirst({
-              where: { primaryPhone: row.primaryPhone, schoolId },
-            });
+          if (!familyId) {
+            // Check DB
+            let dbFamily = null;
+            if (row.primaryPhone) {
+              dbFamily = await tx.family.findFirst({
+                where: { primaryPhone: row.primaryPhone, schoolId },
+              });
+            }
+            if (!dbFamily && row.fatherName && row.motherName) {
+              dbFamily = await tx.family.findFirst({
+                where: { fatherName: row.fatherName, motherName: row.motherName, schoolId },
+              });
+            }
+
+            if (dbFamily) {
+              familyId = dbFamily.id;
+            } else {
+              // Create family
+              const newFamily = await tx.family.create({
+                data: {
+                  schoolId,
+                  fatherName: row.fatherName || null,
+                  motherName: row.motherName || null,
+                  guardianName: row.guardianName || null,
+                  primaryPhone: row.primaryPhone || null,
+                  secondaryPhone: row.secondaryPhone || null,
+                  email: row.email || null,
+                  addressLine1: row.addressLine1 || null,
+                  addressLine2: row.addressLine2 || null,
+                  city: row.city || null,
+                  state: row.state || null,
+                  pincode: row.pincode || null,
+                },
+              });
+              familyId = newFamily.id;
+              await writeAuditLog(
+                {
+                  schoolId,
+                  userId,
+                  action: "create",
+                  module: "family",
+                  entityType: "Family",
+                  entityId: newFamily.id,
+                  newValue: newFamily,
+                },
+                tx,
+              );
+            }
+            createdFamiliesMap.set(familyKey, familyId);
           }
-          if (!dbFamily && row.fatherName && row.motherName) {
-            dbFamily = await tx.family.findFirst({
-              where: { fatherName: row.fatherName, motherName: row.motherName, schoolId },
-            });
-          }
 
-          if (dbFamily) {
-            familyId = dbFamily.id;
-          } else {
-            // Create family
-            const newFamily = await tx.family.create({
-              data: {
-                schoolId,
-                fatherName: row.fatherName || null,
-                motherName: row.motherName || null,
-                guardianName: row.guardianName || null,
-                primaryPhone: row.primaryPhone || null,
-                secondaryPhone: row.secondaryPhone || null,
-                email: row.email || null,
-                addressLine1: row.addressLine1 || null,
-                addressLine2: row.addressLine2 || null,
-                city: row.city || null,
-                state: row.state || null,
-                pincode: row.pincode || null,
-              },
-            });
-            familyId = newFamily.id;
-            await writeAuditLog(
-              {
-                schoolId,
-                userId,
-                action: "create",
-                module: "family",
-                entityType: "Family",
-                entityId: newFamily.id,
-                newValue: newFamily,
-              },
-              tx,
-            );
-          }
-          createdFamiliesMap.set(familyKey, familyId);
-        }
+          // Create Student
+          const genderVal =
+            row.gender === "MALE" || row.gender === "FEMALE" || row.gender === "OTHER"
+              ? row.gender
+              : null;
+          
+          const fullName = buildFullName(row.firstName, row.middleName, row.lastName);
 
-        // Create Student
-        const genderVal =
-          row.gender === "MALE" || row.gender === "FEMALE" || row.gender === "OTHER"
-            ? row.gender
-            : null;
-        
-        const fullName = buildFullName(row.firstName, row.middleName, row.lastName);
+          const newStudent = await tx.student.create({
+            data: {
+              schoolId,
+              familyId,
+              admissionNo: row.admissionNo,
+              firstName: row.firstName,
+              middleName: row.middleName || null,
+              lastName: row.lastName || null,
+              fullName,
+              dateOfBirth: dobDate,
+              gender: genderVal,
+              bloodGroup: row.bloodGroup || null,
+              aadhaar: row.aadhaar || null,
+              status: row.status === "ACTIVE" || row.status === "INACTIVE" || row.status === "ALUMNI" || row.status === "TRANSFERRED" ? row.status : "ACTIVE",
+            },
+          });
 
-        const newStudent = await tx.student.create({
-          data: {
-            schoolId,
-            familyId,
-            admissionNo: row.admissionNo,
-            firstName: row.firstName,
-            middleName: row.middleName || null,
-            lastName: row.lastName || null,
-            fullName,
-            dateOfBirth: new Date(row.dateOfBirth),
-            gender: genderVal,
-            bloodGroup: row.bloodGroup || null,
-            aadhaar: row.aadhaar || null,
-            status: row.status === "ACTIVE" || row.status === "INACTIVE" || row.status === "ALUMNI" || row.status === "TRANSFERRED" ? row.status : "ACTIVE",
-          },
-        });
+          await writeAuditLog(
+            {
+              schoolId,
+              userId,
+              action: "create",
+              module: "student",
+              entityType: "Student",
+              entityId: newStudent.id,
+              newValue: newStudent,
+            },
+            tx,
+          );
 
-        await writeAuditLog(
-          {
-            schoolId,
-            userId,
-            action: "create",
-            module: "student",
-            entityType: "Student",
-            entityId: newStudent.id,
-            newValue: newStudent,
-          },
-          tx,
-        );
-
-        // Create User Account Login
-        await createStudentUser(tx, newStudent, schoolId);
+          // Create User Account Login
+          await createStudentUser(tx, newStudent, schoolId, hashedLoginPassword);
 
         // Register Enrollment and Fees
         if (row.className && currentSession) {

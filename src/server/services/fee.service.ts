@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/server/services/audit.service";
 import { getBrandingBySchoolId } from "@/server/services/branding.service";
 import {
   decimalToNumber,
+  getNextSequenceValue,
   parsePagination,
   schoolIdFromUser,
   sumDecimals,
@@ -54,13 +55,15 @@ async function recalcStudentFeeStatus(
   });
 }
 
-async function generateReceiptNo(): Promise<string> {
+async function generateReceiptNoInTx(
+  tx: Prisma.TransactionClient,
+  schoolId: string,
+): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `RCP-${year}`;
-  const count = await prisma.familyPayment.count({
-    where: { receiptNo: { startsWith: prefix } },
-  });
-  return `${prefix}-${String(count + 1).padStart(5, "0")}`;
+  const counterId = `receipt_no:${schoolId}:${year}`;
+  const seqValue = await getNextSequenceValue(tx, counterId);
+  return `${prefix}-${String(seqValue).padStart(5, "0")}`;
 }
 
 /** Find the single fee structure for a class in a session (business rule: one per class/session). */
@@ -71,7 +74,21 @@ export async function findFeeStructureForClass(
 ) {
   return tx.feeStructure.findFirst({
     where: { sessionId, classId },
-    include: { items: { include: { feeHead: true } }, class: true, session: true },
+    select: {
+      id: true,
+      name: true,
+      items: {
+        select: {
+          feeHeadId: true,
+          amount: true,
+          feeHead: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
 }
@@ -985,35 +1002,58 @@ export async function recordFamilyPayment(input: RecordPaymentInput) {
   }
 
   const familyStudentIds = new Set(family.students.map((s) => s.id));
-  for (const alloc of data.allocations) {
-    if (!familyStudentIds.has(alloc.studentId)) {
-      throw new Error("All allocations must be for students in the payment family");
+  const allocFeeIds = data.allocations
+    .map((a) => a.studentFeeId)
+    .filter((id): id is string => !!id);
+
+  if (allocFeeIds.length > 0) {
+    const fees = await prisma.studentFee.findMany({
+      where: { id: { in: allocFeeIds } },
+      select: { id: true, studentId: true },
+    });
+    const feeMap = new Map(fees.map((f) => [f.id, f.studentId]));
+
+    for (const alloc of data.allocations) {
+      if (!familyStudentIds.has(alloc.studentId)) {
+        throw new Error("All allocations must be for students in the payment family");
+      }
+      if (alloc.studentFeeId) {
+        const studentIdForFee = feeMap.get(alloc.studentFeeId);
+        if (!studentIdForFee || studentIdForFee !== alloc.studentId) {
+          throw new Error("Invalid student fee for student allocation");
+        }
+      }
     }
-    if (alloc.studentFeeId) {
-      const fee = await prisma.studentFee.findFirst({
-        where: { id: alloc.studentFeeId, studentId: alloc.studentId },
-      });
-      if (!fee) throw new Error(`Invalid student fee for student allocation`);
+  } else {
+    for (const alloc of data.allocations) {
+      if (!familyStudentIds.has(alloc.studentId)) {
+        throw new Error("All allocations must be for students in the payment family");
+      }
     }
   }
 
-  const receiptNo = await generateReceiptNo();
   const branding = await getBrandingBySchoolId(schoolId);
 
   return prisma.$transaction(async (tx) => {
+    const receiptNo = await generateReceiptNoInTx(tx, schoolId);
     const expanded: Array<{
       studentId: string;
       studentFeeId: string | null;
       amount: Prisma.Decimal;
     }> = [];
 
-    for (const alloc of data.allocations) {
-      const rows = await expandAllocationToFees(
-        tx,
-        alloc.studentId,
-        toDecimal(alloc.amount),
-        alloc.studentFeeId,
-      );
+    const allocationResults = await Promise.all(
+      data.allocations.map((alloc) =>
+        expandAllocationToFees(
+          tx,
+          alloc.studentId,
+          toDecimal(alloc.amount),
+          alloc.studentFeeId,
+        )
+      )
+    );
+
+    for (const rows of allocationResults) {
       expanded.push(...rows);
     }
 
@@ -1052,9 +1092,9 @@ export async function recordFamilyPayment(input: RecordPaymentInput) {
       ),
     ];
 
-    for (const feeId of feeIds) {
-      await recalcStudentFeeStatus(tx, feeId);
-    }
+    await Promise.all(
+      feeIds.map((feeId) => recalcStudentFeeStatus(tx, feeId))
+    );
 
     const snapshot = {
       receiptNo: payment.receiptNo,
@@ -1107,7 +1147,7 @@ export async function recordFamilyPayment(input: RecordPaymentInput) {
     );
 
     return { payment, receipt };
-  });
+  }, { timeout: 35000 });
 }
 
 export async function getPaymentReceipt(paymentId: string) {

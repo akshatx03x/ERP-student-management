@@ -73,3 +73,16 @@ export async function generateSequentialNo(
   const seq = String(existingCount + 1).padStart(pad, "0");
   return `${prefix}-${year}-${seq}`;
 }
+
+export async function getNextSequenceValue(
+  tx: Prisma.TransactionClient,
+  counterId: string,
+): Promise<number> {
+  const counter = await tx.systemCounter.upsert({
+    where: { id: counterId },
+    create: { id: counterId, value: 1 },
+    update: { value: { increment: 1 } },
+  });
+  return counter.value;
+}
+

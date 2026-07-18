@@ -32,13 +32,10 @@ export async function createStudentUser(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   student: { id: string; admissionNo: string; fullName: string; dateOfBirth: Date },
   schoolId: string,
+  hashedPassword?: string,
 ) {
   const email = studentSyntheticEmail(student.admissionNo);
-  const existing = await tx.user.findUnique({ where: { email } });
-  if (existing) throw new Error(`Login already exists for admission no ${student.admissionNo}`);
-
-  const password = studentDobPassword(student.dateOfBirth);
-  const hashed = await hashPassword(password);
+  const hashed = hashedPassword ?? await hashPassword(studentDobPassword(student.dateOfBirth));
 
   const user = await tx.user.create({
     data: {
@@ -186,7 +183,12 @@ export async function getStudent(studentId: string) {
         take: 1,
       },
       studentFees: {
-        include: { allocations: true },
+        select: {
+          amount: true,
+          allocations: {
+            select: { amount: true },
+          },
+        },
       },
     },
     orderBy: { fullName: "asc" },
@@ -212,43 +214,59 @@ export async function createStudent(input: CreateStudentInput) {
 
   const fullName = buildFullName(data.firstName, data.middleName, data.lastName);
 
-  return prisma.$transaction(async (tx) => {
-    const student = await tx.student.create({
-      data: {
-        schoolId,
-        familyId: data.familyId,
-        admissionNo: data.admissionNo,
-        firstName: data.firstName,
-        middleName: data.middleName,
-        lastName: data.lastName,
-        fullName,
-        dateOfBirth: data.dateOfBirth,
-        gender: data.gender,
-        bloodGroup: data.bloodGroup,
-        aadhaar: data.aadhaar,
-        status: data.status,
-      },
-    });
+  // Compute password hash outside transaction (CPU-bound bcrypt)
+  let hashedLoginPassword = "";
+  if (data.createLogin) {
+    const email = studentSyntheticEmail(data.admissionNo);
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) throw new Error(`Login already exists for admission no ${data.admissionNo}`);
 
-    if (data.createLogin) {
-      await createStudentUser(tx, student, schoolId);
-    }
+    const password = studentDobPassword(data.dateOfBirth);
+    hashedLoginPassword = await hashPassword(password);
+  }
 
-    await writeAuditLog(
-      {
-        schoolId,
-        userId: user.id,
-        action: "create",
-        module: "student",
-        entityType: "Student",
-        entityId: student.id,
-        newValue: student,
-      },
-      tx,
-    );
+  return prisma.$transaction(
+    async (tx) => {
+      const student = await tx.student.create({
+        data: {
+          schoolId,
+          familyId: data.familyId,
+          admissionNo: data.admissionNo,
+          firstName: data.firstName,
+          middleName: data.middleName,
+          lastName: data.lastName,
+          fullName,
+          dateOfBirth: data.dateOfBirth,
+          gender: data.gender,
+          bloodGroup: data.bloodGroup,
+          aadhaar: data.aadhaar,
+          status: data.status,
+        },
+      });
 
-    return student;
-  });
+      if (data.createLogin) {
+        await createStudentUser(tx, student, schoolId, hashedLoginPassword);
+      }
+
+      await writeAuditLog(
+        {
+          schoolId,
+          userId: user.id,
+          action: "create",
+          module: "student",
+          entityType: "Student",
+          entityId: student.id,
+          newValue: student,
+        },
+        tx,
+      );
+
+      return student;
+    },
+    {
+      timeout: 25000,
+    },
+  );
 }
 
 /**
@@ -287,93 +305,114 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
 
   const fullName = buildFullName(data.firstName, data.middleName, data.lastName);
 
-  return prisma.$transaction(async (tx) => {
-    let familyId = data.familyId ?? null;
+  // Compute password hash outside transaction (CPU-bound bcrypt)
+  let hashedLoginPassword = "";
+  if (data.createLogin) {
+    const email = studentSyntheticEmail(data.admissionNo);
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) throw new Error(`Login already exists for admission no ${data.admissionNo}`);
 
-    if (!familyId) {
-      const family = await tx.family.create({
+    const password = studentDobPassword(data.dateOfBirth);
+    hashedLoginPassword = await hashPassword(password);
+  }
+
+  return prisma.$transaction(
+    async (tx) => {
+      let familyId = data.familyId ?? null;
+
+      const student = await tx.student.create({
         data: {
-          schoolId,
-          fatherName: data.fatherName,
-          motherName: data.motherName,
-          guardianName: data.guardianName,
-          primaryPhone: data.phone,
-          addressLine1: data.address,
+          admissionNo: data.admissionNo,
+          firstName: data.firstName,
+          middleName: data.middleName,
+          lastName: data.lastName,
+          fullName,
+          dateOfBirth: data.dateOfBirth,
+          gender: data.gender,
+          bloodGroup: data.bloodGroup,
+          aadhaar: data.aadhaar,
+          status: data.status,
+          school: { connect: { id: schoolId } },
+          ...(familyId
+            ? { family: { connect: { id: familyId } } }
+            : {
+                family: {
+                  create: {
+                    school: { connect: { id: schoolId } },
+                    fatherName: data.fatherName,
+                    motherName: data.motherName,
+                    guardianName: data.guardianName,
+                    primaryPhone: data.phone,
+                    addressLine1: data.address,
+                  },
+                },
+              }),
+        },
+        include: {
+          family: true,
         },
       });
-      familyId = family.id;
+
+      if (!familyId && student.family) {
+        await writeAuditLog(
+          {
+            schoolId,
+            userId: user.id,
+            action: "create",
+            module: "family",
+            entityType: "Family",
+            entityId: student.family.id,
+            newValue: student.family,
+          },
+          tx,
+        );
+      }
+
+      if (data.createLogin) {
+        await createStudentUser(tx, student, schoolId, hashedLoginPassword);
+      }
+
+      if (data.enroll && data.sessionId && data.classId && data.sectionId) {
+        await tx.studentEnrollment.create({
+          data: {
+            studentId: student.id,
+            sessionId: data.sessionId,
+            classId: data.classId,
+            sectionId: data.sectionId,
+            rollNo: data.rollNo,
+            status: EnrollmentStatus.ACTIVE,
+          },
+        });
+
+        await attachFeeStructureInTx(tx, {
+          schoolId,
+          studentId: student.id,
+          sessionId: data.sessionId,
+          classId: data.classId,
+          userId: user.id,
+          requireStructure: true,
+        });
+      }
+
       await writeAuditLog(
         {
           schoolId,
           userId: user.id,
           action: "create",
-          module: "family",
-          entityType: "Family",
-          entityId: family.id,
-          newValue: family,
+          module: "student",
+          entityType: "Student",
+          entityId: student.id,
+          newValue: student,
         },
         tx,
       );
-    }
 
-    const student = await tx.student.create({
-      data: {
-        schoolId,
-        familyId,
-        admissionNo: data.admissionNo,
-        firstName: data.firstName,
-        middleName: data.middleName,
-        lastName: data.lastName,
-        fullName,
-        dateOfBirth: data.dateOfBirth,
-        gender: data.gender,
-        bloodGroup: data.bloodGroup,
-        aadhaar: data.aadhaar,
-        status: data.status,
-      },
-    });
-
-    if (data.createLogin) {
-      await createStudentUser(tx, student, schoolId);
-    }
-
-    if (data.enroll && data.sessionId && data.classId && data.sectionId) {
-      await tx.studentEnrollment.create({
-        data: {
-          studentId: student.id,
-          sessionId: data.sessionId,
-          classId: data.classId,
-          sectionId: data.sectionId,
-          rollNo: data.rollNo,
-          status: EnrollmentStatus.ACTIVE,
-        },
-      });
-
-      await attachFeeStructureInTx(tx, {
-        schoolId,
-        studentId: student.id,
-        sessionId: data.sessionId,
-        classId: data.classId,
-        userId: user.id,
-        requireStructure: true,
-      });
-    }
-
-    await writeAuditLog(
-      {
-        schoolId,
-        userId: user.id,
-        action: "create",
-        module: "student",
-        entityType: "Student",
-        entityId: student.id,
-        newValue: student,
-      },
-      tx,
-    );
-
-    return student;
-  });
+      return student;
+    },
+    {
+      timeout: 25000,
+    },
+  );
 }
 
 /**
@@ -688,8 +727,12 @@ export async function createStudentLogin(studentId: string) {
   if (!student) throw new Error("Student not found");
   if (student.user) throw new Error("Student already has a login account");
 
+  // Compute password hash outside transaction (CPU-bound bcrypt)
+  const password = studentDobPassword(student.dateOfBirth);
+  const hashedLoginPassword = await hashPassword(password);
+
   return prisma.$transaction(async (tx) => {
-    const account = await createStudentUser(tx, student, schoolId);
+    const account = await createStudentUser(tx, student, schoolId, hashedLoginPassword);
     await writeAuditLog(
       {
         schoolId,

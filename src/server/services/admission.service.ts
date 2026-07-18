@@ -11,6 +11,7 @@ import { writeAuditLog } from "@/server/services/audit.service";
 import { attachFeeStructureInTx } from "@/server/services/fee.service";
 import {
   generateSequentialNo,
+  getNextSequenceValue,
   parsePagination,
   schoolIdFromUser,
 } from "@/server/lib/helpers";
@@ -26,12 +27,14 @@ import {
   type UpdateAdmissionInput,
 } from "@/server/validators/admission.validator";
 
-async function generateAdmissionNo(schoolId: string): Promise<string> {
+async function generateAdmissionNoInTx(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  schoolId: string,
+): Promise<string> {
   const year = new Date().getFullYear();
-  const count = await prisma.student.count({
-    where: { schoolId },
-  });
-  return generateSequentialNo("ADM", year, count);
+  const counterId = `admission_no:${schoolId}:${year}`;
+  const seqValue = await getNextSequenceValue(tx, counterId);
+  return generateSequentialNo("ADM", year, seqValue - 1);
 }
 
 export async function listAdmissions(input?: {
@@ -190,33 +193,23 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
     throw new Error("Application is not pending");
   }
 
-  const admissionNo = await generateAdmissionNo(schoolId);
   const nameParts = admission.applicantName.trim().split(/\s+/);
   const firstName = nameParts[0] ?? admission.applicantName;
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
   const fullName = admission.applicantName.trim();
 
-  return prisma.$transaction(async (tx) => {
-    let familyId = data.familyId ?? admission.familyId;
+  // Compute password hash outside transaction (CPU-bound bcrypt)
+  const tempPassword = studentDobPassword(admission.dateOfBirth);
+  const hashed = await hashPassword(tempPassword);
 
-    if (!familyId) {
-      const family = await tx.family.create({
-        data: {
-          schoolId,
-          fatherName: admission.fatherName,
-          motherName: admission.motherName,
-          guardianName: admission.guardianName,
-          primaryPhone: admission.phone,
-          addressLine1: admission.address,
-        },
-      });
-      familyId = family.id;
-    }
+  return prisma.$transaction(async (tx) => {
+    const admissionNo = await generateAdmissionNoInTx(tx, schoolId);
+    const email = studentSyntheticEmail(admissionNo);
+
+    let familyId = data.familyId ?? admission.familyId;
 
     const student = await tx.student.create({
       data: {
-        schoolId,
-        familyId,
         admissionNo,
         firstName,
         lastName,
@@ -224,30 +217,51 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
         dateOfBirth: admission.dateOfBirth,
         gender: admission.gender,
         status: StudentStatus.ACTIVE,
+        school: { connect: { id: schoolId } },
+        ...(familyId
+          ? { family: { connect: { id: familyId } } }
+          : {
+              family: {
+                create: {
+                  school: { connect: { id: schoolId } },
+                  fatherName: admission.fatherName,
+                  motherName: admission.motherName,
+                  guardianName: admission.guardianName,
+                  primaryPhone: admission.phone,
+                  addressLine1: admission.address,
+                },
+              },
+            }),
+      },
+      include: {
+        family: true,
       },
     });
 
+    familyId = student.familyId;
+
     let sectionId = data.sectionId ?? null;
-    if (!sectionId) {
-      const firstSection = await tx.section.findFirst({
-        where: { classId: admission.appliedClassId },
+    let section;
+    if (sectionId) {
+      section = await tx.section.findUnique({
+        where: { id: sectionId },
+        include: { class: true },
+      });
+      if (!section || section.class.schoolId !== schoolId) {
+        throw new Error("Section not found");
+      }
+      if (section.classId !== admission.appliedClassId) {
+        throw new Error("Section does not belong to the applied class");
+      }
+    } else {
+      section = await tx.section.findFirst({
+        where: { classId: admission.appliedClassId, class: { schoolId } },
+        include: { class: true },
         orderBy: { name: "asc" },
       });
-      if (!firstSection) {
+      if (!section) {
         throw new Error("Applied class has no sections. Create a section before approving.");
       }
-      sectionId = firstSection.id;
-    }
-
-    const section = await tx.section.findUnique({
-      where: { id: sectionId },
-      include: { class: true },
-    });
-    if (!section || section.class.schoolId !== schoolId) {
-      throw new Error("Section not found");
-    }
-    if (section.classId !== admission.appliedClassId) {
-      throw new Error("Section does not belong to the applied class");
     }
 
     await tx.studentEnrollment.create({
@@ -269,9 +283,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
       requireStructure: true,
     });
 
-    const email = studentSyntheticEmail(admissionNo);
-    const password = studentDobPassword(admission.dateOfBirth);
-    const hashed = await hashPassword(password);
+    // `email`, `hashed` are closed over from above — already computed.
 
     await tx.user.create({
       data: {
@@ -321,7 +333,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
     );
 
     return { admission: updated, student };
-  });
+  }, { timeout: 25000 });
 }
 
 export async function rejectAdmission(input: ReviewAdmissionInput) {

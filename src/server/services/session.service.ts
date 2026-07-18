@@ -278,81 +278,112 @@ export async function promoteStudents(input: PromoteStudentsInput) {
     throw new Error("Source and target sessions must be different");
   }
 
+  const studentIds = data.mappings.map((m) => m.studentId);
+  const targetClassIds = Array.from(new Set(data.mappings.map((m) => m.toClassId)));
+  const targetSectionIds = Array.from(new Set(data.mappings.map((m) => m.toSectionId)));
+
+  // Pre-fetch all required validation data in parallel
+  const [students, fromEnrollments, classes, sections] = await Promise.all([
+    prisma.student.findMany({
+      where: { id: { in: studentIds }, schoolId },
+      select: { id: true, fullName: true },
+    }),
+    prisma.studentEnrollment.findMany({
+      where: {
+        studentId: { in: studentIds },
+        sessionId: data.fromSessionId,
+      },
+    }),
+    prisma.class.findMany({
+      where: { id: { in: targetClassIds }, schoolId },
+    }),
+    prisma.section.findMany({
+      where: { id: { in: targetSectionIds } },
+    }),
+  ]);
+
+  // Map data for O(1) in-memory checks
+  const studentMap = new Map(students.map((s) => [s.id, s]));
+  const enrollmentMap = new Map(fromEnrollments.map((e) => [e.studentId, e]));
+  const classMap = new Map(classes.map((c) => [c.id, c]));
+  const sectionMap = new Map(sections.map((s) => [s.id, s]));
+
+  // In-memory validation
+  for (const mapping of data.mappings) {
+    const student = studentMap.get(mapping.studentId);
+    if (!student) {
+      throw new Error(`Student ${mapping.studentId} not found`);
+    }
+
+    const fromEnrollment = enrollmentMap.get(mapping.studentId);
+    if (!fromEnrollment) {
+      throw new Error(`No enrollment found for student ${student.fullName} in source session`);
+    }
+
+    const toClass = classMap.get(mapping.toClassId);
+    const toSection = sectionMap.get(mapping.toSectionId);
+    if (!toClass || !toSection) {
+      throw new Error(`Invalid target class/section for student ${student.fullName}`);
+    }
+    if (toSection.classId !== mapping.toClassId) {
+      throw new Error(`Section ${toSection.name} does not belong to target class ${toClass.name}`);
+    }
+  }
+
   const results: Array<{ studentId: string; enrollmentId: string }> = [];
 
   await prisma.$transaction(async (tx) => {
-    for (const mapping of data.mappings) {
-      const student = await tx.student.findFirst({
-        where: { id: mapping.studentId, schoolId },
-      });
-      if (!student) throw new Error(`Student ${mapping.studentId} not found`);
+    const promotionResults = await Promise.all(
+      data.mappings.map(async (mapping) => {
+        const fromEnrollment = enrollmentMap.get(mapping.studentId)!;
 
-      const fromEnrollment = await tx.studentEnrollment.findUnique({
-        where: {
-          studentId_sessionId: {
-            studentId: mapping.studentId,
-            sessionId: data.fromSessionId,
+        await tx.studentEnrollment.update({
+          where: { id: fromEnrollment.id },
+          data: { status: EnrollmentStatus.PROMOTED },
+        });
+
+        const newEnrollment = await tx.studentEnrollment.upsert({
+          where: {
+            studentId_sessionId: {
+              studentId: mapping.studentId,
+              sessionId: data.toSessionId,
+            },
           },
-        },
-      });
-      if (!fromEnrollment) {
-        throw new Error(`No enrollment found for student ${student.fullName} in source session`);
-      }
-
-      const [toClass, toSection] = await Promise.all([
-        tx.class.findFirst({ where: { id: mapping.toClassId, schoolId } }),
-        tx.section.findFirst({
-          where: { id: mapping.toSectionId, classId: mapping.toClassId },
-        }),
-      ]);
-      if (!toClass || !toSection) {
-        throw new Error(`Invalid target class/section for student ${student.fullName}`);
-      }
-
-      await tx.studentEnrollment.update({
-        where: { id: fromEnrollment.id },
-        data: { status: EnrollmentStatus.PROMOTED },
-      });
-
-      const newEnrollment = await tx.studentEnrollment.upsert({
-        where: {
-          studentId_sessionId: {
+          create: {
             studentId: mapping.studentId,
             sessionId: data.toSessionId,
+            classId: mapping.toClassId,
+            sectionId: mapping.toSectionId,
+            rollNo: mapping.rollNo,
+            status: EnrollmentStatus.ACTIVE,
           },
-        },
-        create: {
-          studentId: mapping.studentId,
-          sessionId: data.toSessionId,
-          classId: mapping.toClassId,
-          sectionId: mapping.toSectionId,
-          rollNo: mapping.rollNo,
-          status: EnrollmentStatus.ACTIVE,
-        },
-        update: {
-          classId: mapping.toClassId,
-          sectionId: mapping.toSectionId,
-          rollNo: mapping.rollNo,
-          status: EnrollmentStatus.ACTIVE,
-        },
-      });
+          update: {
+            classId: mapping.toClassId,
+            sectionId: mapping.toSectionId,
+            rollNo: mapping.rollNo,
+            status: EnrollmentStatus.ACTIVE,
+          },
+        });
 
-      await tx.promotionHistory.create({
-        data: {
-          studentId: mapping.studentId,
-          fromSessionId: data.fromSessionId,
-          toSessionId: data.toSessionId,
-          fromClassId: fromEnrollment.classId,
-          toClassId: mapping.toClassId,
-          fromSectionId: fromEnrollment.sectionId,
-          toSectionId: mapping.toSectionId,
-          byUserId: user.id,
-          notes: mapping.notes,
-        },
-      });
+        await tx.promotionHistory.create({
+          data: {
+            studentId: mapping.studentId,
+            fromSessionId: data.fromSessionId,
+            toSessionId: data.toSessionId,
+            fromClassId: fromEnrollment.classId,
+            toClassId: mapping.toClassId,
+            fromSectionId: fromEnrollment.sectionId,
+            toSectionId: mapping.toSectionId,
+            byUserId: user.id,
+            notes: mapping.notes,
+          },
+        });
 
-      results.push({ studentId: mapping.studentId, enrollmentId: newEnrollment.id });
-    }
+        return { studentId: mapping.studentId, enrollmentId: newEnrollment.id };
+      })
+    );
+
+    results.push(...promotionResults);
 
     await writeAuditLog(
       {

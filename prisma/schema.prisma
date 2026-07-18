@@ -1024,3 +1024,10 @@ enum NotificationChannelType {
   WHATSAPP
   EMAIL
 }
+
+model SystemCounter {
+  id        String   @id
+  value     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
