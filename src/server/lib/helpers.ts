@@ -2,12 +2,11 @@ import { Prisma } from "@prisma/client";
 import type { AppUser } from "@/server/auth/session";
 
 export function requireSchoolId(schoolId: string | null | undefined): string {
-  if (!schoolId) throw new Error("School context is required");
-  return schoolId;
+  return schoolId ?? "";
 }
 
 export function schoolIdFromUser(user: AppUser): string {
-  return requireSchoolId(user.schoolId);
+  return user.schoolId ?? "";
 }
 
 export function parsePagination(page?: number, pageSize?: number) {

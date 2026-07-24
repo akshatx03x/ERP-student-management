@@ -57,10 +57,24 @@ export async function listAdmissions(input?: {
   const [items, total] = await Promise.all([
     prisma.admissionApplication.findMany({
       where,
-      include: {
-        session: true,
-        appliedClass: true,
-        family: true,
+      select: {
+        id: true,
+        applicantName: true,
+        dateOfBirth: true,
+        gender: true,
+        fatherName: true,
+        motherName: true,
+        guardianName: true,
+        phone: true,
+        address: true,
+        status: true,
+        admissionNo: true,
+        remarks: true,
+        createdAt: true,
+        updatedAt: true,
+        session: { select: { id: true, name: true, isCurrent: true } },
+        appliedClass: { select: { id: true, name: true } },
+        family: { select: { id: true, familyCode: true, fatherName: true, primaryPhone: true } },
         student: { select: { id: true, fullName: true, admissionNo: true } },
         reviewedBy: { select: { id: true, name: true } },
       },

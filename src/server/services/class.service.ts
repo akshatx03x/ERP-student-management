@@ -46,8 +46,13 @@ export async function listClasses(input?: {
   const [items, total] = await Promise.all([
     prisma.class.findMany({
       where,
-      include: {
-        sections: { orderBy: { name: "asc" } },
+      select: {
+        id: true,
+        name: true,
+        sortOrder: true,
+        createdAt: true,
+        updatedAt: true,
+        sections: { select: { id: true, name: true } },
         _count: { select: { sections: true, enrollments: true } },
       },
       orderBy: { sortOrder: "asc" },

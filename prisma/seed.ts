@@ -14,7 +14,7 @@ const prisma = new PrismaClient();
 async function seedPermissions() {
   for (const resource of PERMISSION_RESOURCES) {
     for (const action of PERMISSION_ACTIONS) {
-      const key = permissionKey(resource, action);
+      const key = permissionKey(resource, action);  
       await prisma.permission.upsert({
         where: { key },
         create: {
