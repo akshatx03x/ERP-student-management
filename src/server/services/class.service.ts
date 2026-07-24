@@ -52,7 +52,7 @@ export async function listClasses(input?: {
         sortOrder: true,
         createdAt: true,
         updatedAt: true,
-        sections: { select: { id: true, name: true } },
+        sections: { select: { id: true, name: true, classId: true } },
         _count: { select: { sections: true, enrollments: true } },
       },
       orderBy: { sortOrder: "asc" },
