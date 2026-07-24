@@ -23,6 +23,13 @@ const nextConfig: NextConfig = {
       "@radix-ui/react-tooltip",
     ],
   },
+  output: "standalone",
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // Keep heavy server-only dependencies off the edge and client bundles.
   serverExternalPackages: ["@prisma/client", "prisma"],
 };

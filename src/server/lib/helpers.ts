@@ -2,11 +2,17 @@ import { Prisma } from "@prisma/client";
 import type { AppUser } from "@/server/auth/session";
 
 export function requireSchoolId(schoolId: string | null | undefined): string {
-  return schoolId ?? "";
+  if (!schoolId || schoolId.trim() === "") {
+    throw new Error("School context is required. Please select or initialize a school.");
+  }
+  return schoolId;
 }
 
 export function schoolIdFromUser(user: AppUser): string {
-  return user.schoolId ?? "";
+  if (!user.schoolId || user.schoolId.trim() === "") {
+    throw new Error("User account is not linked to a school. Please link a school to your profile.");
+  }
+  return user.schoolId;
 }
 
 export function parsePagination(page?: number, pageSize?: number) {

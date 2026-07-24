@@ -1,0 +1,20 @@
+{
+  "name": "school-erp-desktop",
+  "version": "1.0.0",
+  "description": "SchoolERP Desktop Edition - Dual-Mode Offline & Cloud Support",
+  "main": "dist/desktop/electron/main.js",
+  "scripts": {
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/splash.html', 'dist/desktop/electron/splash.html')\"",
+    "build:seed": "tsc ../prisma/seed.ts --outDir ../dist/seed --module commonjs --target es2022 --moduleResolution node --skipLibCheck",
+    "start": "npm run build:electron && electron .",
+    "dist": "npm run build:electron && npm run build:seed && electron-builder --config installer/builder.json"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.0.0"
+  }
+}

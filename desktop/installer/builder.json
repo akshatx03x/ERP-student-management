@@ -1,0 +1,70 @@
+{
+  "appId": "com.vidhyanjali.schoolerp",
+  "productName": "SchoolERP Desktop",
+  "copyright": "Copyright © 2026 Vidhyanjali Public School",
+  "directories": {
+    "output": "../dist/installer",
+    "buildResources": "assets"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json",
+    "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+    "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node"
+  ],
+  "extraResources": [
+    {
+      "from": "../.next/standalone",
+      "to": "app"
+    },
+    {
+      "from": "../.next/static",
+      "to": "app/.next/static"
+    },
+    {
+      "from": "../public",
+      "to": "app/public"
+    },
+    {
+      "from": "../dist/seed",
+      "to": "app/dist/seed"
+    },
+    {
+      "from": "../prisma",
+      "to": "prisma"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "SchoolERP Desktop",
+    "runAfterFinish": true,
+    "artifactName": "SchoolERP_Setup.exe",
+    "include": "installer/nsis-installer.nsh"
+  },
+  "portable": {
+    "artifactName": "SchoolERP_Portable.exe"
+  }
+}

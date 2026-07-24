@@ -52,9 +52,16 @@ function analyzeAnomalies(log: QueryLogEntry, recentLogs: QueryLogEntry[]) {
   return anomalies;
 }
 
+import { getDatabaseUrl } from "@/server/providers/database.provider";
+
 const basePrisma =
   globalForPrisma.prisma ??
   new PrismaClient({
+    datasources: {
+      db: {
+        url: getDatabaseUrl(),
+      },
+    },
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 

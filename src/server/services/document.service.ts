@@ -9,6 +9,7 @@ import {
   uploadDocumentSchema,
   type UploadDocumentInput,
 } from "@/server/validators/document.validator";
+import { getUploadProvider } from "@/server/providers/upload.provider";
 
 export const MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -87,8 +88,15 @@ export async function uploadDocument(input: UploadDocumentInput) {
         mimeType: data.mimeType,
         sizeBytes: buffer.byteLength,
         checksum,
-        blob: { create: { data: buffer } },
       },
+    });
+
+    const uploadProvider = getUploadProvider();
+    await uploadProvider.saveUpload({
+      documentId: document.id,
+      buffer,
+      fileName: data.fileName,
+      mimeType: data.mimeType,
     });
 
     await writeAuditLog(
@@ -129,12 +137,10 @@ export async function getDocument(documentId: string) {
 export async function getDocumentBlob(documentId: string) {
   const document = await getDocument(documentId);
 
-  const blob = await prisma.documentBlob.findUnique({
-    where: { documentId },
-  });
-  if (!blob) throw new Error("Document blob not found");
+  const uploadProvider = getUploadProvider();
+  const uploadResult = await uploadProvider.getUpload(documentId);
 
-  return { document, data: Buffer.from(blob.data) };
+  return { document, data: uploadResult.data };
 }
 
 export async function listDocuments(ownerType: DocumentOwnerType, ownerId: string) {

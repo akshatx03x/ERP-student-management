@@ -123,6 +123,14 @@ export const getCurrentUser = cache(async function getCurrentUser() {
     redirect("/login?error=inactive");
   }
 
+  if (!user.schoolId) {
+    const defaultSchool = await prisma.school.findFirst({ select: { id: true } });
+    if (defaultSchool) {
+      user.schoolId = defaultSchool.id;
+      prisma.user.update({ where: { id: user.id }, data: { schoolId: defaultSchool.id } }).catch(() => {});
+    }
+  }
+
   // Lazily resolve staffProfile and student/school metadata when accessed
   const userWithGetters = {
     ...user,
