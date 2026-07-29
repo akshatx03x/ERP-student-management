@@ -111,6 +111,7 @@ export async function listStudents(input?: {
         id: true,
         admissionNo: true,
         fullName: true,
+        photoUrl: true,
         dateOfBirth: true,
         gender: true,
         bloodGroup: true,
@@ -158,7 +159,16 @@ export async function getStudent(studentId: string) {
   const student = await prisma.student.findFirst({
     where: { id: studentId, schoolId },
     include: {
-      family: true,
+      family: {
+        include: {
+          guardians: true,
+        },
+      },
+      guardians: {
+        include: {
+          guardian: true,
+        },
+      },
       medical: true,
       user: { select: { id: true, email: true, isActive: true, mustChangePassword: true } },
       enrollments: {
@@ -214,6 +224,20 @@ export async function createStudent(input: CreateStudentInput) {
 
   const fullName = buildFullName(data.firstName, data.middleName, data.lastName);
 
+  if (!data.allowDuplicate) {
+    const existingDuplicate = await prisma.student.findFirst({
+      where: {
+        schoolId,
+        fullName: { equals: fullName, mode: "insensitive" },
+        dateOfBirth: data.dateOfBirth,
+      },
+      select: { admissionNo: true },
+    });
+    if (existingDuplicate) {
+      throw new Error(`Student "${fullName}" with this Date of Birth is already registered (Admission No: ${existingDuplicate.admissionNo})`);
+    }
+  }
+
   // Compute password hash outside transaction (CPU-bound bcrypt)
   let hashedLoginPassword = "";
   if (data.createLogin) {
@@ -240,6 +264,19 @@ export async function createStudent(input: CreateStudentInput) {
           gender: data.gender,
           bloodGroup: data.bloodGroup,
           aadhaar: data.aadhaar,
+          religion: data.religion,
+          category: data.category,
+          apaarId: data.apaarId,
+          penId: data.penId,
+          previousSchoolName: data.previousSchoolName,
+          previousClass: data.previousClass,
+          tcNumber: data.tcNumber,
+          tcDate: data.tcDate,
+          transportRequired: data.transportRequired ?? false,
+          transportPickupPoint: data.transportPickupPoint,
+          admissionDate: data.admissionDate ?? new Date(),
+          photoDocumentId: data.photoDocumentId,
+          photoUrl: data.photoUrl,
           status: data.status,
         },
       });
@@ -305,6 +342,20 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
 
   const fullName = buildFullName(data.firstName, data.middleName, data.lastName);
 
+  if (!data.allowDuplicate) {
+    const existingDuplicate = await prisma.student.findFirst({
+      where: {
+        schoolId,
+        fullName: { equals: fullName, mode: "insensitive" },
+        dateOfBirth: data.dateOfBirth,
+      },
+      select: { admissionNo: true },
+    });
+    if (existingDuplicate) {
+      throw new Error(`Student "${fullName}" with this Date of Birth is already registered (Admission No: ${existingDuplicate.admissionNo})`);
+    }
+  }
+
   // Compute password hash outside transaction (CPU-bound bcrypt)
   let hashedLoginPassword = "";
   if (data.createLogin) {
@@ -331,6 +382,19 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
           gender: data.gender,
           bloodGroup: data.bloodGroup,
           aadhaar: data.aadhaar,
+          religion: data.religion,
+          category: data.category,
+          apaarId: data.apaarId,
+          penId: data.penId,
+          previousSchoolName: data.previousSchoolName,
+          previousClass: data.previousClass,
+          tcNumber: data.tcNumber,
+          tcDate: data.tcDate,
+          transportRequired: data.transportRequired ?? false,
+          transportPickupPoint: data.transportPickupPoint,
+          admissionDate: data.admissionDate ?? new Date(),
+          photoDocumentId: data.photoDocumentId,
+          photoUrl: data.photoUrl,
           status: data.status,
           school: { connect: { id: schoolId } },
           ...(familyId
@@ -343,7 +407,22 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
                     motherName: data.motherName,
                     guardianName: data.guardianName,
                     primaryPhone: data.phone,
-                    addressLine1: data.address,
+                    secondaryPhone: data.secondaryPhone,
+                    addressLine1: data.resAddressLine1 || data.address,
+                    resAddressLine1: data.resAddressLine1 || data.address,
+                    resAddressLine2: data.resAddressLine2,
+                    resCity: data.resCity,
+                    resState: data.resState,
+                    resPincode: data.resPincode,
+                    sameAsResidential: data.sameAsResidential,
+                    permAddressLine1: data.sameAsResidential ? (data.resAddressLine1 || data.address) : data.permAddressLine1,
+                    permAddressLine2: data.sameAsResidential ? data.resAddressLine2 : data.permAddressLine2,
+                    permCity: data.sameAsResidential ? data.resCity : data.permCity,
+                    permState: data.sameAsResidential ? data.resState : data.permState,
+                    permPincode: data.sameAsResidential ? data.resPincode : data.permPincode,
+                    declarationAccepted: data.declarationAccepted ?? false,
+                    declarationDate: data.declarationDate,
+                    declarationParentName: data.declarationParentName,
                   },
                 },
               }),
@@ -352,6 +431,89 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
           family: true,
         },
       });
+
+      const effectiveFamilyId = student.familyId;
+
+      // Create Father Guardian if fatherName provided
+      if (data.fatherName) {
+        const father = await tx.guardian.create({
+          data: {
+            schoolId,
+            familyId: effectiveFamilyId,
+            fullName: data.fatherName,
+            gender: "MALE",
+            phone: data.fatherPhone || data.phone,
+            qualification: data.fatherQualification,
+            occupation: data.fatherOccupation,
+            designation: data.fatherDesignation,
+            annualIncome: data.fatherAnnualIncome,
+            officeAddress: data.fatherOfficeAddress,
+            aadhaarNumber: data.fatherAadhaar,
+          },
+        });
+        await tx.studentGuardian.create({
+          data: {
+            studentId: student.id,
+            guardianId: father.id,
+            relationshipType: "FATHER",
+            isPrimaryContact: true,
+            isEmergencyContact: true,
+            isFeePayer: true,
+          },
+        });
+      }
+
+      // Create Mother Guardian if motherName provided
+      if (data.motherName) {
+        const mother = await tx.guardian.create({
+          data: {
+            schoolId,
+            familyId: effectiveFamilyId,
+            fullName: data.motherName,
+            gender: "FEMALE",
+            phone: data.motherPhone,
+            qualification: data.motherQualification,
+            isWorking: data.motherIsWorking,
+            occupation: data.motherOccupation,
+            designation: data.motherDesignation,
+            annualIncome: data.motherAnnualIncome,
+            officeAddress: data.motherOfficeAddress,
+            aadhaarNumber: data.motherAadhaar,
+          },
+        });
+        await tx.studentGuardian.create({
+          data: {
+            studentId: student.id,
+            guardianId: mother.id,
+            relationshipType: "MOTHER",
+            isPrimaryContact: !data.fatherName,
+            isEmergencyContact: true,
+            isFeePayer: !data.fatherName,
+          },
+        });
+      }
+
+      // Create Guardian if guardianName provided and no father/mother
+      if (data.guardianName && !data.fatherName && !data.motherName) {
+        const guardian = await tx.guardian.create({
+          data: {
+            schoolId,
+            familyId: effectiveFamilyId,
+            fullName: data.guardianName,
+            phone: data.phone,
+          },
+        });
+        await tx.studentGuardian.create({
+          data: {
+            studentId: student.id,
+            guardianId: guardian.id,
+            relationshipType: "LEGAL_GUARDIAN",
+            isPrimaryContact: true,
+            isEmergencyContact: true,
+            isFeePayer: true,
+          },
+        });
+      }
 
       if (!familyId && student.family) {
         await writeAuditLog(

@@ -71,7 +71,7 @@ export function Sidebar({
   }, [pathname]);
 
   return (
-    <aside className="no-print flex w-60 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-foreground/10 relative overflow-hidden">
+    <aside className="no-print flex w-60 shrink-0 h-full flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-foreground/10 relative overflow-hidden">
       {/* Decorative gradient blur background */}
       <div className="absolute -left-12 -top-12 h-36 w-36 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
       <div className="absolute -right-16 -bottom-16 h-48 w-48 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />

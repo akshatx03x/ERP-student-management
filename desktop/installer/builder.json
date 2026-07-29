@@ -2,9 +2,12 @@
   "appId": "com.vidhyanjali.schoolerp",
   "productName": "SchoolERP Desktop",
   "copyright": "Copyright © 2026 Vidhyanjali Public School",
+  "compression": "normal",
+  "publish": null,
   "directories": {
-    "output": "../dist/installer",
-    "buildResources": "assets"
+    "output": "C:/Users/Akshat/AppData/Local/SchoolERPBuild",
+    "buildResources": "assets",
+    "app": "."
   },
   "files": [
     "dist/**/*",
@@ -22,14 +25,6 @@
       "to": "app"
     },
     {
-      "from": "../.next/static",
-      "to": "app/.next/static"
-    },
-    {
-      "from": "../public",
-      "to": "app/public"
-    },
-    {
       "from": "../dist/seed",
       "to": "app/dist/seed"
     },
@@ -42,12 +37,6 @@
     "target": [
       {
         "target": "nsis",
-        "arch": [
-          "x64"
-        ]
-      },
-      {
-        "target": "portable",
         "arch": [
           "x64"
         ]

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import {
   createAdmissionAction,
   approveAdmissionAction,
@@ -16,6 +15,7 @@ import {
 } from "@/server/actions/ops.actions";
 import { findFamilyByPhoneAction } from "@/server/actions/family.actions";
 import { formatDate } from "@/lib/utils";
+import { UnifiedStudentForm, type UnifiedFormState } from "@/components/shared/unified-student-form";
 
 type Admission = {
   id: string;
@@ -24,6 +24,7 @@ type Admission = {
   status: string;
   admissionNo: string | null;
   phone: string | null;
+  photoUrl?: string | null;
   fatherName?: string | null;
   motherName?: string | null;
   appliedClass: { name: string };
@@ -40,36 +41,6 @@ type MatchedFamily = {
   students: Array<{ id: string; fullName: string; admissionNo: string }>;
 };
 
-type FormState = {
-  sessionId: string;
-  appliedClassId: string;
-  applicantName: string;
-  dateOfBirth: string;
-  gender: string;
-  phone: string;
-  fatherName: string;
-  motherName: string;
-  guardianName: string;
-  address: string;
-};
-
-const emptyForm = (
-  sessions: Session[],
-  classes: ClassRow[],
-  currentSessionId: string | null,
-): FormState => ({
-  sessionId: currentSessionId ?? sessions[0]?.id ?? "",
-  appliedClassId: classes[0]?.id ?? "",
-  applicantName: "",
-  dateOfBirth: "",
-  gender: "",
-  phone: "",
-  fatherName: "",
-  motherName: "",
-  guardianName: "",
-  address: "",
-});
-
 export function AdmissionsClient({
   admissions,
   classes,
@@ -81,293 +52,345 @@ export function AdmissionsClient({
   sessions: Session[];
   currentSessionId: string | null;
 }) {
+  const [activeTab, setActiveTab] = useState<"form" | "approvals">("form");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [pending, startTransition] = useTransition();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [form, setForm] = useState(() => emptyForm(sessions, classes, currentSessionId));
   const [matchDialog, setMatchDialog] = useState<MatchedFamily | null>(null);
   const [approvingApp, setApprovingApp] = useState<Admission | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("");
-
-  const [familySearchPhone, setFamilySearchPhone] = useState("");
-  const [foundSearchFamily, setFoundSearchFamily] = useState<MatchedFamily | null>(null);
-  const [searchAttempted, setSearchAttempted] = useState(false);
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
+  const [pendingSubmitState, setPendingSubmitState] = useState<UnifiedFormState | null>(null);
 
-  function resetForm() {
-    setForm(emptyForm(sessions, classes, currentSessionId));
-    setStep(1);
-    setMatchDialog(null);
-    setFamilySearchPhone("");
-    setFoundSearchFamily(null);
-    setSearchAttempted(false);
-    setSelectedFamilyId(null);
-  }
+  const pendingCount = useMemo(() => admissions.filter((a) => a.status === "PENDING").length, [admissions]);
+  const approvedCount = useMemo(() => admissions.filter((a) => a.status === "APPROVED").length, [admissions]);
+  const rejectedCount = useMemo(() => admissions.filter((a) => a.status === "REJECTED").length, [admissions]);
 
-  function studentStepValid() {
-    return Boolean(form.sessionId && form.appliedClassId && form.applicantName.trim() && form.dateOfBirth);
-  }
-
-  function parentStepValid() {
-    return Boolean(form.phone.trim() && (form.fatherName.trim() || form.motherName.trim() || form.guardianName.trim()));
-  }
-
-  async function submitAdmission(familyId: string | null) {
-    const result = await createAdmissionAction({
-      sessionId: form.sessionId,
-      appliedClassId: form.appliedClassId,
-      applicantName: form.applicantName.trim(),
-      dateOfBirth: new Date(form.dateOfBirth),
-      gender: form.gender ? (form.gender as "MALE" | "FEMALE" | "OTHER") : null,
-      phone: form.phone.trim() || null,
-      fatherName: form.fatherName.trim() || null,
-      motherName: form.motherName.trim() || null,
-      guardianName: form.guardianName.trim() || null,
-      address: form.address.trim() || null,
-      familyId,
-    });
-    
-    if (!result.success) {
-      throw new Error(result.error || "Failed to save admission");
-    }
-    
-    toast.success("Admission saved");
-    resetForm();
-  }
-
-  function handleSearchFamily() {
-    if (!familySearchPhone.trim()) return;
-    startTransition(async () => {
-      try {
-        const existing = await findFamilyByPhoneAction(familySearchPhone.trim());
-        setFoundSearchFamily(existing);
-        setSearchAttempted(true);
-      } catch {
-        toast.error("Lookup failed");
+  const filteredAdmissions = useMemo(() => {
+    return admissions.filter((a) => {
+      if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const matchName = a.applicantName.toLowerCase().includes(query);
+        const matchAdm = a.admissionNo?.toLowerCase().includes(query);
+        const matchPhone = a.phone?.toLowerCase().includes(query);
+        const matchClass = a.appliedClass.name.toLowerCase().includes(query);
+        return matchName || matchAdm || matchPhone || matchClass;
       }
+      return true;
     });
+  }, [admissions, statusFilter, searchQuery]);
+
+  async function handleUnifiedSubmit(formState: UnifiedFormState) {
+    const phoneTrimmed = formState.phone.trim();
+    if (!selectedFamilyId && phoneTrimmed) {
+      const existing = await findFamilyByPhoneAction(phoneTrimmed);
+      if (existing) {
+        setPendingSubmitState(formState);
+        setMatchDialog(existing);
+        return;
+      }
+    }
+    await executeSubmit(formState, selectedFamilyId);
   }
 
-  function applySearchFamily() {
-    if (!foundSearchFamily) return;
-    setForm((f) => ({
-      ...f,
-      fatherName: foundSearchFamily.fatherName ?? "",
-      motherName: foundSearchFamily.motherName ?? "",
-      phone: foundSearchFamily.primaryPhone ?? f.phone,
-    }));
-    setSelectedFamilyId(foundSearchFamily.id);
-    toast.success("Family linked and fields pre-filled!");
-  }
+  async function executeSubmit(formState: UnifiedFormState, familyId: string | null, allowDuplicate: boolean = false) {
+    const result = await createAdmissionAction({
+      sessionId: formState.sessionId,
+      appliedClassId: formState.appliedClassId,
+      applicantName: formState.applicantName.trim(),
+      dateOfBirth: new Date(formState.dateOfBirth),
+      gender: formState.gender ? (formState.gender as "MALE" | "FEMALE" | "OTHER") : null,
+      religion: formState.religion.trim() || null,
+      category: formState.category ? (formState.category as any) : null,
+      aadhaar: formState.aadhaar.trim() || null,
+      apaarId: formState.apaarId.trim() || null,
+      penId: formState.penId.trim() || null,
 
-  function handleSave() {
-    if (!parentStepValid()) {
-      toast.error("Enter mobile number and at least one parent/guardian name");
+      fatherName: formState.fatherName.trim() || null,
+      fatherQualification: formState.fatherQualification.trim() || null,
+      fatherOccupation: formState.fatherOccupation.trim() || null,
+      fatherDesignation: formState.fatherDesignation.trim() || null,
+      fatherAnnualIncome: formState.fatherAnnualIncome ? Number(formState.fatherAnnualIncome) : null,
+      fatherOfficeAddress: formState.fatherOfficeAddress.trim() || null,
+      fatherPhone: formState.fatherPhone.trim() || null,
+      fatherAadhaar: formState.fatherAadhaar.trim() || null,
+
+      motherName: formState.motherName.trim() || null,
+      motherQualification: formState.motherQualification.trim() || null,
+      motherIsWorking: formState.motherIsWorking,
+      motherOccupation: formState.motherOccupation.trim() || null,
+      motherDesignation: formState.motherDesignation.trim() || null,
+      motherAnnualIncome: formState.motherAnnualIncome ? Number(formState.motherAnnualIncome) : null,
+      motherOfficeAddress: formState.motherOfficeAddress.trim() || null,
+      motherPhone: formState.motherPhone.trim() || null,
+      motherAadhaar: formState.motherAadhaar.trim() || null,
+
+      guardianName: formState.guardianName.trim() || null,
+      phone: formState.phone.trim() || null,
+      address: formState.resAddressLine1.trim() || null,
+      resAddressLine1: formState.resAddressLine1.trim() || null,
+      resAddressLine2: formState.resAddressLine2.trim() || null,
+      resCity: formState.resCity.trim() || null,
+      resState: formState.resState.trim() || null,
+      resPincode: formState.resPincode.trim() || null,
+      sameAsResidential: formState.sameAsResidential,
+      permAddressLine1: formState.permAddressLine1.trim() || null,
+      permAddressLine2: formState.permAddressLine2.trim() || null,
+      permCity: formState.permCity.trim() || null,
+      permState: formState.permState.trim() || null,
+      permPincode: formState.permPincode.trim() || null,
+
+      previousSchoolName: formState.previousSchoolName.trim() || null,
+      previousClass: formState.previousClass.trim() || null,
+      tcNumber: formState.tcNumber.trim() || null,
+      tcDate: formState.tcDate ? new Date(formState.tcDate) : null,
+
+      transportRequired: formState.transportRequired,
+      transportPickupPoint: formState.transportPickupPoint.trim() || null,
+
+      declarationAccepted: formState.declarationAccepted,
+      declarationDate: formState.declarationDate ? new Date(formState.declarationDate) : null,
+      declarationParentName: formState.declarationParentName.trim() || null,
+      photoUrl: formState.photoUrl || null,
+      familyId,
+      allowDuplicate,
+    });
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to save admission application");
       return;
     }
 
-    startTransition(async () => {
-      try {
-        if (selectedFamilyId) {
-          await submitAdmission(selectedFamilyId);
-          return;
-        }
-        const existing = await findFamilyByPhoneAction(form.phone.trim());
-        if (existing) {
-          setMatchDialog(existing);
-          return;
-        }
-        await submitAdmission(null);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
-    });
+    toast.success("Admission application saved successfully");
+    setMatchDialog(null);
+    setPendingSubmitState(null);
+    // Switch to approvals tab to see the newly submitted application
+    setActiveTab("approvals");
   }
 
   function confirmUseExisting() {
-    if (!matchDialog) return;
-    const familyId = matchDialog.id;
-    startTransition(async () => {
-      try {
-        await submitAdmission(familyId);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
-    });
+    if (!matchDialog || !pendingSubmitState) return;
+    executeSubmit(pendingSubmitState, matchDialog.id);
   }
 
   function confirmCreateNew() {
-    startTransition(async () => {
-      try {
-        await submitAdmission(null);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
-    });
+    if (!pendingSubmitState) return;
+    executeSubmit(pendingSubmitState, null);
   }
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            New admission
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              Step {step} of 2 — {step === 1 ? "Student details" : "Parent details"}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {step === 1 ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Academic session</Label>
-                <Select
-                  value={form.sessionId}
-                  onChange={(e) => setForm((f) => ({ ...f, sessionId: e.target.value }))}
-                >
-                  {sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Class</Label>
-                <Select
-                  value={form.appliedClassId}
-                  onChange={(e) => setForm((f) => ({ ...f, appliedClassId: e.target.value }))}
-                >
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Student name</Label>
-                <Input
-                  placeholder="Full name"
-                  value={form.applicantName}
-                  onChange={(e) => setForm((f) => ({ ...f, applicantName: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Date of birth</Label>
-                <Input
-                  type="date"
-                  value={form.dateOfBirth}
-                  onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Gender</Label>
-                <Select
-                  value={form.gender}
-                  onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-                >
-                  <option value="">—</option>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
-                </Select>
-              </div>
-              <div className="flex items-end md:col-span-3">
-                <Button
+      {/* Top Segmented Navigation Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-3">
+        <div className="inline-flex rounded-lg bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("form")}
+            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all ${
+              activeTab === "form"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <span>New Application</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("approvals")}
+            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all ${
+              activeTab === "approvals"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <span>Approvals Queue</span>
+            {pendingCount > 0 ? (
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
+                {pendingCount}
+              </span>
+            ) : null}
+          </button>
+        </div>
+
+        {/* Quick Tab Stats */}
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-muted-foreground">Total: <strong>{admissions.length}</strong></span>
+          <span className="text-amber-600">Pending: <strong>{pendingCount}</strong></span>
+          <span className="text-emerald-600">Approved: <strong>{approvedCount}</strong></span>
+        </div>
+      </div>
+
+      {/* Tab 1: New Admission Form with scrollbar */}
+      {activeTab === "form" ? (
+        <div className="max-h-[75vh] overflow-y-auto pr-2 scrollbar-thin">
+          <UnifiedStudentForm
+            classes={classes}
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            mode="admission"
+            onSubmit={handleUnifiedSubmit}
+          />
+        </div>
+      ) : null}
+
+      {/* Tab 2: Dedicated Approval & Applications Queue Section */}
+      {activeTab === "approvals" ? (
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-4">
+            <div>
+              <CardTitle className="text-lg">Admission Applications Queue</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Review pending applications, select section assignments, and approve or reject students.
+              </p>
+            </div>
+
+            {/* Status Filter Buttons & Search */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                placeholder="Search applicant or admission no..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-60 h-8 text-xs"
+              />
+              <div className="inline-flex rounded-md border bg-muted/50 p-0.5 text-xs">
+                <button
                   type="button"
-                  disabled={!studentStepValid()}
-                  onClick={() => setStep(2)}
+                  onClick={() => setStatusFilter("ALL")}
+                  className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                    statusFilter === "ALL" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                  }`}
                 >
-                  Next: Parent details
-                </Button>
+                  All ({admissions.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("PENDING")}
+                  className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                    statusFilter === "PENDING" ? "bg-background text-amber-700 font-bold shadow-xs" : "text-muted-foreground"
+                  }`}
+                >
+                  Pending ({pendingCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("APPROVED")}
+                  className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                    statusFilter === "APPROVED" ? "bg-background text-emerald-700 font-bold shadow-xs" : "text-muted-foreground"
+                  }`}
+                >
+                  Approved ({approvedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("REJECTED")}
+                  className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                    statusFilter === "REJECTED" ? "bg-background text-destructive font-bold shadow-xs" : "text-muted-foreground"
+                  }`}
+                >
+                  Rejected ({rejectedCount})
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="md:col-span-3 rounded-md border border-stone-200 bg-stone-50 p-3 space-y-2">
-                <Label className="font-semibold text-xs">Is this student a sibling of an existing student?</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter parent mobile number to look up family..."
-                    value={familySearchPhone}
-                    onChange={(e) => setFamilySearchPhone(e.target.value)}
-                    className="max-w-xs bg-white h-9"
-                  />
-                  <Button type="button" size="sm" variant="secondary" onClick={handleSearchFamily} loading={pending}>
-                    Search Family
-                  </Button>
+          </CardHeader>
+
+          <CardContent className="pt-0">
+            {/* Scrollable Container for Applications Queue */}
+            <div className="max-h-[65vh] overflow-y-auto pr-2 space-y-3 scrollbar-thin">
+              {filteredAdmissions.length === 0 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  No admission applications found matching the selected filter.
                 </div>
-                {foundSearchFamily ? (
-                  <div className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200 flex justify-between items-center mt-1">
-                    <span>
-                      Found Sibling Family: {foundSearchFamily.fatherName} & {foundSearchFamily.motherName} ({foundSearchFamily.primaryPhone})
-                    </span>
-                    <Button type="button" size="sm" onClick={applySearchFamily}>
-                      Link & Autofill
-                    </Button>
+              ) : (
+                filteredAdmissions.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-accent/10 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-muted-foreground font-semibold text-sm">
+                        {a.photoUrl ? (
+                          <img src={a.photoUrl} alt={a.applicantName} className="h-full w-full object-cover" />
+                        ) : (
+                          a.applicantName.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-base">{a.applicantName}</span>
+                          <Badge
+                            variant={
+                              a.status === "APPROVED"
+                                ? "success"
+                                : a.status === "REJECTED"
+                                  ? "destructive"
+                                  : "warning"
+                            }
+                          >
+                            {a.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Class: <strong className="text-foreground">{a.appliedClass.name}</strong> · Session: <strong>{a.session.name}</strong> · DOB: <strong>{formatDate(a.dateOfBirth)}</strong>
+                          {a.admissionNo ? ` · Adm No: ${a.admissionNo}` : ""}
+                          {a.phone ? ` · Mobile: ${a.phone}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {a.status === "PENDING" ? (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() => {
+                              const clsInfo = classes.find((c) => c.name === a.appliedClass.name);
+                              const secs = clsInfo?.sections ?? [];
+                              setApprovingApp(a);
+                              setSelectedSectionId(secs[0]?.id ?? "");
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() =>
+                              startTransition(async () => {
+                                try {
+                                  const result = await rejectAdmissionAction({ id: a.id, remarks: "Rejected" });
+                                  if (!result.success) {
+                                    toast.error(result.error || "Failed to reject admission");
+                                    return;
+                                  }
+                                  toast.success("Application rejected");
+                                } catch (e) {
+                                  toast.error(e instanceof Error ? e.message : "Failed");
+                                }
+                              })
+                            }
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {a.admissionNo ? `Assigned ID: ${a.admissionNo}` : "Processed"}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                ) : searchAttempted ? (
-                  <p className="text-xs text-destructive">No family found with this phone number.</p>
-                ) : null}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Father name</Label>
-                <Input
-                  value={form.fatherName}
-                  onChange={(e) => setForm((f) => ({ ...f, fatherName: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Mother name</Label>
-                <Input
-                  value={form.motherName}
-                  onChange={(e) => setForm((f) => ({ ...f, motherName: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Guardian name</Label>
-                <Input
-                  value={form.guardianName}
-                  onChange={(e) => setForm((f) => ({ ...f, guardianName: e.target.value }))}
-                  placeholder="If different from parents"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Mobile number</Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="Primary contact mobile"
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Address</Label>
-                <Textarea
-                  value={form.address}
-                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                  rows={2}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 md:col-span-3">
-                <Button type="button" variant="outline" onClick={() => setStep(1)}>
-                  Back
-                </Button>
-                <Button
-                  type="button"
-                  loading={pending}
-                  disabled={!parentStepValid()}
-                  onClick={handleSave}
-                >
-                  Save admission
-                </Button>
-              </div>
+                ))
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
+      {/* Existing Family Match Modal */}
       {matchDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="w-full max-w-md shadow-lg">
@@ -386,7 +409,7 @@ export function AdmissionsClient({
                 </p>
                 <p>
                   <span className="text-muted-foreground">Mobile:</span>{" "}
-                  {matchDialog.primaryPhone || form.phone}
+                  {matchDialog.primaryPhone || pendingSubmitState?.phone || "—"}
                 </p>
               </div>
 
@@ -396,46 +419,87 @@ export function AdmissionsClient({
                   <p className="text-muted-foreground">No students linked yet.</p>
                 ) : (
                   <ul className="list-inside list-disc space-y-1">
-                    {matchDialog.students.map((s) => (
-                      <li key={s.id}>
-                        {s.fullName}
-                        {s.admissionNo ? (
-                          <span className="text-muted-foreground"> ({s.admissionNo})</span>
-                        ) : null}
-                      </li>
-                    ))}
+                    {matchDialog.students.map((s) => {
+                      const isSameStudent = pendingSubmitState && s.fullName.trim().toLowerCase() === pendingSubmitState.applicantName.trim().toLowerCase();
+                      return (
+                        <li key={s.id} className={isSameStudent ? "font-semibold text-destructive" : ""}>
+                          {s.fullName}
+                          {s.admissionNo ? (
+                            <span className="text-muted-foreground"> ({s.admissionNo})</span>
+                          ) : null}
+                          {isSameStudent && <span className="ml-2 text-xs text-destructive font-bold">(Same Student)</span>}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
 
-              <p>Do you want to add this student to the same family?</p>
+              {pendingSubmitState && matchDialog.students.some((s) => s.fullName.trim().toLowerCase() === pendingSubmitState.applicantName.trim().toLowerCase()) ? (
+                <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 space-y-1">
+                  <p className="font-semibold text-sm">⚠️ Duplicate Student Warning</p>
+                  <p className="text-xs text-amber-800">
+                    A student named <strong>{pendingSubmitState.applicantName}</strong> already belongs to this family. Closing is recommended to avoid duplicate student records.
+                  </p>
+                </div>
+              ) : (
+                <p>Do you want to add this student to the same family?</p>
+              )}
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" loading={pending} onClick={confirmUseExisting}>
-                  Use existing family
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  loading={pending}
-                  onClick={confirmCreateNew}
-                >
-                  Create new family
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={pending}
-                  onClick={() => setMatchDialog(null)}
-                >
-                  Cancel
-                </Button>
+                {pendingSubmitState && matchDialog.students.some((s) => s.fullName.trim().toLowerCase() === pendingSubmitState.applicantName.trim().toLowerCase()) ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="default"
+                      onClick={() => setMatchDialog(null)}
+                    >
+                      Close (Recommended)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      loading={pending}
+                      onClick={() => {
+                        if (!pendingSubmitState || !matchDialog) return;
+                        startTransition(async () => {
+                          await executeSubmit(pendingSubmitState, matchDialog.id, true);
+                        });
+                      }}
+                    >
+                      Save & Add Duplicate Anyway
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button type="button" loading={pending} onClick={confirmUseExisting}>
+                      Use existing family
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      loading={pending}
+                      onClick={confirmCreateNew}
+                    >
+                      Create new family
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={pending}
+                      onClick={() => setMatchDialog(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
       ) : null}
 
+      {/* Section Assignment & Approval Modal */}
       {approvingApp ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="w-full max-w-md shadow-lg">
@@ -492,76 +556,6 @@ export function AdmissionsClient({
           </Card>
         </div>
       ) : null}
-
-      <div className="space-y-2">
-        {admissions.map((a) => {
-          return (
-            <div
-              key={a.id}
-              className="flex flex-col gap-2 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="font-medium">{a.applicantName}</p>
-                <p className="text-sm text-muted-foreground">
-                  {a.session.name} · {a.appliedClass.name} · DOB {formatDate(a.dateOfBirth)}
-                  {a.admissionNo ? ` · ${a.admissionNo}` : ""}
-                  {a.phone ? ` · ${a.phone}` : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={
-                     a.status === "APPROVED"
-                       ? "success"
-                       : a.status === "REJECTED"
-                         ? "destructive"
-                         : "warning"
-                  }
-                >
-                  {a.status}
-                </Badge>
-                {a.status === "PENDING" ? (
-                  <>
-                    <Button
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => {
-                        const clsInfo = classes.find((c) => c.name === a.appliedClass.name);
-                        const secs = clsInfo?.sections ?? [];
-                        setApprovingApp(a);
-                        setSelectedSectionId(secs[0]?.id ?? "");
-                      }}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={pending}
-                      onClick={() =>
-                        startTransition(async () => {
-                          try {
-                            const result = await rejectAdmissionAction({ id: a.id, remarks: "Rejected" });
-                            if (!result.success) {
-                              toast.error(result.error || "Failed to reject admission");
-                              return;
-                            }
-                            toast.success("Rejected");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Failed");
-                          }
-                        })
-                      }
-                    >
-                      Reject
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

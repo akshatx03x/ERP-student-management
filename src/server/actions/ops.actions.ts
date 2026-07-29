@@ -40,7 +40,7 @@ export async function createAdmissionAction(input: CreateAdmissionInput) {
   try {
     const r = await createAdmission(input);
     revalidatePath("/admissions");
-    return { success: true, data: r, error: null };
+    return { success: true, data: JSON.parse(JSON.stringify(r)), error: null };
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : "Failed to create admission" };
   }
@@ -50,7 +50,7 @@ export async function approveAdmissionAction(input: ReviewAdmissionInput) {
     const r = await approveAdmission(input);
     revalidatePath("/admissions");
     revalidatePath("/students");
-    return { success: true, data: r, error: null };
+    return { success: true, data: JSON.parse(JSON.stringify(r)), error: null };
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : "Failed to approve admission" };
   }
@@ -59,7 +59,7 @@ export async function rejectAdmissionAction(input: ReviewAdmissionInput) {
   try {
     const r = await rejectAdmission(input);
     revalidatePath("/admissions");
-    return { success: true, data: r, error: null };
+    return { success: true, data: JSON.parse(JSON.stringify(r)), error: null };
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : "Failed to reject admission" };
   }

@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "dev:cloud": "APP_MODE=cloud next dev --turbopack",
     "dev:offline": "APP_MODE=offline next dev --turbopack",
-    "build": "next build --turbopack && node -e \"require('fs').cpSync('.next/static', '.next/standalone/.next/static', {recursive: true}); require('fs').cpSync('public', '.next/standalone/public', {recursive: true});\"",
+    "build": "node -e \"const p=require('path'),f=require('fs'),r=p.resolve(__dirname),n=p.join(r,'.next');try{if(f.existsSync(n))f.rmSync(n,{recursive:true,force:true,maxRetries:5,retryDelay:200});}catch(e){}\" && next build && node -e \"const p=require('path'),f=require('fs'),r=p.resolve(__dirname),s=p.join(r,'.next/static'),sd=p.join(r,'.next/standalone/.next/static'),pb=p.join(r,'public'),pd=p.join(r,'.next/standalone/public');if(f.existsSync(s))f.cpSync(s,sd,{recursive:true,dereference:true});if(f.existsSync(pb))f.cpSync(pb,pd,{recursive:true,dereference:true});const nm=p.join(r,'.next/standalone/node_modules');if(f.existsSync(nm)){const tmp=p.join(r,'.next/nm_deref');f.cpSync(nm,tmp,{recursive:true,dereference:true});f.rmSync(nm,{recursive:true,force:true});f.renameSync(tmp,nm);}\"",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",

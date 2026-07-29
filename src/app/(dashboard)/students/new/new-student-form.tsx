@@ -1,29 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { createStudentWithFamilyAction } from "@/server/actions/student.actions";
 import { findFamilyByPhoneAction } from "@/server/actions/family.actions";
 import { cn } from "@/lib/utils";
+import { UnifiedStudentForm, type UnifiedFormState } from "@/components/shared/unified-student-form";
 
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
 type Session = { id: string; name: string };
-
-type MatchedFamily = {
-  id: string;
-  fatherName: string | null;
-  motherName: string | null;
-  primaryPhone: string | null;
-  students: Array<{ id: string; fullName: string; admissionNo: string }>;
-};
 
 export function NewStudentForm({
   classes,
@@ -36,365 +25,159 @@ export function NewStudentForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [match, setMatch] = useState<MatchedFamily | null>(null);
-  const [checkedPhone, setCheckedPhone] = useState("");
-  const [form, setForm] = useState({
-    admissionNo: "",
-    firstName: "",
-    lastName: "",
-    dateOfBirth: "",
-    gender: "",
-    fatherName: "",
-    motherName: "",
-    guardianName: "",
-    phone: "",
-    address: "",
-    enroll: true,
-    sessionId: currentSessionId ?? sessions[0]?.id ?? "",
-    classId: classes[0]?.id ?? "",
-    sectionId: classes[0]?.sections[0]?.id ?? "",
-    rollNo: "",
-  });
+  const [duplicateAlert, setDuplicateAlert] = useState<{ message: string; formState: UnifiedFormState } | null>(null);
 
-  const sections = useMemo(
-    () => classes.find((c) => c.id === form.classId)?.sections ?? [],
-    [classes, form.classId],
-  );
+  async function executeDirectSubmit(formState: UnifiedFormState, allowDuplicate: boolean = false) {
+    let familyId: string | null = null;
+    if (formState.phone.trim()) {
+      const existing = await findFamilyByPhoneAction(formState.phone.trim());
+      if (existing) {
+        familyId = existing.id;
+      }
+    }
 
-  function canSave() {
-    return Boolean(
-      form.admissionNo.trim() &&
-        form.firstName.trim() &&
-        form.dateOfBirth &&
-        form.phone.trim() &&
-        (form.fatherName.trim() || form.motherName.trim() || form.guardianName.trim()),
-    );
-  }
-
-  async function save(familyId: string | null) {
     const result = await createStudentWithFamilyAction({
-      admissionNo: form.admissionNo.trim(),
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim() || null,
-      dateOfBirth: new Date(form.dateOfBirth),
-      gender: form.gender ? (form.gender as "MALE" | "FEMALE" | "OTHER") : null,
-      fatherName: form.fatherName.trim() || null,
-      motherName: form.motherName.trim() || null,
-      guardianName: form.guardianName.trim() || null,
-      phone: form.phone.trim(),
-      address: form.address.trim() || null,
+      admissionNo: formState.admissionNo.trim(),
+      firstName: formState.firstName.trim(),
+      middleName: formState.middleName.trim() || null,
+      lastName: formState.lastName.trim() || null,
+      dateOfBirth: new Date(formState.dateOfBirth),
+      gender: formState.gender ? (formState.gender as "MALE" | "FEMALE" | "OTHER") : null,
+      bloodGroup: null,
+      aadhaar: formState.aadhaar.trim() || null,
+      religion: formState.religion.trim() || null,
+      category: formState.category ? (formState.category as any) : null,
+      apaarId: formState.apaarId.trim() || null,
+      penId: formState.penId.trim() || null,
+
+      fatherName: formState.fatherName.trim() || null,
+      fatherQualification: formState.fatherQualification.trim() || null,
+      fatherOccupation: formState.fatherOccupation.trim() || null,
+      fatherDesignation: formState.fatherDesignation.trim() || null,
+      fatherAnnualIncome: formState.fatherAnnualIncome ? Number(formState.fatherAnnualIncome) : null,
+      fatherOfficeAddress: formState.fatherOfficeAddress.trim() || null,
+      fatherPhone: formState.fatherPhone.trim() || null,
+      fatherAadhaar: formState.fatherAadhaar.trim() || null,
+
+      motherName: formState.motherName.trim() || null,
+      motherQualification: formState.motherQualification.trim() || null,
+      motherIsWorking: formState.motherIsWorking,
+      motherOccupation: formState.motherOccupation.trim() || null,
+      motherDesignation: formState.motherDesignation.trim() || null,
+      motherAnnualIncome: formState.motherAnnualIncome ? Number(formState.motherAnnualIncome) : null,
+      motherOfficeAddress: formState.motherOfficeAddress.trim() || null,
+      motherPhone: formState.motherPhone.trim() || null,
+      motherAadhaar: formState.motherAadhaar.trim() || null,
+
+      guardianName: formState.guardianName.trim() || null,
+      phone: formState.phone.trim(),
+      secondaryPhone: formState.secondaryPhone.trim() || null,
+      address: formState.resAddressLine1.trim() || null,
+      resAddressLine1: formState.resAddressLine1.trim() || null,
+      resAddressLine2: formState.resAddressLine2.trim() || null,
+      resCity: formState.resCity.trim() || null,
+      resState: formState.resState.trim() || null,
+      resPincode: formState.resPincode.trim() || null,
+      sameAsResidential: formState.sameAsResidential,
+      permAddressLine1: formState.permAddressLine1.trim() || null,
+      permAddressLine2: formState.permAddressLine2.trim() || null,
+      permCity: formState.permCity.trim() || null,
+      permState: formState.permState.trim() || null,
+      permPincode: formState.permPincode.trim() || null,
+
+      previousSchoolName: formState.previousSchoolName.trim() || null,
+      previousClass: formState.previousClass.trim() || null,
+      tcNumber: formState.tcNumber.trim() || null,
+      tcDate: formState.tcDate ? new Date(formState.tcDate) : null,
+
+      transportRequired: formState.transportRequired,
+      transportPickupPoint: formState.transportPickupPoint.trim() || null,
+
+      declarationAccepted: formState.declarationAccepted,
+      declarationDate: formState.declarationDate ? new Date(formState.declarationDate) : null,
+      declarationParentName: formState.declarationParentName.trim() || null,
+      photoUrl: formState.photoUrl || null,
       familyId,
+      allowDuplicate,
       createLogin: true,
       status: "ACTIVE",
-      enroll: form.enroll,
-      sessionId: form.enroll ? form.sessionId : null,
-      classId: form.enroll ? form.classId : null,
-      sectionId: form.enroll ? form.sectionId : null,
-      rollNo: form.rollNo.trim() || null,
+      enroll: true,
+      sessionId: formState.sessionId,
+      classId: formState.appliedClassId,
+      sectionId: formState.sectionId,
+      rollNo: formState.rollNo.trim() || null,
     });
-    
-    if (!result.success) {
-      throw new Error(result.error || "Failed to add student");
-    }
-    
-    toast.success("Student added");
-    router.push("/students");
-    router.refresh();
-  }
 
-  function handleSave() {
-    if (!canSave()) {
-      toast.error("Fill student name, admission no, DOB, mobile, and at least one parent name");
+    if (!result.success) {
+      if (result.error && (result.error.includes("already registered") || result.error.includes("already enrolled"))) {
+        setDuplicateAlert({ message: result.error, formState });
+        return;
+      }
+      toast.error(result.error || "Failed to add student");
       return;
     }
-    startTransition(async () => {
-      try {
-        const phoneTrimmed = form.phone.trim();
-        let familyId: string | null = match?.id ?? null;
 
-        // If we haven't checked this phone number yet, check it now
-        if (checkedPhone !== phoneTrimmed) {
-          const existing = await findFamilyByPhoneAction(phoneTrimmed);
-          setCheckedPhone(phoneTrimmed);
-          if (existing && !match) {
-            setMatch(existing);
-            return;
-          }
-          familyId = existing?.id ?? null;
-        }
-
-        await save(familyId);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
-      }
-    });
+    toast.success("Student created successfully");
+    setDuplicateAlert(null);
+    router.push("/students");
+    router.refresh();
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Link href="/students" className={cn(buttonVariants({ variant: "ghost" }))}>
-          Back
+          ← Back to Students
         </Link>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Student details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Admission no</Label>
-            <Input
-              value={form.admissionNo}
-              onChange={(e) => setForm((f) => ({ ...f, admissionNo: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>First name</Label>
-            <Input
-              value={form.firstName}
-              onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Last name</Label>
-            <Input
-              value={form.lastName}
-              onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Date of birth</Label>
-            <Input
-              type="date"
-              value={form.dateOfBirth}
-              onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Gender</Label>
-            <Select
-              value={form.gender}
-              onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-            >
-              <option value="">—</option>
-              <option value="MALE">Male</option>
-              <option value="FEMALE">Female</option>
-              <option value="OTHER">Other</option>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <UnifiedStudentForm
+        classes={classes}
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        mode="direct"
+        onSubmit={(state) => executeDirectSubmit(state, false)}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Parent details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Father name</Label>
-            <Input
-              value={form.fatherName}
-              onChange={(e) => setForm((f) => ({ ...f, fatherName: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Mother name</Label>
-            <Input
-              value={form.motherName}
-              onChange={(e) => setForm((f) => ({ ...f, motherName: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Guardian name</Label>
-            <Input
-              value={form.guardianName}
-              onChange={(e) => setForm((f) => ({ ...f, guardianName: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Mobile number</Label>
-            <Input
-              value={form.phone}
-              onChange={(e) => {
-                const val = e.target.value;
-                setMatch(null);
-                setForm((f) => ({ ...f, phone: val }));
-                if (val.trim() !== checkedPhone) {
-                  setCheckedPhone("");
-                }
-              }}
-              onBlur={(e) => {
-                const val = e.target.value.trim();
-                if (val && val !== checkedPhone) {
-                  startTransition(async () => {
-                    try {
-                      const existing = await findFamilyByPhoneAction(val);
-                      setCheckedPhone(val);
-                      if (existing) {
-                        setMatch(existing);
-                      }
-                    } catch (err) {
-                      console.error(err);
-                    }
-                  });
-                }
-              }}
-              placeholder="Used to find existing family"
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label>Address</Label>
-            <Textarea
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              rows={2}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Class (optional)</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="flex items-end md:col-span-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.enroll}
-                onChange={(e) => setForm((f) => ({ ...f, enroll: e.target.checked }))}
-              />
-              Enroll in class now
-            </label>
-          </div>
-          {form.enroll ? (
-            <>
-              <div className="space-y-2">
-                <Label>Session</Label>
-                <Select
-                  value={form.sessionId}
-                  onChange={(e) => setForm((f) => ({ ...f, sessionId: e.target.value }))}
-                >
-                  {sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
+      {duplicateAlert ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <Card className="w-full max-w-md shadow-lg border-amber-200">
+            <CardHeader>
+              <CardTitle className="text-amber-900">⚠️ Duplicate Student Warning</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 text-xs">
+                {duplicateAlert.message}
               </div>
-              <div className="space-y-2">
-                <Label>Class</Label>
-                <Select
-                  value={form.classId}
-                  onChange={(e) => {
-                    const next = classes.find((c) => c.id === e.target.value);
-                    setForm((f) => ({
-                      ...f,
-                      classId: e.target.value,
-                      sectionId: next?.sections[0]?.id ?? "",
-                    }));
+              <p className="text-muted-foreground text-xs">
+                Closing is recommended to avoid duplicate student entries in the school. Do you want to proceed anyway?
+              </p>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => setDuplicateAlert(null)}
+                >
+                  Close (Recommended)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  loading={pending}
+                  onClick={() => {
+                    startTransition(async () => {
+                      await executeDirectSubmit(duplicateAlert.formState, true);
+                    });
                   }}
                 >
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
+                  Save & Add Duplicate Anyway
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label>Section</Label>
-                <Select
-                  value={form.sectionId}
-                  onChange={(e) => setForm((f) => ({ ...f, sectionId: e.target.value }))}
-                >
-                  {sections.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Roll no</Label>
-                <Input
-                  value={form.rollNo}
-                  onChange={(e) => setForm((f) => ({ ...f, rollNo: e.target.value }))}
-                />
-              </div>
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {match ? (
-        <Card className="border-amber-300 bg-amber-50/50">
-          <CardHeader>
-            <CardTitle>Existing family found</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <p>
-              Father: {match.fatherName || "—"} · Mother: {match.motherName || "—"} · Mobile:{" "}
-              {match.primaryPhone || form.phone}
-            </p>
-            {match.students.length > 0 ? (
-              <ul className="list-inside list-disc">
-                {match.students.map((s) => (
-                  <li key={s.id}>
-                    {s.fullName} ({s.admissionNo})
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">No students linked yet.</p>
-            )}
-            <p>Add this student to the same family?</p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                loading={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    try {
-                      await save(match.id);
-                    } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Failed");
-                    }
-                  })
-                }
-              >
-                Use existing family
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                loading={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    try {
-                      setMatch(null);
-                      await save(null);
-                    } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Failed");
-                    }
-                  })
-                }
-              >
-                Create new family
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!match ? (
-        <Button type="button" loading={pending} disabled={!canSave()} onClick={handleSave}>
-          Save student
-        </Button>
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
     </div>
   );
 }
+

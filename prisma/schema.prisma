@@ -21,6 +21,7 @@ model School {
   families             Family[]
   feeHeads             FeeHead[]
   gradeScales          GradeScale[]
+  guardians            Guardian[]
   holidays             Holiday[]
   importJobs           ImportJob[]
   notices              Notice[]
@@ -308,26 +309,41 @@ model ClassTeacherAssignment {
 }
 
 model Family {
-  id             String                 @id @default(cuid())
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  schoolId       String
-  familyCode     String?
-  fatherName     String?
-  motherName     String?
-  guardianName   String?
-  primaryPhone   String?
-  secondaryPhone String?
-  email          String?
-  addressLine1   String?
-  addressLine2   String?
-  city           String?
-  state          String?
-  pincode        String?
-  admissions     AdmissionApplication[]
-  school         School                 @relation(fields: [schoolId], references: [id])
-  payments       FamilyPayment[]
-  students       Student[]
+  id                    String                 @id @default(cuid())
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  schoolId              String
+  familyCode            String?
+  fatherName            String?
+  motherName            String?
+  guardianName          String?
+  primaryPhone          String?
+  secondaryPhone        String?
+  email                 String?
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  state                 String?
+  pincode               String?
+  resAddressLine1       String?
+  resAddressLine2       String?
+  resCity               String?
+  resState              String?
+  resPincode            String?
+  sameAsResidential     Boolean                @default(true)
+  permAddressLine1      String?
+  permAddressLine2      String?
+  permCity              String?
+  permState             String?
+  permPincode           String?
+  declarationAccepted   Boolean                @default(false)
+  declarationDate       DateTime?
+  declarationParentName String?
+  admissions            AdmissionApplication[]
+  school                School                 @relation(fields: [schoolId], references: [id])
+  payments              FamilyPayment[]
+  students              Student[]
+  guardians             Guardian[]
 
   @@unique([schoolId, familyCode])
   @@index([schoolId, fatherName])
@@ -335,35 +351,98 @@ model Family {
   @@index([schoolId, primaryPhone])
 }
 
-model Student {
-  id             String                 @id @default(cuid())
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+model Guardian {
+  id             String            @id @default(cuid())
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   schoolId       String
-  familyId       String
-  admissionNo    String
-  firstName      String
-  middleName     String?
-  lastName       String?
+  familyId       String?
   fullName       String
-  dateOfBirth    DateTime
   gender         Gender?
-  bloodGroup     String?
-  aadhaar        String?
-  status         StudentStatus          @default(ACTIVE)
-  admissions     AdmissionApplication[]
-  attendance     AttendanceRecord[]
-  feeAllocations FeePaymentAllocation[]
-  leaveRequests  LeaveRequest[]
-  markEntries    MarkEntry[]
-  promotions     PromotionHistory[]
-  reportCards    ReportCard[]
-  family         Family                 @relation(fields: [familyId], references: [id])
-  school         School                 @relation(fields: [schoolId], references: [id])
-  enrollments    StudentEnrollment[]
-  studentFees    StudentFee[]
-  medical        StudentMedical?
-  user           User?
+  phone          String?
+  secondaryPhone String?
+  email          String?
+  qualification  String?
+  isWorking      Boolean?
+  occupation     String?
+  designation    String?
+  annualIncome   Decimal?          @db.Decimal(12, 2)
+  officeAddress  String?
+  employerName   String?
+  aadhaarNumber  String?
+  panNumber      String?
+  userId         String?           @unique
+  family         Family?           @relation(fields: [familyId], references: [id])
+  school         School            @relation(fields: [schoolId], references: [id])
+  students       StudentGuardian[]
+
+  @@index([schoolId, phone])
+  @@index([schoolId, fullName])
+}
+
+model StudentGuardian {
+  id                 String               @id @default(cuid())
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  studentId          String
+  guardianId         String
+  relationshipType   GuardianRelationship @default(OTHER)
+  isPrimaryContact   Boolean              @default(false)
+  isEmergencyContact Boolean              @default(false)
+  isFeePayer         Boolean              @default(false)
+  hasCustody         Boolean              @default(true)
+  canPickUp          Boolean              @default(true)
+  guardian           Guardian             @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  student            Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, guardianId])
+  @@index([studentId])
+  @@index([guardianId])
+}
+
+model Student {
+  id                   String                 @id @default(cuid())
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  schoolId             String
+  familyId             String
+  admissionNo          String
+  firstName            String
+  middleName           String?
+  lastName             String?
+  fullName             String
+  dateOfBirth          DateTime
+  gender               Gender?
+  bloodGroup           String?
+  aadhaar              String?
+  religion             String?
+  category             StudentCategory?
+  apaarId              String?
+  penId                String?
+  previousSchoolName   String?
+  previousClass        String?
+  tcNumber             String?
+  tcDate               DateTime?
+  transportRequired    Boolean                @default(false)
+  transportPickupPoint String?
+  admissionDate        DateTime?              @default(now())
+  photoDocumentId      String?
+  photoUrl             String?
+  status               StudentStatus          @default(ACTIVE)
+  admissions           AdmissionApplication[]
+  attendance           AttendanceRecord[]
+  feeAllocations       FeePaymentAllocation[]
+  leaveRequests        LeaveRequest[]
+  markEntries          MarkEntry[]
+  promotions           PromotionHistory[]
+  reportCards          ReportCard[]
+  family               Family                 @relation(fields: [familyId], references: [id])
+  school               School                 @relation(fields: [schoolId], references: [id])
+  enrollments          StudentEnrollment[]
+  studentFees          StudentFee[]
+  guardians            StudentGuardian[]
+  medical              StudentMedical?
+  user                 User?
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, fullName])
@@ -429,31 +508,74 @@ model PromotionHistory {
 }
 
 model AdmissionApplication {
-  id             String          @id @default(cuid())
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  sessionId      String
-  familyId       String?
-  studentId      String?
-  applicantName  String
-  dateOfBirth    DateTime
-  gender         Gender?
-  appliedClassId String
-  fatherName     String?
-  motherName     String?
-  guardianName   String?
-  phone          String?
-  address        String?
-  status         AdmissionStatus @default(PENDING)
-  admissionNo    String?
-  remarks        String?
-  reviewedById   String?
-  reviewedAt     DateTime?
-  appliedClass   Class           @relation(fields: [appliedClassId], references: [id])
-  family         Family?         @relation(fields: [familyId], references: [id])
-  reviewedBy     User?           @relation("AdmissionReviewer", fields: [reviewedById], references: [id])
-  session        AcademicSession @relation(fields: [sessionId], references: [id])
-  student        Student?        @relation(fields: [studentId], references: [id])
+  id                    String            @id @default(cuid())
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  sessionId             String
+  familyId              String?
+  studentId             String?
+  applicantName         String
+  dateOfBirth           DateTime
+  gender                Gender?
+  religion              String?
+  category              StudentCategory?
+  aadhaar               String?
+  apaarId               String?
+  penId                 String?
+  appliedClassId        String
+  fatherName            String?
+  fatherQualification   String?
+  fatherOccupation      String?
+  fatherDesignation     String?
+  fatherAnnualIncome    Decimal?          @db.Decimal(12, 2)
+  fatherOfficeAddress   String?
+  fatherPhone           String?
+  fatherAadhaar         String?
+  motherName            String?
+  motherQualification   String?
+  motherIsWorking       Boolean?
+  motherOccupation      String?
+  motherDesignation     String?
+  motherAnnualIncome    Decimal?          @db.Decimal(12, 2)
+  motherOfficeAddress   String?
+  motherPhone           String?
+  motherAadhaar         String?
+  guardianName          String?
+  phone                 String?
+  address               String?
+  resAddressLine1       String?
+  resAddressLine2       String?
+  resCity               String?
+  resState              String?
+  resPincode            String?
+  sameAsResidential     Boolean           @default(true)
+  permAddressLine1      String?
+  permAddressLine2      String?
+  permCity              String?
+  permState             String?
+  permPincode           String?
+  previousSchoolName    String?
+  previousClass         String?
+  tcNumber              String?
+  tcDate                DateTime?
+  transportRequired     Boolean           @default(false)
+  transportPickupPoint  String?
+  declarationAccepted   Boolean           @default(false)
+  declarationDate       DateTime?
+  declarationParentName String?
+  admissionDate         DateTime?
+  photoDocumentId       String?
+  photoUrl              String?
+  status                AdmissionStatus   @default(PENDING)
+  admissionNo           String?
+  remarks               String?
+  reviewedById          String?
+  reviewedAt            DateTime?
+  appliedClass          Class             @relation(fields: [appliedClassId], references: [id])
+  family                Family?           @relation(fields: [familyId], references: [id])
+  reviewedBy            User?             @relation("AdmissionReviewer", fields: [reviewedById], references: [id])
+  session               AcademicSession   @relation(fields: [sessionId], references: [id])
+  student               Student?          @relation(fields: [studentId], references: [id])
 
   @@index([sessionId, status])
   @@index([admissionNo])
@@ -869,6 +991,13 @@ model ImportJob {
   @@index([schoolId, createdAt])
 }
 
+model SystemCounter {
+  id        String   @id
+  value     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum Role {
   PRINCIPAL
   ACCOUNTANT
@@ -1025,9 +1154,24 @@ enum NotificationChannelType {
   EMAIL
 }
 
-model SystemCounter {
-  id        String   @id
-  value     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum StudentCategory {
+  GENERAL
+  OBC
+  SC
+  ST
+  EWS
+  OTHER
 }
+
+enum GuardianRelationship {
+  FATHER
+  MOTHER
+  STEP_FATHER
+  STEP_MOTHER
+  GRANDPARENT
+  UNCLE
+  AUNT
+  LEGAL_GUARDIAN
+  OTHER
+}
+

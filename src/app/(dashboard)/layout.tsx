@@ -31,15 +31,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
       <NextTopLoader color="#4f46e5" showSpinner={false} />
       <Sidebar
         schoolName={branding?.schoolName ?? school?.name ?? "School ERP"}
         allowedResources={allowedResources}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
         <Header userName={user.name} role={user.role} />
-        <main className="flex-1 overflow-auto p-6 md:p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
       </div>
     </div>
   );

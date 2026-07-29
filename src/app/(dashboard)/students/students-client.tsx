@@ -21,6 +21,7 @@ type StudentRow = {
   fullName: string;
   admissionNo: string;
   status: string;
+  photoUrl?: string | null;
   family: {
     fatherName: string | null;
     motherName: string | null;
@@ -271,7 +272,6 @@ export function StudentsClient({
             <tr>
               <th className="px-4 py-3 font-medium">Admission</th>
               <th className="px-4 py-3 font-medium">Name</th>
-              <th className="px-4 py-3 font-medium">Parents</th>
               <th className="px-4 py-3 font-medium">Class</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium" />
@@ -280,14 +280,21 @@ export function StudentsClient({
           <tbody>
             {students.map((s) => {
               const enrollment = s.enrollments[0];
-              const parents = s.family
-                ? [s.family.fatherName, s.family.motherName].filter(Boolean).join(" · ") || "—"
-                : "—";
               return (
-                <tr key={s.id} className="border-b last:border-0">
-                  <td className="px-4 py-3">{s.admissionNo}</td>
-                  <td className="px-4 py-3">{s.fullName}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{parents}</td>
+                <tr key={s.id} className="border-b last:border-0 hover:bg-accent/10 transition-colors">
+                  <td className="px-4 py-3 font-mono font-medium">{s.admissionNo}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-xs font-semibold text-muted-foreground shadow-2xs">
+                        {s.photoUrl ? (
+                          <img src={s.photoUrl} alt={s.fullName} className="h-full w-full object-cover" />
+                        ) : (
+                          s.fullName.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <span className="font-semibold">{s.fullName}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     {enrollment
                       ? `${enrollment.class.name}-${enrollment.section.name}`

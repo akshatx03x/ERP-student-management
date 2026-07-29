@@ -20,6 +20,31 @@ export interface AppPaths {
   embeddedPostgresBinDir: string | null;
 }
 
+export function getOrCreateDesktopAuthSecret(configDir: string): string {
+  const secretFile = path.join(configDir, "auth-secret.key");
+  if (fs.existsSync(secretFile)) {
+    try {
+      const existingSecret = fs.readFileSync(secretFile, "utf-8").trim();
+      if (existingSecret) {
+        return existingSecret;
+      }
+    } catch (err) {
+      console.warn("[Paths] Error reading persisted auth secret key file:", err);
+    }
+  }
+
+  // Generate a cryptographically secure 256-bit secret for desktop offline auth
+  const crypto = require("crypto");
+  const newSecret = crypto.randomBytes(32).toString("hex");
+  try {
+    fs.writeFileSync(secretFile, newSecret, "utf-8");
+    console.log(`[Paths] Generated and persisted new desktop auth secret at: ${secretFile}`);
+  } catch (err) {
+    console.warn("[Paths] Failed to persist generated auth secret file:", err);
+  }
+  return newSecret;
+}
+
 export function ensureWritableDirectoriesExist(): {
   userDataDir: string;
   logsDir: string;

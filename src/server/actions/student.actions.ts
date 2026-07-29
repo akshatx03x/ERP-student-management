@@ -47,7 +47,7 @@ export async function createStudentWithFamilyAction(input: CreateStudentWithFami
     const result = await createStudentWithFamily(input);
     revalidatePath("/students");
     revalidatePath("/families");
-    return { success: true, data: result, error: null };
+    return { success: true, data: JSON.parse(JSON.stringify(result)), error: null };
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : "Failed to create student" };
   }

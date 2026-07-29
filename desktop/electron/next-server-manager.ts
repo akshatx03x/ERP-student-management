@@ -132,15 +132,25 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
       if (serverProcess && !serverProcess.killed && serverProcess.exitCode === null) {
         console.warn(`[NextServerManager] A child process is already attached and running. Awaiting server readiness...`);
       } else {
-        // Candidate standalone server locations:
-        // 1. Packaged app: process.resourcesPath/app/server.js
-        // 2. Dev/Built standalone: rootDir/.next/standalone/server.js
-        const packagedStandaloneServer = path.join(process.resourcesPath, "app", "server.js");
+        const packagedCandidates = [
+          path.join(process.resourcesPath, "app", "server.js"),
+          path.join(app.getAppPath(), "app", "server.js"),
+          path.join(process.resourcesPath, "app.asar.unpacked", "app", "server.js"),
+        ];
         const devStandaloneServer = path.join(config.rootDir, ".next", "standalone", "server.js");
 
         let standaloneServerJs: string | null = null;
-        if (app.isPackaged && fs.existsSync(packagedStandaloneServer)) {
-          standaloneServerJs = packagedStandaloneServer;
+        if (app.isPackaged) {
+          for (const cand of packagedCandidates) {
+            if (fs.existsSync(cand)) {
+              standaloneServerJs = cand;
+              break;
+            }
+          }
+          if (!standaloneServerJs) {
+            console.error(`[NextServerManager CRITICAL] Standalone server file NOT found in candidates: ${JSON.stringify(packagedCandidates)}`);
+            throw new Error(`Packaged Next.js server entrypoint not found. Checked: ${JSON.stringify(packagedCandidates)}.`);
+          }
         } else if (fs.existsSync(devStandaloneServer)) {
           standaloneServerJs = devStandaloneServer;
         }
@@ -159,8 +169,20 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           APP_MODE: config.appMode,
           DATABASE_URL: config.databaseUrl,
           DATABASE_URL_LOCAL: config.databaseUrl,
+          DIRECT_URL: process.env.DIRECT_URL || config.databaseUrl,
+          BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || serverUrl,
+          NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || serverUrl,
+          BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
           NODE_ENV: isProduction ? "production" : "development",
         };
+
+        console.log(`[NextServerManager] Child process env propagation verification:
+          APP_MODE: ${env.APP_MODE}
+          BETTER_AUTH_URL: ${env.BETTER_AUTH_URL}
+          NEXT_PUBLIC_APP_URL: ${env.NEXT_PUBLIC_APP_URL}
+          BETTER_AUTH_SECRET present: ${Boolean(env.BETTER_AUTH_SECRET)} (length: ${env.BETTER_AUTH_SECRET?.length ?? 0})
+          DATABASE_URL: ${env.DATABASE_URL?.replace(/:[^:@]+@/, ":****@")}
+          DIRECT_URL: ${env.DIRECT_URL?.replace(/:[^:@]+@/, ":****@")}`);
 
         let cmd: string;
         let args: string[];
@@ -177,7 +199,17 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           args = ["next", "dev", "--turbopack", "-H", "127.0.0.1", "-p", String(port)];
         }
 
-        const cwd = app.isPackaged ? app.getPath("userData") : (standaloneServerJs ? path.dirname(standaloneServerJs) : config.rootDir);
+        const cwd = standaloneServerJs ? path.dirname(standaloneServerJs) : config.rootDir;
+        if (!fs.existsSync(cwd)) {
+          fs.mkdirSync(cwd, { recursive: true });
+        }
+
+        console.log(`[NextServerManager Spawn Inspection]
+          cmd: "${cmd}" (exists: ${fs.existsSync(cmd)})
+          args: ${JSON.stringify(args)}
+          cwd: "${cwd}" (exists: ${fs.existsSync(cwd)})
+          standaloneServerJs: "${standaloneServerJs}" (exists: ${Boolean(standaloneServerJs && fs.existsSync(standaloneServerJs))})
+          ELECTRON_RUN_AS_NODE: "${env.ELECTRON_RUN_AS_NODE || ""}"`);
 
         serverProcess = spawn(cmd, args, {
           cwd,

@@ -29,6 +29,15 @@ export function StudentProfileCard({
     gender: string | null;
     bloodGroup: string | null;
     aadhaar: string | null;
+    religion?: string | null;
+    category?: string | null;
+    apaarId?: string | null;
+    penId?: string | null;
+    previousSchoolName?: string | null;
+    transportRequired?: boolean;
+    transportPickupPoint?: string | null;
+    photoDocumentId?: string | null;
+    photoUrl?: string | null;
     status: string;
     familyId: string;
     user: { email: string } | null;
@@ -106,15 +115,19 @@ export function StudentProfileCard({
   return (
     <Card className="border-border">
       {/* Card Header: Avatar + Name + Key Identifiers */}
-      <CardHeader className="px-5 py-4 border-b">
-        <div className="flex items-center gap-4">
+      <CardHeader className="px-5 py-5 border-b">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-bold ${avatarColorClass}`}
+            className={`relative flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 text-2xl font-bold shadow-md ${avatarColorClass}`}
           >
-            {initials}
+            {student.photoUrl ? (
+              <img src={student.photoUrl} alt={student.fullName} className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[17px] font-semibold leading-tight text-foreground">
+          <div className="min-w-0 flex-1 space-y-1">
+            <h2 className="text-xl sm:text-2xl font-bold leading-tight text-foreground">
               {student.fullName}
             </h2>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
@@ -197,18 +210,18 @@ export function StudentProfileCard({
             </div>
             <div>
               <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Roll Number
+                Category / Religion
               </span>
               <span className="text-sm font-medium text-foreground">
-                {currentEnrollment?.rollNo || "—"}
+                {student.category || "—"} {student.religion ? `(${student.religion})` : ""}
               </span>
             </div>
             <div>
               <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Blood Group
+                Roll Number
               </span>
               <span className="text-sm font-medium text-foreground">
-                {student.bloodGroup || "—"}
+                {currentEnrollment?.rollNo || "—"}
               </span>
             </div>
             <div>
@@ -219,16 +232,30 @@ export function StudentProfileCard({
                 {student.aadhaar || "—"}
               </span>
             </div>
-            {!isStudentSelf && (
-              <div>
-                <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                  Portal Login
-                </span>
-                <span className="text-sm font-medium text-foreground break-all">
-                  {student.user ? student.user.email : "Not created"}
-                </span>
-              </div>
-            )}
+            <div>
+              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
+                APAAR ID / PEN ID
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                {student.apaarId || "—"} {student.penId ? `/ ${student.penId}` : ""}
+              </span>
+            </div>
+            <div>
+              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
+                Previous School
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                {student.previousSchoolName || "—"}
+              </span>
+            </div>
+            <div>
+              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
+                Transport
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                {student.transportRequired ? `Required (${student.transportPickupPoint || "Stop specified"})` : "Not Required"}
+              </span>
+            </div>
           </div>
           {canDelete && (
             <div className="mt-5 pt-4 border-t flex justify-end">

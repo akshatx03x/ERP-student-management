@@ -66,6 +66,7 @@ export async function listAdmissions(input?: {
         motherName: true,
         guardianName: true,
         phone: true,
+        photoUrl: true,
         address: true,
         status: true,
         admissionNo: true,
@@ -124,6 +125,21 @@ export async function createAdmission(input: CreateAdmissionInput) {
     if (!family) throw new Error("Family not found");
   }
 
+  if (!data.allowDuplicate) {
+    const applicantNameTrimmed = data.applicantName.trim();
+    const existingStudent = await prisma.student.findFirst({
+      where: {
+        schoolId,
+        fullName: { equals: applicantNameTrimmed, mode: "insensitive" },
+        dateOfBirth: data.dateOfBirth,
+      },
+      select: { admissionNo: true },
+    });
+    if (existingStudent) {
+      throw new Error(`Student "${applicantNameTrimmed}" is already enrolled in the school (Admission No: ${existingStudent.admissionNo}). Duplicate registration is not allowed.`);
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const admission = await tx.admissionApplication.create({
       data: {
@@ -132,12 +148,63 @@ export async function createAdmission(input: CreateAdmissionInput) {
         applicantName: data.applicantName,
         dateOfBirth: data.dateOfBirth,
         gender: data.gender,
+        religion: data.religion,
+        category: data.category,
+        aadhaar: data.aadhaar,
+        apaarId: data.apaarId,
+        penId: data.penId,
         appliedClassId: data.appliedClassId,
+
         fatherName: data.fatherName,
+        fatherQualification: data.fatherQualification,
+        fatherOccupation: data.fatherOccupation,
+        fatherDesignation: data.fatherDesignation,
+        fatherAnnualIncome: data.fatherAnnualIncome,
+        fatherOfficeAddress: data.fatherOfficeAddress,
+        fatherPhone: data.fatherPhone,
+        fatherAadhaar: data.fatherAadhaar,
+
         motherName: data.motherName,
+        motherQualification: data.motherQualification,
+        motherIsWorking: data.motherIsWorking,
+        motherOccupation: data.motherOccupation,
+        motherDesignation: data.motherDesignation,
+        motherAnnualIncome: data.motherAnnualIncome,
+        motherOfficeAddress: data.motherOfficeAddress,
+        motherPhone: data.motherPhone,
+        motherAadhaar: data.motherAadhaar,
+
         guardianName: data.guardianName,
         phone: data.phone,
-        address: data.address,
+        address: data.address || data.resAddressLine1,
+
+        resAddressLine1: data.resAddressLine1 || data.address,
+        resAddressLine2: data.resAddressLine2,
+        resCity: data.resCity,
+        resState: data.resState,
+        resPincode: data.resPincode,
+        sameAsResidential: data.sameAsResidential,
+        permAddressLine1: data.sameAsResidential ? (data.resAddressLine1 || data.address) : data.permAddressLine1,
+        permAddressLine2: data.sameAsResidential ? data.resAddressLine2 : data.permAddressLine2,
+        permCity: data.sameAsResidential ? data.resCity : data.permCity,
+        permState: data.sameAsResidential ? data.resState : data.permState,
+        permPincode: data.sameAsResidential ? data.resPincode : data.permPincode,
+
+        previousSchoolName: data.previousSchoolName,
+        previousClass: data.previousClass,
+        tcNumber: data.tcNumber,
+        tcDate: data.tcDate,
+
+        transportRequired: data.transportRequired ?? false,
+        transportPickupPoint: data.transportPickupPoint,
+
+        declarationAccepted: data.declarationAccepted ?? false,
+        declarationDate: data.declarationDate,
+        declarationParentName: data.declarationParentName,
+        admissionDate: data.admissionDate ?? new Date(),
+        photoDocumentId: data.photoDocumentId,
+        photoUrl: data.photoUrl,
+
         status: AdmissionStatus.PENDING,
       },
     });
@@ -212,6 +279,18 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
   const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
   const fullName = admission.applicantName.trim();
 
+  const existingStudent = await prisma.student.findFirst({
+    where: {
+      schoolId,
+      fullName: { equals: fullName, mode: "insensitive" },
+      dateOfBirth: admission.dateOfBirth,
+    },
+    select: { admissionNo: true },
+  });
+  if (existingStudent) {
+    throw new Error(`Student "${fullName}" is already enrolled in the school (Admission No: ${existingStudent.admissionNo}). Cannot approve duplicate admission.`);
+  }
+
   // Compute password hash outside transaction (CPU-bound bcrypt)
   const tempPassword = studentDobPassword(admission.dateOfBirth);
   const hashed = await hashPassword(tempPassword);
@@ -230,6 +309,20 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
         fullName,
         dateOfBirth: admission.dateOfBirth,
         gender: admission.gender,
+        religion: admission.religion,
+        category: admission.category,
+        aadhaar: admission.aadhaar,
+        apaarId: admission.apaarId,
+        penId: admission.penId,
+        previousSchoolName: admission.previousSchoolName,
+        previousClass: admission.previousClass,
+        tcNumber: admission.tcNumber,
+        tcDate: admission.tcDate,
+        transportRequired: admission.transportRequired ?? false,
+        transportPickupPoint: admission.transportPickupPoint,
+        admissionDate: admission.admissionDate ?? new Date(),
+        photoDocumentId: admission.photoDocumentId,
+        photoUrl: admission.photoUrl,
         status: StudentStatus.ACTIVE,
         school: { connect: { id: schoolId } },
         ...(familyId
@@ -242,7 +335,21 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
                   motherName: admission.motherName,
                   guardianName: admission.guardianName,
                   primaryPhone: admission.phone,
-                  addressLine1: admission.address,
+                  addressLine1: admission.resAddressLine1 || admission.address,
+                  resAddressLine1: admission.resAddressLine1 || admission.address,
+                  resAddressLine2: admission.resAddressLine2,
+                  resCity: admission.resCity,
+                  resState: admission.resState,
+                  resPincode: admission.resPincode,
+                  sameAsResidential: admission.sameAsResidential,
+                  permAddressLine1: admission.sameAsResidential ? (admission.resAddressLine1 || admission.address) : admission.permAddressLine1,
+                  permAddressLine2: admission.sameAsResidential ? admission.resAddressLine2 : admission.permAddressLine2,
+                  permCity: admission.sameAsResidential ? admission.resCity : admission.permCity,
+                  permState: admission.sameAsResidential ? admission.resState : admission.permState,
+                  permPincode: admission.sameAsResidential ? admission.resPincode : admission.permPincode,
+                  declarationAccepted: admission.declarationAccepted ?? false,
+                  declarationDate: admission.declarationDate,
+                  declarationParentName: admission.declarationParentName,
                 },
               },
             }),
@@ -253,6 +360,87 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
     });
 
     familyId = student.familyId;
+
+    // Create Father Guardian if fatherName provided
+    if (admission.fatherName) {
+      const father = await tx.guardian.create({
+        data: {
+          schoolId,
+          familyId,
+          fullName: admission.fatherName,
+          gender: "MALE",
+          phone: admission.fatherPhone || admission.phone,
+          qualification: admission.fatherQualification,
+          occupation: admission.fatherOccupation,
+          designation: admission.fatherDesignation,
+          annualIncome: admission.fatherAnnualIncome,
+          officeAddress: admission.fatherOfficeAddress,
+          aadhaarNumber: admission.fatherAadhaar,
+        },
+      });
+      await tx.studentGuardian.create({
+        data: {
+          studentId: student.id,
+          guardianId: father.id,
+          relationshipType: "FATHER",
+          isPrimaryContact: true,
+          isEmergencyContact: true,
+          isFeePayer: true,
+        },
+      });
+    }
+
+    // Create Mother Guardian if motherName provided
+    if (admission.motherName) {
+      const mother = await tx.guardian.create({
+        data: {
+          schoolId,
+          familyId,
+          fullName: admission.motherName,
+          gender: "FEMALE",
+          phone: admission.motherPhone,
+          qualification: admission.motherQualification,
+          isWorking: admission.motherIsWorking,
+          occupation: admission.motherOccupation,
+          designation: admission.motherDesignation,
+          annualIncome: admission.motherAnnualIncome,
+          officeAddress: admission.motherOfficeAddress,
+          aadhaarNumber: admission.motherAadhaar,
+        },
+      });
+      await tx.studentGuardian.create({
+        data: {
+          studentId: student.id,
+          guardianId: mother.id,
+          relationshipType: "MOTHER",
+          isPrimaryContact: !admission.fatherName,
+          isEmergencyContact: true,
+          isFeePayer: !admission.fatherName,
+        },
+      });
+    }
+
+    // Create Guardian if guardianName provided
+    if (admission.guardianName && !admission.fatherName && !admission.motherName) {
+      const guardian = await tx.guardian.create({
+        data: {
+          schoolId,
+          familyId,
+          fullName: admission.guardianName,
+          phone: admission.phone,
+        },
+      });
+      await tx.studentGuardian.create({
+        data: {
+          studentId: student.id,
+          guardianId: guardian.id,
+          relationshipType: "LEGAL_GUARDIAN",
+          isPrimaryContact: true,
+          isEmergencyContact: true,
+          isFeePayer: true,
+        },
+      });
+    }
 
     const sectionId = data.sectionId ?? null;
     let section;
@@ -296,8 +484,6 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
       userId: user.id,
       requireStructure: true,
     });
-
-    // `email`, `hashed` are closed over from above — already computed.
 
     await tx.user.create({
       data: {

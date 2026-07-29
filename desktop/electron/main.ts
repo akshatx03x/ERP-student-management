@@ -6,7 +6,7 @@ import { registerIpcHandlers } from "./ipc";
 import { ensureLocalPostgresRunning, stopEmbeddedPostgres } from "./postgres-manager";
 import { runPendingPrismaMigrations } from "./migration-runner";
 import { startNextServer, stopNextServer } from "./next-server-manager";
-import { ensureWritableDirectoriesExist } from "./paths";
+import { ensureWritableDirectoriesExist, getOrCreateDesktopAuthSecret } from "./paths";
 
 // Force Chromium to never use a system proxy for loopback addresses.
 // Without this, WinINET proxy resolution hangs Chromium on Windows before
@@ -185,6 +185,56 @@ function findProjectRootDir(startDir: string): string {
   return path.resolve(startDir, "../../../..");
 }
 
+async function resolveWorkingLocalDatabaseUrl(configDir: string): Promise<string> {
+  const urlFile = path.join(configDir, "database.url");
+  if (fs.existsSync(urlFile)) {
+    try {
+      const persistedUrl = fs.readFileSync(urlFile, "utf-8").trim();
+      if (persistedUrl) {
+        console.log(`[Main] Loaded persisted database URL from: ${urlFile}`);
+        return persistedUrl;
+      }
+    } catch (err) {
+      console.warn("[Main] Failed to read persisted database.url file:", err);
+    }
+  }
+
+  const candidates = [
+    process.env.DATABASE_URL_LOCAL,
+    process.env.DATABASE_URL,
+    "postgresql://postgres:Akshat%401909@127.0.0.1:5432/school_erp_offline",
+    "postgresql://postgres:postgres@127.0.0.1:5432/school_erp_offline",
+    "postgresql://postgres@127.0.0.1:5432/school_erp_offline",
+  ].filter((u): u is string => Boolean(u && u.trim() !== "" && !u.includes("supabase.com")));
+
+  let pgClient: any = null;
+  try {
+    const { Client } = require("pg");
+    pgClient = Client;
+  } catch (err: any) {
+    console.warn("[Main] pg module not directly loadable in main process. Testing socket readiness.");
+  }
+
+  for (const url of candidates) {
+    if (pgClient) {
+      try {
+        const client = new pgClient({ connectionString: url, connectionTimeoutMillis: 2000 });
+        await client.connect();
+        await client.end();
+        console.log(`[Main] Database connection verified successfully with URL: ${url.replace(/:[^:@]+@/, ":****@")}`);
+        try { fs.writeFileSync(urlFile, url, "utf-8"); } catch {}
+        return url;
+      } catch (err: any) {
+        console.warn(`[Main] Connection test failed for candidate DB URL: ${url.replace(/:[^:@]+@/, ":****@")}: ${err.message}`);
+      }
+    }
+  }
+
+  const fallbackUrl = candidates[0] || "postgresql://postgres:postgres@127.0.0.1:5432/school_erp_offline";
+  try { fs.writeFileSync(urlFile, fallbackUrl, "utf-8"); } catch {}
+  return fallbackUrl;
+}
+
 let isBootstrapping = false;
 let isBootstrapped = false;
 
@@ -215,23 +265,40 @@ async function bootstrapDesktopApp(): Promise<void> {
 
   const projectRootDir = findProjectRootDir(__dirname);
 
-  // Load environment configuration from project root .env
-  dotenv.config({ path: path.join(projectRootDir, ".env") });
+  // Search candidate .env locations in priority order
+  const candidateEnvPaths = [
+    path.join(process.resourcesPath, ".env"),
+    path.join(writablePaths.userDataDir, ".env"),
+    path.join(projectRootDir, ".env"),
+  ];
+
+  let loadedEnvPath: string | null = null;
+  for (const envPath of candidateEnvPaths) {
+    if (fs.existsSync(envPath)) {
+      dotenv.config({ path: envPath });
+      loadedEnvPath = envPath;
+      console.log(`[Main] Successfully loaded environment variables from: ${envPath}`);
+      break;
+    }
+  }
+
+  if (!loadedEnvPath) {
+    console.warn(`[Main] No .env file found in candidate paths: ${candidateEnvPaths.join(", ")}. Operating with runtime environment defaults.`);
+  }
 
   // Force offline mode environment for desktop wrapper
   process.env.APP_MODE = "offline";
-  process.env.BETTER_AUTH_URL = "http://127.0.0.1:3000";
-  process.env.NEXT_PUBLIC_APP_URL = "http://127.0.0.1:3000";
-  const localDbUrl =
-    process.env.DATABASE_URL_LOCAL && process.env.DATABASE_URL_LOCAL.trim() !== ""
-      ? process.env.DATABASE_URL_LOCAL.trim()
-      : process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("supabase.com")
-      ? process.env.DATABASE_URL.trim()
-      : "postgresql://postgres:postgres@127.0.0.1:5432/school_erp_offline";
+  process.env.BETTER_AUTH_URL = process.env.BETTER_AUTH_URL || "http://127.0.0.1:3000";
+  process.env.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000";
 
-  process.env.DATABASE_URL = localDbUrl;
-  process.env.DATABASE_URL_LOCAL = localDbUrl;
-  process.env.DIRECT_URL = localDbUrl;
+  // Check or generate desktop auth secret if not supplied via .env
+  if (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.trim() === "") {
+    const desktopSecret = getOrCreateDesktopAuthSecret(writablePaths.configDir);
+    process.env.BETTER_AUTH_SECRET = desktopSecret;
+    console.log(`[Main] BETTER_AUTH_SECRET was missing. Set persisted desktop secret in process.env (length: ${desktopSecret.length}).`);
+  } else {
+    console.log(`[Main] BETTER_AUTH_SECRET present from environment (length: ${process.env.BETTER_AUTH_SECRET.length}).`);
+  }
 
   updateSplashProgress("Registering system services...", 25);
   registerIpcHandlers();
@@ -245,6 +312,20 @@ async function bootstrapDesktopApp(): Promise<void> {
       `Could not connect to local PostgreSQL database server.\n\nDetail: ${pgStatus.message}\n\nPlease ensure PostgreSQL service is installed and running.`
     );
   }
+
+  // Resolve working local database URL across candidates without requiring a .env file
+  const localDbUrl = await resolveWorkingLocalDatabaseUrl(writablePaths.configDir);
+
+  process.env.DATABASE_URL = localDbUrl;
+  process.env.DATABASE_URL_LOCAL = localDbUrl;
+  process.env.DIRECT_URL = localDbUrl;
+
+  console.log(`[Main Environment Summary]
+  APP_MODE: ${process.env.APP_MODE}
+  BETTER_AUTH_URL: ${process.env.BETTER_AUTH_URL}
+  NEXT_PUBLIC_APP_URL: ${process.env.NEXT_PUBLIC_APP_URL}
+  BETTER_AUTH_SECRET set? ${Boolean(process.env.BETTER_AUTH_SECRET)}
+  DATABASE_URL: ${localDbUrl.replace(/:[^:@]+@/, ":****@")}`);
 
   updateSplashProgress("Applying database migrations...", 60);
   const migrationResult = await runPendingPrismaMigrations(projectRootDir, localDbUrl);
