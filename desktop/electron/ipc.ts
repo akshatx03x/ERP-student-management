@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import { loadAppConfig } from "../../src/config/app-config";
 import { getBackupProvider } from "../../src/server/providers/backup.provider";
-import { checkPostgresPort } from "./postgres-manager";
+import { checkDatabaseReady } from "./sqlite-manager";
 
 export function registerIpcHandlers(): void {
   // Channel 1: Application Metadata & Configuration
@@ -17,12 +17,13 @@ export function registerIpcHandlers(): void {
     };
   });
 
-  // Channel 2: Local Infrastructure Status Check
+  // Channel 2: Portable System Status Check
   ipcMain.handle("infra:check-status", async () => {
-    const isPgReady = await checkPostgresPort();
     const config = loadAppConfig();
+    const isDbReady = await checkDatabaseReady(config.offlinePaths.dbFilePath);
     return {
-      postgresReady: isPgReady,
+      postgresReady: isDbReady,
+      sqliteReady: isDbReady,
       appMode: config.appMode,
       databaseUrlConfigured: Boolean(config.databaseUrl),
       uploadsDirExists: true,

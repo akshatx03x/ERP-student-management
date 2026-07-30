@@ -26,8 +26,8 @@ export async function GET(request: Request) {
       where: {
         schoolId,
         OR: [
-          { fullName: { contains: q, mode: "insensitive" } },
-          { admissionNo: { contains: q, mode: "insensitive" } },
+          { fullName: { contains: q } },
+          { admissionNo: { contains: q } },
         ],
       },
       take: 8,
@@ -37,9 +37,9 @@ export async function GET(request: Request) {
       where: {
         schoolId,
         OR: [
-          { fatherName: { contains: q, mode: "insensitive" } },
-          { motherName: { contains: q, mode: "insensitive" } },
-          { primaryPhone: { contains: q, mode: "insensitive" } },
+          { fatherName: { contains: q } },
+          { motherName: { contains: q } },
+          { primaryPhone: { contains: q } },
         ],
       },
       take: 5,
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
     }),
     prisma.familyPayment.findMany({
       where: {
-        receiptNo: { contains: q, mode: "insensitive" },
+        receiptNo: { contains: q },
         family: { schoolId },
       },
       take: 5,

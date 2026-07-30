@@ -13,8 +13,7 @@
     "postdist": "node -e \"const f=require('fs'),p=require('path'),s='C:/Users/Akshat/AppData/Local/SchoolERPBuild',d='../dist/installer';f.mkdirSync(d,{recursive:true});['SchoolERP_Setup.exe','SchoolERP_Setup.exe.blockmap','builder-debug.yml'].forEach(n=>{const sf=p.join(s,n);if(f.existsSync(sf))f.copyFileSync(sf,p.join(d,n));});console.log('Artifacts copied to dist/installer')\""
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "pg": "^8.13.1"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "electron": "^34.2.0",

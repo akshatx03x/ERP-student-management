@@ -13,19 +13,15 @@ interface DBMetrics {
   complexQueryMs: number;
   serializationMs: number;
   prismaOverheadEstimateMs: number;
-  supabaseLatencyMs: number;
+  sqliteLatencyMs: number;
   isPooledUrl: boolean;
 }
 
 async function runDBAudit(): Promise<DBMetrics> {
-  console.log("\n--- STARTING DATABASE & SUPABASE AUDIT ---");
+  console.log("\n--- STARTING PORTABLE SQLITE DATABASE AUDIT ---");
   const dbUrl = process.env.DATABASE_URL || "";
-  const directUrl = process.env.DIRECT_URL || "";
-  const isPooledUrl = dbUrl.includes("pooler") || dbUrl.includes(":6543") || dbUrl.includes("pgbouncer");
 
-  console.log(`Database URL Type: ${isPooledUrl ? "Pooled (pgBouncer / Supabase pooler)" : "Direct Connection"}`);
-  console.log(`DATABASE_URL configured: ${dbUrl ? "YES" : "NO"}`);
-  console.log(`DIRECT_URL configured: ${directUrl ? "YES" : "NO"}`);
+  console.log(`Database URL: ${dbUrl}`);
 
   // 1. Connection Time
   const connStart = performance.now();
@@ -37,7 +33,7 @@ async function runDBAudit(): Promise<DBMetrics> {
   const simpleStart = performance.now();
   await prisma.$queryRaw`SELECT 1 as ping`;
   const simpleQueryMs = Math.round(performance.now() - simpleStart);
-  console.log(`Simple Query (SELECT 1) Supabase Roundtrip: ${simpleQueryMs}ms`);
+  console.log(`Simple Query (SELECT 1) SQLite Latency: ${simpleQueryMs}ms`);
 
   // 3. Complex Query & Serialization
   const complexStart = performance.now();
@@ -59,9 +55,8 @@ async function runDBAudit(): Promise<DBMetrics> {
   console.log(`JS Object Serialization (Payload ${payloadKb} KB): ${serializationMs}ms`);
 
   // 4. Prisma Engine Overhead Estimate
-  // Estimate engine serialization overhead by comparing raw vs client query
   const rawStart = performance.now();
-  await prisma.$queryRaw`SELECT id, email, role FROM "User" LIMIT 50`;
+  await prisma.$queryRaw`SELECT id, email, role FROM User LIMIT 50`;
   const rawMs = performance.now() - rawStart;
 
   const clientStart = performance.now();
@@ -77,8 +72,8 @@ async function runDBAudit(): Promise<DBMetrics> {
     complexQueryMs,
     serializationMs,
     prismaOverheadEstimateMs,
-    supabaseLatencyMs: simpleQueryMs,
-    isPooledUrl,
+    sqliteLatencyMs: simpleQueryMs,
+    isPooledUrl: false,
   };
 
   await prisma.$disconnect();

@@ -4,20 +4,30 @@ import { app } from "electron";
 
 export interface AppPaths {
   isPackaged: boolean;
-  userDataDir: string;
+  baseDataDir: string;
+  dataDir: string;
+  dbFilePath: string;
   logsDir: string;
-  postgresDataDir: string;
   configDir: string;
   tempDir: string;
   uploadsDir: string;
   backupsDir: string;
-  // Read-only resource paths
+  storageDir: string;
   resourcesDir: string;
   standaloneServerJs: string | null;
   prismaSchemaPath: string;
   prismaCliJs: string | null;
   seedScriptJs: string | null;
-  embeddedPostgresBinDir: string | null;
+}
+
+export function getPortableBaseDirectory(): string {
+  if (process.env.OFFLINE_DATA_DIR && process.env.OFFLINE_DATA_DIR.trim() !== "") {
+    return process.env.OFFLINE_DATA_DIR.trim();
+  }
+  if (app && app.isPackaged) {
+    return path.dirname(process.execPath);
+  }
+  return process.cwd();
 }
 
 export function getOrCreateDesktopAuthSecret(configDir: string): string {
@@ -33,10 +43,12 @@ export function getOrCreateDesktopAuthSecret(configDir: string): string {
     }
   }
 
-  // Generate a cryptographically secure 256-bit secret for desktop offline auth
   const crypto = require("crypto");
   const newSecret = crypto.randomBytes(32).toString("hex");
   try {
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
     fs.writeFileSync(secretFile, newSecret, "utf-8");
     console.log(`[Paths] Generated and persisted new desktop auth secret at: ${secretFile}`);
   } catch (err) {
@@ -46,26 +58,27 @@ export function getOrCreateDesktopAuthSecret(configDir: string): string {
 }
 
 export function ensureWritableDirectoriesExist(): {
-  userDataDir: string;
+  baseDataDir: string;
+  dataDir: string;
+  dbFilePath: string;
   logsDir: string;
-  postgresDataDir: string;
   configDir: string;
   tempDir: string;
   uploadsDir: string;
   backupsDir: string;
   storageDir: string;
 } {
-  const userDataDir = app.getPath("userData");
-  const logsDir = path.join(userDataDir, "logs");
-  const postgresDataDir = path.join(userDataDir, "postgres-data");
-  const configDir = path.join(userDataDir, "config");
-  const tempDir = path.join(userDataDir, "temp");
-  const uploadsDir = path.join(userDataDir, "uploads");
-  const backupsDir = path.join(userDataDir, "backups");
+  const baseDataDir = getPortableBaseDirectory();
+  const dataDir = path.join(baseDataDir, "data");
+  const dbFilePath = path.join(dataDir, "school.db");
+  const logsDir = path.join(baseDataDir, "logs");
+  const configDir = path.join(baseDataDir, "config");
+  const tempDir = path.join(baseDataDir, "temp");
+  const uploadsDir = path.join(baseDataDir, "uploads");
+  const backupsDir = path.join(baseDataDir, "backups");
+  const storageDir = path.join(baseDataDir, "storage");
 
-  const storageDir = path.join(userDataDir, "storage");
-
-  const dirs = [userDataDir, logsDir, postgresDataDir, configDir, tempDir, uploadsDir, backupsDir, storageDir];
+  const dirs = [dataDir, logsDir, configDir, tempDir, uploadsDir, backupsDir, storageDir];
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -73,9 +86,10 @@ export function ensureWritableDirectoriesExist(): {
   }
 
   return {
-    userDataDir,
+    baseDataDir,
+    dataDir,
+    dbFilePath,
     logsDir,
-    postgresDataDir,
     configDir,
     tempDir,
     uploadsDir,
@@ -85,9 +99,9 @@ export function ensureWritableDirectoriesExist(): {
 }
 
 export function getAppPaths(projectRootDir: string): AppPaths {
-  const isPackaged = app.isPackaged;
+  const isPackaged = Boolean(app && app.isPackaged);
   const writable = ensureWritableDirectoriesExist();
-  const resourcesDir = process.resourcesPath;
+  const resourcesDir = process.resourcesPath || projectRootDir;
 
   // Read-only standalone server resolution
   const packagedStandaloneServer = path.join(resourcesDir, "app", "server.js");
@@ -125,36 +139,21 @@ export function getAppPaths(projectRootDir: string): AppPaths {
     seedScriptJs = devSeedJs;
   }
 
-  // Read-only embedded postgres binary resolution
-  const candidatePgBins = [
-    path.join(resourcesDir, "postgres", "bin"),
-    path.join(__dirname, "../../vendor/postgres/win-x64/bin"),
-    path.join(projectRootDir, "desktop/vendor/postgres/win-x64/bin"),
-  ];
-
-  let embeddedPostgresBinDir: string | null = null;
-  for (const binPath of candidatePgBins) {
-    const pgCtl = path.join(binPath, process.platform === "win32" ? "pg_ctl.exe" : "pg_ctl");
-    if (fs.existsSync(pgCtl)) {
-      embeddedPostgresBinDir = binPath;
-      break;
-    }
-  }
-
   return {
     isPackaged,
-    userDataDir: writable.userDataDir,
+    baseDataDir: writable.baseDataDir,
+    dataDir: writable.dataDir,
+    dbFilePath: writable.dbFilePath,
     logsDir: writable.logsDir,
-    postgresDataDir: writable.postgresDataDir,
     configDir: writable.configDir,
     tempDir: writable.tempDir,
     uploadsDir: writable.uploadsDir,
     backupsDir: writable.backupsDir,
+    storageDir: writable.storageDir,
     resourcesDir,
     standaloneServerJs,
     prismaSchemaPath,
     prismaCliJs,
     seedScriptJs,
-    embeddedPostgresBinDir,
   };
 }

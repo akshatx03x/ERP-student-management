@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model School {
@@ -366,7 +365,7 @@ model Guardian {
   isWorking      Boolean?
   occupation     String?
   designation    String?
-  annualIncome   Decimal?          @db.Decimal(12, 2)
+  annualIncome   Decimal?
   officeAddress  String?
   employerName   String?
   aadhaarNumber  String?
@@ -527,7 +526,7 @@ model AdmissionApplication {
   fatherQualification   String?
   fatherOccupation      String?
   fatherDesignation     String?
-  fatherAnnualIncome    Decimal?          @db.Decimal(12, 2)
+  fatherAnnualIncome    Decimal?
   fatherOfficeAddress   String?
   fatherPhone           String?
   fatherAadhaar         String?
@@ -536,7 +535,7 @@ model AdmissionApplication {
   motherIsWorking       Boolean?
   motherOccupation      String?
   motherDesignation     String?
-  motherAnnualIncome    Decimal?          @db.Decimal(12, 2)
+  motherAnnualIncome    Decimal?
   motherOfficeAddress   String?
   motherPhone           String?
   motherAadhaar         String?
@@ -587,7 +586,7 @@ model AttendanceRecord {
   updatedAt  DateTime         @updatedAt
   sessionId  String
   studentId  String
-  date       DateTime         @db.Date
+  date       DateTime
   status     AttendanceStatus
   remarks    String?
   markedById String?
@@ -606,8 +605,8 @@ model LeaveRequest {
   requesterType  LeaveRequesterType
   studentId      String?
   staffProfileId String?
-  fromDate       DateTime           @db.Date
-  toDate         DateTime           @db.Date
+  fromDate       DateTime
+  toDate         DateTime
   reason         String
   status         LeaveStatus        @default(PENDING)
   approvedById   String?
@@ -627,7 +626,7 @@ model Holiday {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   schoolId    String
-  date        DateTime    @db.Date
+  date        DateTime
   name        String
   description String?
   type        HolidayType @default(SCHOOL)
@@ -726,8 +725,8 @@ model ExamSubject {
   updatedAt   DateTime    @updatedAt
   examId      String
   subjectId   String
-  maxMarks    Decimal     @db.Decimal(8, 2)
-  passMarks   Decimal     @db.Decimal(8, 2)
+  maxMarks    Decimal
+  passMarks   Decimal
   exam        Exam        @relation(fields: [examId], references: [id], onDelete: Cascade)
   subject     Subject     @relation(fields: [subjectId], references: [id])
   markEntries MarkEntry[]
@@ -741,7 +740,7 @@ model MarkEntry {
   updatedAt     DateTime    @updatedAt
   examSubjectId String
   studentId     String
-  marksObtained Decimal     @db.Decimal(8, 2)
+  marksObtained Decimal
   grade         String?
   remarks       String?
   enteredById   String?
@@ -758,8 +757,8 @@ model GradeScale {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   schoolId   String
-  minPercent Decimal  @db.Decimal(5, 2)
-  maxPercent Decimal  @db.Decimal(5, 2)
+  minPercent Decimal
+  maxPercent Decimal
   grade      String
   remarks    String?
   school     School   @relation(fields: [schoolId], references: [id])
@@ -819,7 +818,7 @@ model FeeStructureItem {
   updatedAt      DateTime     @updatedAt
   feeStructureId String
   feeHeadId      String
-  amount         Decimal      @db.Decimal(12, 2)
+  amount         Decimal
   feeHead        FeeHead      @relation(fields: [feeHeadId], references: [id])
   feeStructure   FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
 
@@ -833,7 +832,7 @@ model StudentFee {
   studentId   String
   feeHeadId   String
   sessionId   String
-  amount      Decimal                @db.Decimal(12, 2)
+  amount      Decimal
   dueDate     DateTime?
   status      StudentFeeStatus       @default(PENDING)
   remarks     String?
@@ -851,7 +850,7 @@ model FamilyPayment {
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   familyId     String
-  amount       Decimal                @db.Decimal(12, 2)
+  amount       Decimal
   method       PaymentMethod
   referenceNo  String?
   paidAt       DateTime               @default(now())
@@ -873,7 +872,7 @@ model FeePaymentAllocation {
   paymentId    String
   studentId    String
   studentFeeId String?
-  amount       Decimal       @db.Decimal(12, 2)
+  amount       Decimal
   payment      FamilyPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   studentFee   StudentFee?   @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)

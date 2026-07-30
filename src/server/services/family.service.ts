@@ -28,12 +28,12 @@ export async function listFamilies(input?: {
     ...(params.search
       ? {
           OR: [
-            { familyCode: { contains: params.search, mode: "insensitive" as const } },
-            { fatherName: { contains: params.search, mode: "insensitive" as const } },
-            { motherName: { contains: params.search, mode: "insensitive" as const } },
-            { guardianName: { contains: params.search, mode: "insensitive" as const } },
+            { familyCode: { contains: params.search } },
+            { fatherName: { contains: params.search } },
+            { motherName: { contains: params.search } },
+            { guardianName: { contains: params.search } },
             { primaryPhone: { contains: params.search } },
-            { email: { contains: params.search, mode: "insensitive" as const } },
+            { email: { contains: params.search } },
           ],
         }
       : {}),
@@ -326,9 +326,9 @@ export async function searchFamilies(query: string, limit = 10) {
       schoolId,
       students: { some: {} },
       OR: [
-        { familyCode: { contains: query, mode: "insensitive" } },
-        { fatherName: { contains: query, mode: "insensitive" } },
-        { motherName: { contains: query, mode: "insensitive" } },
+        { familyCode: { contains: query } },
+        { fatherName: { contains: query } },
+        { motherName: { contains: query } },
         { primaryPhone: { contains: query } },
       ],
     },

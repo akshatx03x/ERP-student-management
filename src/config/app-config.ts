@@ -1,96 +1,86 @@
 import path from "path";
 
-export type AppMode = "cloud" | "offline";
+export type AppMode = "offline";
 
 export interface AppConfig {
   appMode: AppMode;
   isOffline: boolean;
   isCloud: boolean;
   databaseUrl: string;
-  uploadProvider: "database" | "filesystem";
-  backupProvider: "cloud_stub" | "local_postgres";
-  storageProvider: "database" | "filesystem";
+  uploadProvider: "filesystem";
+  backupProvider: "local_sqlite";
+  storageProvider: "filesystem";
   offlinePaths: {
     baseDir: string;
+    dataDir: string;
+    dbFilePath: string;
     uploadsDir: string;
     backupsDir: string;
     storageDir: string;
+    logsDir: string;
+    tempDir: string;
   };
   serverPort: number;
 }
 
-function resolveAppMode(): AppMode {
-  const mode = process.env.APP_MODE?.toLowerCase().trim();
-  if (mode === "offline" || mode === "desktop") {
-    return "offline";
-  }
-  return "cloud";
-}
-
-function resolveDatabaseUrl(mode: AppMode): string {
-  if (mode === "offline") {
-    const localUrl = process.env.DATABASE_URL_LOCAL;
-    if (localUrl && localUrl.trim() !== "") {
-      return localUrl.trim();
-    }
-    if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("supabase.com")) {
-      return process.env.DATABASE_URL.trim();
-    }
-    return "postgresql://postgres:postgres@localhost:5432/school_erp_offline";
-  }
-
-  const cloudUrl = process.env.DATABASE_URL_CLOUD || process.env.DATABASE_URL;
-  if (cloudUrl && cloudUrl.trim() !== "") {
-    return cloudUrl.trim();
-  }
-
-  return process.env.DATABASE_URL || "";
-}
-
 function getBaseDataDirectory(): string {
-  if (process.env.OFFLINE_DATA_DIR) {
-    return process.env.OFFLINE_DATA_DIR;
+  if (process.env.OFFLINE_DATA_DIR && process.env.OFFLINE_DATA_DIR.trim() !== "") {
+    return process.env.OFFLINE_DATA_DIR.trim();
   }
-  if (process.platform === "win32") {
-    const appData = process.env.APPDATA || process.env.LOCALAPPDATA;
-    if (appData) {
-      return path.join(appData, "SchoolERP");
-    }
-    const programData = process.env.ProgramData || "C:\\ProgramData";
-    return path.join(programData, "SchoolERP");
+  if (typeof process !== "undefined" && process.versions && process.versions.electron) {
+    try {
+      /* eslint-disable-next-line @typescript-eslint/no-require-imports */
+      const { app } = require("electron");
+      if (app && app.isPackaged) {
+        return path.dirname(process.execPath);
+      }
+    } catch {}
   }
-  return path.join(process.cwd(), ".data");
+  return process.cwd();
+}
+
+function resolveDatabaseUrl(): string {
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== "") {
+    return process.env.DATABASE_URL.trim();
+  }
+  const baseDir = getBaseDataDirectory();
+  const dbPath = path.join(baseDir, "data", "school.db");
+  return `file:${dbPath}`;
 }
 
 export const appConfig: AppConfig = {
-  get appMode() {
-    return resolveAppMode();
+  get appMode(): AppMode {
+    return "offline";
   },
-  get isOffline() {
-    return resolveAppMode() === "offline";
+  get isOffline(): boolean {
+    return true;
   },
-  get isCloud() {
-    return resolveAppMode() === "cloud";
+  get isCloud(): boolean {
+    return false;
   },
-  get databaseUrl() {
-    return resolveDatabaseUrl(resolveAppMode());
+  get databaseUrl(): string {
+    return resolveDatabaseUrl();
   },
-  get uploadProvider() {
-    return resolveAppMode() === "offline" ? "filesystem" : "database";
+  get uploadProvider(): "filesystem" {
+    return "filesystem";
   },
-  get backupProvider() {
-    return resolveAppMode() === "offline" ? "local_postgres" : "cloud_stub";
+  get backupProvider(): "local_sqlite" {
+    return "local_sqlite";
   },
-  get storageProvider() {
-    return resolveAppMode() === "offline" ? "filesystem" : "database";
+  get storageProvider(): "filesystem" {
+    return "filesystem";
   },
   get offlinePaths() {
     const baseDir = getBaseDataDirectory();
     return {
       baseDir,
+      dataDir: path.join(baseDir, "data"),
+      dbFilePath: path.join(baseDir, "data", "school.db"),
       uploadsDir: process.env.OFFLINE_UPLOAD_DIR || path.join(baseDir, "uploads"),
       backupsDir: process.env.OFFLINE_BACKUP_DIR || path.join(baseDir, "backups"),
       storageDir: process.env.OFFLINE_STORAGE_DIR || path.join(baseDir, "storage"),
+      logsDir: process.env.OFFLINE_LOG_DIR || path.join(baseDir, "logs"),
+      tempDir: process.env.OFFLINE_TEMP_DIR || path.join(baseDir, "temp"),
     };
   },
   get serverPort() {

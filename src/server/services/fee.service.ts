@@ -505,8 +505,8 @@ export async function listStudentFees(input?: {
       ...(params.search
         ? {
             OR: [
-              { fullName: { contains: params.search, mode: "insensitive" as const } },
-              { admissionNo: { contains: params.search, mode: "insensitive" as const } },
+              { fullName: { contains: params.search } },
+              { admissionNo: { contains: params.search } },
             ],
           }
         : {}),

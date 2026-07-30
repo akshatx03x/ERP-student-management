@@ -73,9 +73,9 @@ export async function listStaff(input?: {
     ...(params.search
       ? {
           OR: [
-            { fullName: { contains: params.search, mode: "insensitive" as const } },
-            { employeeCode: { contains: params.search, mode: "insensitive" as const } },
-            { designation: { contains: params.search, mode: "insensitive" as const } },
+            { fullName: { contains: params.search } },
+            { employeeCode: { contains: params.search } },
+            { designation: { contains: params.search } },
           ],
         }
       : {}),

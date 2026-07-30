@@ -168,8 +168,6 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           HOSTNAME: "127.0.0.1",
           APP_MODE: config.appMode,
           DATABASE_URL: config.databaseUrl,
-          DATABASE_URL_LOCAL: config.databaseUrl,
-          DIRECT_URL: process.env.DIRECT_URL || config.databaseUrl,
           BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || serverUrl,
           NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || serverUrl,
           BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
@@ -181,8 +179,7 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           BETTER_AUTH_URL: ${env.BETTER_AUTH_URL}
           NEXT_PUBLIC_APP_URL: ${env.NEXT_PUBLIC_APP_URL}
           BETTER_AUTH_SECRET present: ${Boolean(env.BETTER_AUTH_SECRET)} (length: ${env.BETTER_AUTH_SECRET?.length ?? 0})
-          DATABASE_URL: ${env.DATABASE_URL?.replace(/:[^:@]+@/, ":****@")}
-          DIRECT_URL: ${env.DIRECT_URL?.replace(/:[^:@]+@/, ":****@")}`);
+          DATABASE_URL: ${env.DATABASE_URL}`);
 
         let cmd: string;
         let args: string[];

@@ -69,8 +69,8 @@ export async function exportStudents(
     ...(filters.search
       ? {
           OR: [
-            { fullName: { contains: filters.search, mode: "insensitive" as const } },
-            { admissionNo: { contains: filters.search, mode: "insensitive" as const } },
+            { fullName: { contains: filters.search } },
+            { admissionNo: { contains: filters.search } },
             { aadhaar: { contains: filters.search } },
           ],
         }

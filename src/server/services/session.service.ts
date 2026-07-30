@@ -26,7 +26,7 @@ export async function listSessions(input?: { page?: number; pageSize?: number; s
   const where = {
     schoolId,
     ...(params.search
-      ? { name: { contains: params.search, mode: "insensitive" as const } }
+      ? { name: { contains: params.search } }
       : {}),
   };
 

@@ -33,9 +33,9 @@ export async function listUsers(input?: {
     ...(params.search
       ? {
           OR: [
-            { name: { contains: params.search, mode: "insensitive" as const } },
-            { email: { contains: params.search, mode: "insensitive" as const } },
-            { loginIdentifier: { contains: params.search, mode: "insensitive" as const } },
+            { name: { contains: params.search } },
+            { email: { contains: params.search } },
+            { loginIdentifier: { contains: params.search } },
           ],
         }
       : {}),

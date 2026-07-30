@@ -1,7 +1,7 @@
 import { appConfig } from "../../config/app-config";
 
 export interface DatabaseProviderInfo {
-  mode: "cloud" | "offline";
+  mode: "offline";
   url: string;
   isPooled: boolean;
   providerName: string;
@@ -9,14 +9,11 @@ export interface DatabaseProviderInfo {
 
 export function getDatabaseConfig(): DatabaseProviderInfo {
   const url = appConfig.databaseUrl;
-  const isPooled = url.includes("pgbouncer=true") || url.includes("pooler");
-  const providerName = appConfig.isOffline ? "Local PostgreSQL" : "Supabase PostgreSQL";
-
   return {
-    mode: appConfig.appMode,
+    mode: "offline",
     url,
-    isPooled,
-    providerName,
+    isPooled: false,
+    providerName: "Local Portable SQLite",
   };
 }
 

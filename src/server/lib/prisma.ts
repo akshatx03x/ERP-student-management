@@ -65,6 +65,22 @@ const basePrisma =
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
+let isPragmaApplied = false;
+
+export async function ensureSqlitePragmas(client: PrismaClient = basePrisma): Promise<void> {
+  if (isPragmaApplied) return;
+  try {
+    await client.$executeRawUnsafe(`PRAGMA foreign_keys = ON;`);
+    await client.$executeRawUnsafe(`PRAGMA journal_mode = WAL;`);
+    await client.$executeRawUnsafe(`PRAGMA synchronous = NORMAL;`);
+    await client.$executeRawUnsafe(`PRAGMA busy_timeout = 5000;`);
+    isPragmaApplied = true;
+    console.log("[Prisma] SQLite production PRAGMA settings applied successfully (foreign_keys=ON, WAL, synchronous=NORMAL, busy_timeout=5000).");
+  } catch (err) {
+    console.warn("[Prisma] Failed to apply SQLite PRAGMAs:", err);
+  }
+}
+
 export const prisma = basePrisma.$extends({
   query: {
     $allModels: {

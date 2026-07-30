@@ -96,8 +96,8 @@ export async function listStudents(input?: {
     ...(params.search
       ? {
         OR: [
-          { fullName: { contains: params.search, mode: "insensitive" as const } },
-          { admissionNo: { contains: params.search, mode: "insensitive" as const } },
+          { fullName: { contains: params.search } },
+          { admissionNo: { contains: params.search } },
           { aadhaar: { contains: params.search } },
         ],
       }
@@ -228,7 +228,7 @@ export async function createStudent(input: CreateStudentInput) {
     const existingDuplicate = await prisma.student.findFirst({
       where: {
         schoolId,
-        fullName: { equals: fullName, mode: "insensitive" },
+        fullName: { equals: fullName },
         dateOfBirth: data.dateOfBirth,
       },
       select: { admissionNo: true },
@@ -346,7 +346,7 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
     const existingDuplicate = await prisma.student.findFirst({
       where: {
         schoolId,
-        fullName: { equals: fullName, mode: "insensitive" },
+        fullName: { equals: fullName },
         dateOfBirth: data.dateOfBirth,
       },
       select: { admissionNo: true },

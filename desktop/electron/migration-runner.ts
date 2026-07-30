@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
 import { app } from "electron";
+import { PrismaClient } from "@prisma/client";
 
 export interface MigrationResult {
   success: boolean;
@@ -46,10 +47,98 @@ function runCommand(command: string, args: string[], cwd: string, env: NodeJS.Pr
   });
 }
 
-export async function runPendingPrismaMigrations(cwd: string, databaseUrl: string): Promise<MigrationResult> {
-  console.log(`[MigrationRunner] Starting database schema synchronization for local offline database...`);
+async function checkPendingMigrationsExist(
+  executionCwd: string,
+  schemaPath: string,
+  prismaCliJs: string | null,
+  env: NodeJS.ProcessEnv
+): Promise<boolean> {
+  try {
+    let stdout = "";
+    if (prismaCliJs) {
+      const statusEnv = { ...env, ELECTRON_RUN_AS_NODE: "1" };
+      stdout = await runCommand(
+        process.execPath,
+        [prismaCliJs, "migrate", "status", `--schema=${schemaPath}`],
+        executionCwd,
+        statusEnv
+      );
+    } else {
+      stdout = await runCommand(
+        "npx",
+        ["prisma", "migrate", "status", `--schema=${schemaPath}`],
+        executionCwd,
+        env
+      );
+    }
+    if (stdout.includes("Database schema is up to date") || stdout.includes("No pending migrations")) {
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    const errText = err.message || "";
+    if (errText.includes("Database schema is up to date") || errText.includes("No pending migrations")) {
+      return false;
+    }
+    // Non-zero status indicates pending migrations or unapplied schema changes
+    return true;
+  }
+}
 
-  // Resolve schema path
+async function createPreMigrationBackup(databaseUrl: string, backupsDir: string): Promise<boolean> {
+  try {
+    if (!fs.existsSync(backupsDir)) {
+      fs.mkdirSync(backupsDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupFilename = `pre_migration_backup_${timestamp}.db`;
+    const backupPath = path.join(backupsDir, backupFilename);
+    const normalizedBackupPath = backupPath.replace(/\\/g, "/");
+
+    console.log(`[MigrationRunner] Pending schema updates found. Creating pre-migration backup snapshot at: ${backupPath}`);
+
+    const prisma = new PrismaClient({
+      datasources: { db: { url: databaseUrl } },
+      log: [],
+    });
+
+    try {
+      await prisma.$connect();
+      await prisma.$executeRawUnsafe(`PRAGMA journal_mode = WAL;`);
+      await prisma.$executeRawUnsafe(`VACUUM INTO '${normalizedBackupPath}';`);
+      await prisma.$disconnect();
+    } catch (err: any) {
+      console.warn(`[MigrationRunner] VACUUM INTO statement warning: ${err.message}. Performing direct copy fallback...`);
+      try { await prisma.$disconnect(); } catch {}
+
+      const cleanDbPath = databaseUrl.replace(/^file:/, "");
+      if (fs.existsSync(cleanDbPath)) {
+        fs.copyFileSync(cleanDbPath, backupPath);
+      }
+    }
+
+    if (fs.existsSync(backupPath) && fs.statSync(backupPath).size > 0) {
+      console.log(`[MigrationRunner] Pre-migration backup verified successfully (${fs.statSync(backupPath).size} bytes).`);
+      return true;
+    }
+    return false;
+  } catch (backupErr: any) {
+    console.error(`[MigrationRunner] Pre-migration backup failed:`, backupErr);
+    return false;
+  }
+}
+
+export async function runPendingPrismaMigrations(
+  cwd: string,
+  databaseUrl: string,
+  options?: { isFirstRun?: boolean; backupsDir?: string }
+): Promise<MigrationResult> {
+  const isFirstRun = Boolean(options?.isFirstRun);
+  const backupsDir = options?.backupsDir || path.join(cwd, "backups");
+
+  console.log(`[MigrationRunner] Starting database schema verification (isFirstRun: ${isFirstRun})...`);
+
   const schemaPath = app.isPackaged
     ? path.join(process.resourcesPath, "prisma", "schema.prisma")
     : path.resolve(cwd, "prisma", "schema.prisma");
@@ -59,16 +148,12 @@ export async function runPendingPrismaMigrations(cwd: string, databaseUrl: strin
     return { success: false, message: `schema.prisma not found at: ${schemaPath}` };
   }
 
-  // Override DATABASE_URL and DIRECT_URL to local database URL
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: databaseUrl,
-    DATABASE_URL_LOCAL: databaseUrl,
-    DIRECT_URL: databaseUrl,
     APP_MODE: "offline",
   };
 
-  // Find bundled Prisma CLI js bundle
   const packagedPrismaJs = path.join(process.resourcesPath, "app", "node_modules", "prisma", "build", "index.js");
   const devPrismaJs = path.join(cwd, "node_modules", "prisma", "build", "index.js");
 
@@ -79,76 +164,81 @@ export async function runPendingPrismaMigrations(cwd: string, databaseUrl: strin
     prismaCliJs = devPrismaJs;
   }
 
-  // Check for unpacked query engine binary location in packaged app
-  const unpackedEnginePath = path.join(
-    process.resourcesPath,
-    "app.asar.unpacked",
-    "node_modules",
-    ".prisma",
-    "client",
-    "query_engine-windows.dll.node"
-  );
-  if (app.isPackaged && fs.existsSync(unpackedEnginePath)) {
-    env.PRISMA_QUERY_ENGINE_LIBRARY = unpackedEnginePath;
-    console.log(`[MigrationRunner] PRISMA_QUERY_ENGINE_LIBRARY set to: ${unpackedEnginePath}`);
+  const executionCwd = app.isPackaged ? path.dirname(process.execPath) : cwd;
+
+  // Optimized Backup Execution:
+  // For existing production database, check if pending migrations exist BEFORE creating backup
+  if (!isFirstRun) {
+    console.log(`[MigrationRunner] Checking for pending database schema migrations...`);
+    const hasPending = await checkPendingMigrationsExist(executionCwd, schemaPath, prismaCliJs, env);
+    if (!hasPending) {
+      console.log(`[MigrationRunner] Database schema is up to date. No pending migrations found. Skipping pre-migration backup.`);
+      return { success: true, message: "Database schema is up to date." };
+    }
+
+    console.log(`[MigrationRunner] Pending schema migrations detected. Initiating automatic pre-migration backup...`);
+    const backupOk = await createPreMigrationBackup(databaseUrl, backupsDir);
+    if (!backupOk) {
+      return {
+        success: false,
+        message: "Automatic pre-migration backup failed. Aborting database migration to protect user data.",
+      };
+    }
   }
 
-  const executionCwd = app.isPackaged ? app.getPath("userData") : cwd;
-
-  console.log(`[MigrationRunner] Running: prisma db push --skip-generate (schema sync)`);
+  console.log(`[MigrationRunner] Executing: prisma migrate deploy`);
   try {
     let stdout: string;
     if (prismaCliJs) {
       env.ELECTRON_RUN_AS_NODE = "1";
       stdout = await runCommand(
         process.execPath,
-        [prismaCliJs, "db", "push", "--skip-generate", "--accept-data-loss", `--schema=${schemaPath}`],
+        [prismaCliJs, "migrate", "deploy", `--schema=${schemaPath}`],
         executionCwd,
         env
       );
     } else {
       stdout = await runCommand(
         "npx",
-        ["prisma", "db", "push", "--skip-generate", "--accept-data-loss", `--schema=${schemaPath}`],
+        ["prisma", "migrate", "deploy", `--schema=${schemaPath}`],
         executionCwd,
         env
       );
     }
-    console.log("[MigrationRunner] DB push output:\n", stdout);
-  } catch (pushErr: any) {
-    console.error("[MigrationRunner] prisma db push failed:", pushErr.message);
+    console.log("[MigrationRunner] Migration output:\n", stdout);
+  } catch (migErr: any) {
+    console.error("[MigrationRunner] prisma migrate deploy failed:", migErr.message);
     return {
       success: false,
-      message: `Database schema synchronization failed: ${pushErr.message}`,
+      message: `Database migration failed: ${migErr.message}. Pre-migration backup has been preserved in backups folder.`,
     };
   }
 
-  // Seed the database
-  const packagedSeedJs = path.join(process.resourcesPath, "app", "dist", "seed", "prisma", "seed.js");
-  const devSeedJs = path.join(cwd, "dist", "seed", "prisma", "seed.js");
-  const seedTsPath = path.resolve(cwd, "prisma", "seed.ts");
+  // First-run seed execution: Brand new database only
+  if (isFirstRun) {
+    console.log(`[MigrationRunner] Brand new database detected. Running initial database seeding...`);
+    const packagedSeedJs = path.join(process.resourcesPath, "app", "dist", "seed", "prisma", "seed.js");
+    const devSeedJs = path.join(cwd, "dist", "seed", "prisma", "seed.js");
+    const seedTsPath = path.resolve(cwd, "prisma", "seed.ts");
 
-  try {
-    let seedOut: string;
-    if (fs.existsSync(packagedSeedJs)) {
-      console.log(`[MigrationRunner] Running packaged seed script: ${packagedSeedJs}`);
-      env.ELECTRON_RUN_AS_NODE = "1";
-      seedOut = await runCommand(process.execPath, [packagedSeedJs], executionCwd, env);
-    } else if (fs.existsSync(devSeedJs)) {
-      console.log(`[MigrationRunner] Running compiled dev seed script: ${devSeedJs}`);
-      env.ELECTRON_RUN_AS_NODE = "1";
-      seedOut = await runCommand(process.execPath, [devSeedJs], cwd, env);
-    } else if (fs.existsSync(seedTsPath)) {
-      console.log(`[MigrationRunner] Running dev tsx seed script: ${seedTsPath}`);
-      seedOut = await runCommand("npx", ["tsx", seedTsPath], cwd, env);
-    } else {
-      seedOut = "No seed script found.";
+    try {
+      let seedOut: string;
+      if (fs.existsSync(packagedSeedJs)) {
+        env.ELECTRON_RUN_AS_NODE = "1";
+        seedOut = await runCommand(process.execPath, [packagedSeedJs], executionCwd, env);
+      } else if (fs.existsSync(devSeedJs)) {
+        env.ELECTRON_RUN_AS_NODE = "1";
+        seedOut = await runCommand(process.execPath, [devSeedJs], cwd, env);
+      } else if (fs.existsSync(seedTsPath)) {
+        seedOut = await runCommand("npx", ["tsx", seedTsPath], cwd, env);
+      } else {
+        seedOut = "No seed script found.";
+      }
+      console.log("[MigrationRunner] Seed output:\n", seedOut);
+    } catch (seedErr: any) {
+      console.warn("[MigrationRunner] Seed warning (non-fatal):", seedErr.message);
     }
-    console.log("[MigrationRunner] Seed output:\n", seedOut);
-  } catch (seedErr: any) {
-    console.warn("[MigrationRunner] Seed warning (non-fatal):", seedErr.message);
   }
 
-  return { success: true, message: "Local database schema synchronized and seeded successfully." };
+  return { success: true, message: "Portable SQLite database schema synchronized successfully." };
 }
-

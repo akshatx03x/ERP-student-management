@@ -130,7 +130,7 @@ export async function createAdmission(input: CreateAdmissionInput) {
     const existingStudent = await prisma.student.findFirst({
       where: {
         schoolId,
-        fullName: { equals: applicantNameTrimmed, mode: "insensitive" },
+        fullName: { equals: applicantNameTrimmed },
         dateOfBirth: data.dateOfBirth,
       },
       select: { admissionNo: true },
@@ -282,7 +282,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
   const existingStudent = await prisma.student.findFirst({
     where: {
       schoolId,
-      fullName: { equals: fullName, mode: "insensitive" },
+      fullName: { equals: fullName },
       dateOfBirth: admission.dateOfBirth,
     },
     select: { admissionNo: true },

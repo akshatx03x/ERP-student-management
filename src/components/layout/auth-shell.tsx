@@ -22,12 +22,12 @@ export function AuthShell({
           {/* Logo */}
           <div className="flex items-center gap-3 mb-10">
             <svg width="38" height="38" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M4 28V10C4 8.9 4.9 8 6 8H18V28H6C4.9 28 4 27.1 4 26V28Z" fill="#1a1a2e"/>
-              <path d="M18 8H30C31.1 8 32 8.9 32 10V26C32 27.1 31.1 28 30 28H18V8Z" fill="#1a1a2e"/>
-              <path d="M16 6L18 4L20 6V8H16V6Z" fill="#1a1a2e"/>
-              <rect x="8" y="12" width="6" height="1.5" rx="0.75" fill="white" opacity="0.7"/>
-              <rect x="8" y="15" width="8" height="1.5" rx="0.75" fill="white" opacity="0.7"/>
-              <rect x="8" y="18" width="6" height="1.5" rx="0.75" fill="white" opacity="0.7"/>
+              <path d="M4 28V10C4 8.9 4.9 8 6 8H18V28H6C4.9 28 4 27.1 4 26V28Z" fill="#1a1a2e" />
+              <path d="M18 8H30C31.1 8 32 8.9 32 10V26C32 27.1 31.1 28 30 28H18V8Z" fill="#1a1a2e" />
+              <path d="M16 6L18 4L20 6V8H16V6Z" fill="#1a1a2e" />
+              <rect x="8" y="12" width="6" height="1.5" rx="0.75" fill="white" opacity="0.7" />
+              <rect x="8" y="15" width="8" height="1.5" rx="0.75" fill="white" opacity="0.7" />
+              <rect x="8" y="18" width="6" height="1.5" rx="0.75" fill="white" opacity="0.7" />
             </svg>
             <div>
               <p className="text-[16px] font-bold tracking-[0.12em] uppercase text-[#1a1a2e] leading-none">Vidhyanjali Public School</p>

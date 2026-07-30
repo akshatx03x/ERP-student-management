@@ -39,7 +39,7 @@ export async function listClasses(input?: {
   const where = {
     schoolId,
     ...(params.search
-      ? { name: { contains: params.search, mode: "insensitive" as const } }
+      ? { name: { contains: params.search } }
       : {}),
   };
 
@@ -177,7 +177,7 @@ export async function listSections(classId: string, input?: { search?: string })
   const where = {
     classId,
     ...(input?.search
-      ? { name: { contains: input.search, mode: "insensitive" as const } }
+      ? { name: { contains: input.search } }
       : {}),
   };
 
@@ -304,8 +304,8 @@ export async function listSubjects(input?: { page?: number; pageSize?: number; s
     ...(input?.search
       ? {
           OR: [
-            { name: { contains: input.search, mode: "insensitive" as const } },
-            { code: { contains: input.search, mode: "insensitive" as const } },
+            { name: { contains: input.search } },
+            { code: { contains: input.search } },
           ],
         }
       : {}),
