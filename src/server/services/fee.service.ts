@@ -1,4 +1,4 @@
-import { Prisma, Role, StudentFeeStatus } from "@prisma/client";
+import { AdvanceTransactionType, FeeFrequency, FeeMonth, PaymentMethod, Prisma, Role, StudentFeeStatus } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
@@ -16,6 +16,7 @@ import { parseOrThrow } from "@/server/validators/common";
 import {
   createFeeHeadSchema,
   createFeeStructureSchema,
+  generateMonthlyLedgerSchema,
   listPaymentsSchema,
   listStudentFeesSchema,
   recordPaymentSchema,
@@ -23,25 +24,123 @@ import {
   updateFeeStructureSchema,
   type CreateFeeHeadInput,
   type CreateFeeStructureInput,
+  type GenerateMonthlyLedgerInput,
   type RecordPaymentInput,
   type UpdateFeeStructureInput,
 } from "@/server/validators/fee.validator";
 
-async function recalcStudentFeeStatus(
+export const ALL_FEE_MONTHS: FeeMonth[] = [
+  FeeMonth.APRIL,
+  FeeMonth.MAY,
+  FeeMonth.JUNE,
+  FeeMonth.JULY,
+  FeeMonth.AUGUST,
+  FeeMonth.SEPTEMBER,
+  FeeMonth.OCTOBER,
+  FeeMonth.NOVEMBER,
+  FeeMonth.DECEMBER,
+  FeeMonth.JANUARY,
+  FeeMonth.FEBRUARY,
+  FeeMonth.MARCH,
+];
+
+export function getAcademicMonthIndex(month: FeeMonth): number {
+  return ALL_FEE_MONTHS.indexOf(month);
+}
+
+export function dateToFeeMonth(date: Date): FeeMonth {
+  const m = date.getMonth(); // 0..11
+  switch (m) {
+    case 0:
+      return FeeMonth.JANUARY;
+    case 1:
+      return FeeMonth.FEBRUARY;
+    case 2:
+      return FeeMonth.MARCH;
+    case 3:
+      return FeeMonth.APRIL;
+    case 4:
+      return FeeMonth.MAY;
+    case 5:
+      return FeeMonth.JUNE;
+    case 6:
+      return FeeMonth.JULY;
+    case 7:
+      return FeeMonth.AUGUST;
+    case 8:
+      return FeeMonth.SEPTEMBER;
+    case 9:
+      return FeeMonth.OCTOBER;
+    case 10:
+      return FeeMonth.NOVEMBER;
+    case 11:
+      return FeeMonth.DECEMBER;
+    default:
+      return FeeMonth.APRIL;
+  }
+}
+
+export function computeMonthDueDate(
+  sessionStartDate: Date,
+  month: FeeMonth,
+  dayOfMonth = 10,
+): { dueDate: Date; dueYear: number } {
+  const sessionYear = sessionStartDate.getFullYear();
+  const academicIdx = getAcademicMonthIndex(month);
+  let calendarMonthIndex: number;
+  let year: number;
+
+  if (academicIdx <= 8) {
+    calendarMonthIndex = academicIdx + 3; // 3..11
+    year = sessionYear;
+  } else {
+    calendarMonthIndex = academicIdx - 9; // 0..2
+    year = sessionYear + 1;
+  }
+
+  const dueDate = new Date(year, calendarMonthIndex, dayOfMonth, 23, 59, 59, 999);
+  return { dueDate, dueYear: year };
+}
+
+export function getApplicableMonthsForItem(item: {
+  months?: Array<{ month: FeeMonth }> | null;
+  feeHead: { frequency: FeeFrequency };
+}): FeeMonth[] {
+  if (item.months && item.months.length > 0) {
+    return item.months.map((m) => m.month);
+  }
+
+  switch (item.feeHead.frequency) {
+    case FeeFrequency.MONTHLY:
+      return ALL_FEE_MONTHS;
+    case FeeFrequency.ANNUAL:
+    case FeeFrequency.ONE_TIME:
+      return [FeeMonth.APRIL];
+    case FeeFrequency.QUARTERLY:
+      return [FeeMonth.APRIL, FeeMonth.JULY, FeeMonth.OCTOBER, FeeMonth.JANUARY];
+    case FeeFrequency.CUSTOM:
+    default:
+      return [FeeMonth.APRIL];
+  }
+}
+
+export async function recalcStudentFeeStatus(
   tx: Prisma.TransactionClient,
   studentFeeId: string,
 ) {
   const fee = await tx.studentFee.findUnique({
     where: { id: studentFeeId },
-    include: { allocations: true },
+    include: { allocations: true, fine: true },
   });
   if (!fee) return;
 
   const paid = sumDecimals(fee.allocations.map((a) => a.amount));
-  const total = toDecimal(fee.amount);
+  const fineAmount = fee.fine ? toDecimal(fee.fine.finalAmount) : toDecimal(0);
+  const total = toDecimal(fee.amount).sub(toDecimal(fee.discountAmount ?? 0)).add(fineAmount);
+  const netTotal = total.lessThan(0) ? toDecimal(0) : total;
   let status: StudentFeeStatus = StudentFeeStatus.PENDING;
 
-  if (paid.greaterThanOrEqualTo(total)) {
+  if (paid.greaterThanOrEqualTo(netTotal)) {
     status = StudentFeeStatus.PAID;
   } else if (paid.greaterThan(0)) {
     status = StudentFeeStatus.PARTIAL;
@@ -55,18 +154,21 @@ async function recalcStudentFeeStatus(
   });
 }
 
-async function generateReceiptNoInTx(
+export async function generateReceiptNoInTx(
   tx: Prisma.TransactionClient,
   schoolId: string,
-): Promise<string> {
+) {
   const year = new Date().getFullYear();
-  const prefix = `RCP-${year}`;
+  const school = await tx.school.findUnique({ where: { id: schoolId }, select: { code: true } });
+  const schoolCode = school?.code ? school.code.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() : "SCH";
+  const schoolHash = schoolId.slice(-4).toUpperCase();
+  const prefix = `RCP-${schoolCode}-${schoolHash}-${year}`;
   const counterId = `receipt_no:${schoolId}:${year}`;
   const seqValue = await getNextSequenceValue(tx, counterId);
   return `${prefix}-${String(seqValue).padStart(5, "0")}`;
 }
 
-/** Find the single fee structure for a class in a session (business rule: one per class/session). */
+/** Find the single fee structure for a class in a session. */
 export async function findFeeStructureForClass(
   tx: Prisma.TransactionClient | typeof prisma,
   sessionId: string,
@@ -79,11 +181,19 @@ export async function findFeeStructureForClass(
       name: true,
       items: {
         select: {
+          id: true,
           feeHeadId: true,
           amount: true,
+          months: {
+            select: {
+              month: true,
+            },
+          },
           feeHead: {
             select: {
+              id: true,
               name: true,
+              frequency: true,
             },
           },
         },
@@ -94,58 +204,105 @@ export async function findFeeStructureForClass(
 }
 
 /**
- * Attach the class fee structure to a student as StudentFee rows.
- * Idempotent per (student, feeHead, session). Call inside an existing transaction.
+ * Monthly Ledger Generator Service (Phase 1).
+ * Reads Fee Structure & FeeStructureItemMonth to generate month-wise StudentFee rows.
+ * Validates active student, active session, and enforces idempotency.
  */
-export async function attachFeeStructureInTx(
+export async function generateStudentMonthlyLedgerInTx(
   tx: Prisma.TransactionClient,
   opts: {
     schoolId: string;
     studentId: string;
     sessionId: string;
     classId: string;
-    userId: string;
+    userId?: string | null;
     requireStructure?: boolean;
   },
-): Promise<{ attached: number; structureId: string | null }> {
-  const structure = await findFeeStructureForClass(tx, opts.sessionId, opts.classId);
+): Promise<{ generated: number; structureId: string | null }> {
+  // 1. Validate active student
+  const student = await tx.student.findFirst({
+    where: { id: opts.studentId, schoolId: opts.schoolId },
+    select: { id: true, status: true, admissionDate: true },
+  });
+  if (!student) {
+    throw new Error("Student not found");
+  }
+  if (student.status !== "ACTIVE") {
+    throw new Error(`Cannot generate fee ledger for ${student.status.toLowerCase()} student`);
+  }
 
+  // 2. Validate academic session
+  const session = await tx.academicSession.findFirst({
+    where: { id: opts.sessionId, schoolId: opts.schoolId },
+    select: { id: true, startDate: true, endDate: true, status: true },
+  });
+  if (!session) {
+    throw new Error("Invalid academic session");
+  }
+
+  // 3. Find fee structure
+  const structure = await findFeeStructureForClass(tx, opts.sessionId, opts.classId);
   if (!structure) {
     if (opts.requireStructure) {
       throw new Error(
-        "No fee structure exists for this class in the selected academic session. Create a fee structure before admitting the student.",
+        "No fee structure exists for this class in the selected academic session. Create a fee structure before generating fees.",
       );
     }
-    return { attached: 0, structureId: null };
+    return { generated: 0, structureId: null };
   }
 
-  // ── Bulk read existing rows; filter in-memory; bulk insert new ones ─────────
-  // Previously this was a per-item findFirst + create loop — 2 queries × N items.
-  // Now it is 1 findMany + 1 createMany = 2 queries total, regardless of N.
+  // 5. Query existing StudentFee rows for idempotency
   const existingFees = await tx.studentFee.findMany({
     where: { studentId: opts.studentId, sessionId: opts.sessionId },
-    select: { feeHeadId: true },
+    select: { feeHeadId: true, month: true },
   });
-  const existingSet = new Set(existingFees.map((f) => f.feeHeadId));
+  const existingSet = new Set<string>();
+  for (const f of existingFees) {
+    existingSet.add(`${f.feeHeadId}:${f.month ?? "LEGACY"}`);
+  }
 
-  const newItems = structure.items
-    .filter((item) => !existingSet.has(item.feeHeadId))
-    .map((item) => ({
-      studentId: opts.studentId,
-      feeHeadId: item.feeHeadId,
-      sessionId: opts.sessionId,
-      amount: item.amount,
-      status: StudentFeeStatus.PENDING,
-      remarks: `Auto-attached from ${structure.name}`,
-    }));
+  // 6. Build new StudentFee records
+  const newItems: Array<{
+    studentId: string;
+    feeHeadId: string;
+    sessionId: string;
+    amount: Prisma.Decimal;
+    month: FeeMonth;
+    dueYear: number;
+    dueDate: Date;
+    status: StudentFeeStatus;
+    remarks: string;
+  }> = [];
+
+  for (const item of structure.items) {
+    const applicableMonths = getApplicableMonthsForItem(item);
+    for (const month of applicableMonths) {
+
+      const key = `${item.feeHeadId}:${month}`;
+      if (existingSet.has(key)) {
+        continue; // Idempotency: skip already generated rows
+      }
+
+      const { dueDate, dueYear } = computeMonthDueDate(session.startDate, month);
+
+      newItems.push({
+        studentId: opts.studentId,
+        feeHeadId: item.feeHeadId,
+        sessionId: opts.sessionId,
+        amount: item.amount,
+        month,
+        dueYear,
+        dueDate,
+        status: StudentFeeStatus.PENDING,
+        remarks: `Auto-generated for ${month} from ${structure.name}`,
+      });
+      existingSet.add(key);
+    }
+  }
 
   if (newItems.length > 0) {
     await tx.studentFee.createMany({ data: newItems });
-  }
 
-  const attached = newItems.length;
-
-  if (attached > 0) {
     await writeAuditLog(
       {
         schoolId: opts.schoolId,
@@ -156,7 +313,7 @@ export async function attachFeeStructureInTx(
         entityId: opts.studentId,
         newValue: {
           structureId: structure.id,
-          attached,
+          generated: newItems.length,
           sessionId: opts.sessionId,
           classId: opts.classId,
         },
@@ -165,7 +322,26 @@ export async function attachFeeStructureInTx(
     );
   }
 
-  return { attached, structureId: structure.id };
+  return { generated: newItems.length, structureId: structure.id };
+}
+
+/**
+ * Attach fee structure to student (Delegates to Monthly Ledger Generator).
+ * Fully backward compatible.
+ */
+export async function attachFeeStructureInTx(
+  tx: Prisma.TransactionClient,
+  opts: {
+    schoolId: string;
+    studentId: string;
+    sessionId: string;
+    classId: string;
+    userId?: string | null;
+    requireStructure?: boolean;
+  },
+): Promise<{ attached: number; structureId: string | null }> {
+  const result = await generateStudentMonthlyLedgerInTx(tx, opts);
+  return { attached: result.generated, structureId: result.structureId };
 }
 
 
@@ -195,7 +371,8 @@ async function expandAllocationToFees(
   for (const fee of unpaid) {
     if (remaining.lessThanOrEqualTo(0)) break;
     const alreadyPaid = sumDecimals(fee.allocations.map((a) => a.amount));
-    const balance = toDecimal(fee.amount).sub(alreadyPaid);
+    const netBillable = toDecimal(fee.amount).sub(toDecimal(fee.discountAmount ?? 0));
+    const balance = netBillable.sub(alreadyPaid);
     if (balance.lessThanOrEqualTo(0)) continue;
 
     const apply = remaining.lessThanOrEqualTo(balance) ? remaining : balance;
@@ -214,24 +391,47 @@ function ledgerFromFees(
   fees: Array<{
     id: string;
     amount: Prisma.Decimal | number;
+    discountAmount?: Prisma.Decimal | number | null;
     status: StudentFeeStatus;
     remarks: string | null;
     dueDate: Date | null;
     feeHead: { id: string; name: string };
     session: { id: string; name: string };
-    allocations: Array<{ amount: Prisma.Decimal | number }>;
+    allocations: Array<{ amount: Prisma.Decimal | number; studentFeeFineId?: string | null }>;
+    fine?: {
+      id: string;
+      calculatedAmount: Prisma.Decimal | number;
+      waivedAmount: Prisma.Decimal | number;
+      finalAmount: Prisma.Decimal | number;
+      paidAmount: Prisma.Decimal | number;
+      status: string;
+    } | null;
   }>,
 ) {
   const lines = fees.map((f) => {
-    const amount = decimalToNumber(f.amount);
+    const origAmount = decimalToNumber(f.amount);
+    const discAmount = f.discountAmount ? decimalToNumber(f.discountAmount) : 0;
+    const netAmount = Math.max(0, origAmount - discAmount);
+
+    const calcFine = f.fine ? decimalToNumber(f.fine.calculatedAmount) : 0;
+    const waivedFine = f.fine ? decimalToNumber(f.fine.waivedAmount) : 0;
+    const finalFine = f.fine ? decimalToNumber(f.fine.finalAmount) : 0;
+
+    const totalNetDue = netAmount + finalFine;
     const paidAmount = decimalToNumber(sumDecimals(f.allocations.map((a) => a.amount)));
+
     return {
       id: f.id,
       feeHead: f.feeHead,
       session: f.session,
-      amount,
+      amount: totalNetDue,
+      originalAmount: origAmount,
+      discountAmount: discAmount,
+      calculatedFine: calcFine,
+      waivedFine: waivedFine,
+      finalFine: finalFine,
       paidAmount,
-      remaining: Math.max(0, amount - paidAmount),
+      remaining: Math.max(0, totalNetDue - paidAmount),
       status: f.status,
       dueDate: f.dueDate,
       remarks: f.remarks,
@@ -330,7 +530,7 @@ export async function listFeeStructures(sessionId?: string, classId?: string) {
     include: {
       class: true,
       session: true,
-      items: { include: { feeHead: true }, orderBy: { feeHead: { name: "asc" } } },
+      items: { include: { feeHead: true, months: true }, orderBy: { feeHead: { name: "asc" } } },
     },
     orderBy: [{ session: { startDate: "desc" } }, { class: { sortOrder: "asc" } }],
   });
@@ -362,6 +562,7 @@ export async function listFeeStructures(sessionId?: string, classId?: string) {
         id: item.feeHead.id,
         name: item.feeHead.name,
       },
+      months: item.months.map((m) => m.month),
     })),
   }));
 }
@@ -403,10 +604,21 @@ export async function createFeeStructure(input: CreateFeeStructureInput) {
           create: data.items.map((item) => ({
             feeHeadId: item.feeHeadId,
             amount: toDecimal(item.amount),
+            ...(item.months && item.months.length > 0
+              ? {
+                  months: {
+                    create: item.months.map((m) => ({ month: m })),
+                  },
+                }
+              : {}),
           })),
         },
       },
-      include: { items: { include: { feeHead: true } }, class: true, session: true },
+      include: {
+        items: { include: { feeHead: true, months: true } },
+        class: true,
+        session: true,
+      },
     });
 
     await writeAuditLog(
@@ -421,6 +633,22 @@ export async function createFeeStructure(input: CreateFeeStructureInput) {
       },
       tx,
     );
+
+    // Sync student ledgers automatically for new structure
+    const enrollments = await tx.studentEnrollment.findMany({
+      where: { classId: data.classId, sessionId: data.sessionId, student: { schoolId } },
+      select: { studentId: true }
+    });
+    const studentIds = enrollments.map(e => e.studentId);
+    for (const studentId of studentIds) {
+      await generateStudentMonthlyLedgerInTx(tx, {
+        schoolId,
+        studentId,
+        sessionId: data.sessionId,
+        classId: data.classId,
+        userId: user.id,
+      });
+    }
 
     return structure;
   });
@@ -453,10 +681,21 @@ export async function updateFeeStructure(input: UpdateFeeStructureInput) {
           create: data.items.map((item) => ({
             feeHeadId: item.feeHeadId,
             amount: toDecimal(item.amount),
+            ...(item.months && item.months.length > 0
+              ? {
+                  months: {
+                    create: item.months.map((m) => ({ month: m })),
+                  },
+                }
+              : {}),
           })),
         },
       },
-      include: { items: { include: { feeHead: true } }, class: true, session: true },
+      include: {
+        items: { include: { feeHead: true, months: true } },
+        class: true,
+        session: true,
+      },
     });
 
     await writeAuditLog(
@@ -473,7 +712,115 @@ export async function updateFeeStructure(input: UpdateFeeStructureInput) {
       tx,
     );
 
-    return updated;
+    // Sync student ledgers automatically
+    const enrollments = await tx.studentEnrollment.findMany({
+      where: { classId: existing.classId, sessionId: existing.sessionId, student: { schoolId } },
+      select: { studentId: true }
+    });
+    const studentIds = enrollments.map(e => e.studentId);
+
+    let studentsUpdated = 0;
+    let ledgerEntriesUpdated = 0;
+    let paidEntriesSkipped = 0;
+
+    if (studentIds.length > 0) {
+      const studentFees = await tx.studentFee.findMany({
+        where: { studentId: { in: studentIds }, sessionId: existing.sessionId },
+        include: { allocations: true }
+      });
+
+      const feeGroup = new Map<string, Map<string, typeof studentFees>>();
+      for (const f of studentFees) {
+        if (!feeGroup.has(f.studentId)) {
+          feeGroup.set(f.studentId, new Map());
+        }
+        const studentMap = feeGroup.get(f.studentId)!;
+        const monthKey = f.month || "OTHER";
+        if (!studentMap.has(monthKey)) {
+          studentMap.set(monthKey, []);
+        }
+        studentMap.get(monthKey)!.push(f);
+      }
+
+      for (const studentId of studentIds) {
+        const studentMap = feeGroup.get(studentId) || new Map();
+        let studentWasUpdated = false;
+
+        const student = await tx.student.findUnique({
+          where: { id: studentId },
+          select: { admissionDate: true }
+        });
+        if (!student) continue;
+
+        let startAcademicIdx = 0;
+        if (student.admissionDate && student.admissionDate > existing.session.startDate) {
+          const admissionMonth = dateToFeeMonth(student.admissionDate);
+          const admIdx = getAcademicMonthIndex(admissionMonth);
+          if (admIdx > 0 && student.admissionDate <= existing.session.endDate) {
+            startAcademicIdx = admIdx;
+          }
+        }
+
+        for (const month of ALL_FEE_MONTHS) {
+          const monthIdx = getAcademicMonthIndex(month);
+          if (monthIdx < startAcademicIdx) continue;
+
+          const monthFees = studentMap.get(month) || [];
+          const isPaid = monthFees.some((f: any) => 
+            f.status === "PAID" || 
+            f.status === "PARTIAL" || 
+            (f.allocations && f.allocations.length > 0)
+          );
+
+          if (isPaid) {
+            paidEntriesSkipped += monthFees.length;
+            continue;
+          }
+
+          if (monthFees.length > 0) {
+            await tx.studentFee.deleteMany({
+              where: { id: { in: monthFees.map((f: any) => f.id) } }
+            });
+            studentWasUpdated = true;
+          }
+
+          for (const item of updated.items) {
+            const applicableMonths = getApplicableMonthsForItem(item);
+            if (applicableMonths.includes(month)) {
+              const { dueDate, dueYear } = computeMonthDueDate(existing.session.startDate, month);
+              await tx.studentFee.create({
+                data: {
+                  studentId,
+                  feeHeadId: item.feeHeadId,
+                  sessionId: existing.sessionId,
+                  amount: item.amount,
+                  month,
+                  dueYear,
+                  dueDate,
+                  status: StudentFeeStatus.PENDING,
+                  remarks: "Regenerated from updated fee structure template"
+                }
+              });
+              ledgerEntriesUpdated++;
+              studentWasUpdated = true;
+            }
+          }
+        }
+
+        if (studentWasUpdated) {
+          studentsUpdated++;
+        }
+      }
+    }
+
+    return {
+      structure: updated,
+      stats: {
+        studentsUpdated,
+        ledgerEntriesUpdated,
+        paidEntriesSkipped,
+      }
+    };
   });
 }
 
@@ -685,6 +1032,7 @@ export async function getStudentFeeLedger(studentId: string) {
   >();
 
   for (const a of allocations) {
+    if (!a.paymentId || !a.payment) continue;
     const existing = paymentMap.get(a.paymentId);
     const line = {
       feeHead: a.studentFee?.feeHead.name ?? "Advance",
@@ -981,39 +1329,64 @@ export async function listPayments(input?: {
   };
 }
 
-export async function recordFamilyPayment(input: RecordPaymentInput) {
-  const { user } = await requirePermission("payment.create");
-  const schoolId = schoolIdFromUser(user);
-  const data = parseOrThrow(recordPaymentSchema, input);
+export async function recordFamilyPaymentInTx(
+  tx: Prisma.TransactionClient,
+  opts: {
+    schoolId: string;
+    userId?: string | null;
+    familyId: string;
+    amount: Prisma.Decimal | number;
+    method: PaymentMethod;
+    referenceNo?: string | null;
+    paidAt?: Date;
+    notes?: string | null;
+    allocations: Array<{ studentId: string; amount: Prisma.Decimal | number; studentFeeId?: string | null }>;
+  },
+) {
+  // Invariant 4 Idempotency Check: Prevent duplicate payment and wallet credit
+  if (opts.referenceNo && opts.referenceNo.trim()) {
+    const existingPayment = await tx.familyPayment.findFirst({
+      where: {
+        familyId: opts.familyId,
+        referenceNo: opts.referenceNo.trim(),
+      },
+      include: { receipt: true },
+    });
+    if (existingPayment && existingPayment.receipt) {
+      return { payment: existingPayment, receipt: existingPayment.receipt, duplicate: true };
+    }
+  }
 
-  const family = await prisma.family.findFirst({
-    where: { id: data.familyId, schoolId },
+  const family = await tx.family.findFirst({
+    where: { id: opts.familyId, schoolId: opts.schoolId },
     include: { students: true },
   });
   if (!family) throw new Error("Family not found");
 
-  const paymentAmount = toDecimal(data.amount);
-  const allocationTotal = sumDecimals(data.allocations.map((a) => a.amount));
+  const paymentAmount = toDecimal(opts.amount);
+  const allocationTotal = sumDecimals(opts.allocations.map((a) => a.amount));
 
-  if (!allocationTotal.equals(paymentAmount)) {
+  if (allocationTotal.greaterThan(paymentAmount)) {
     throw new Error(
-      `Allocation total (${decimalToNumber(allocationTotal)}) must equal payment amount (${decimalToNumber(paymentAmount)})`,
+      `Allocation total (${decimalToNumber(allocationTotal)}) cannot exceed payment amount (${decimalToNumber(paymentAmount)})`,
     );
   }
 
+  const excessAmount = paymentAmount.sub(allocationTotal);
+
   const familyStudentIds = new Set(family.students.map((s) => s.id));
-  const allocFeeIds = data.allocations
+  const allocFeeIds = opts.allocations
     .map((a) => a.studentFeeId)
     .filter((id): id is string => !!id);
 
   if (allocFeeIds.length > 0) {
-    const fees = await prisma.studentFee.findMany({
+    const fees = await tx.studentFee.findMany({
       where: { id: { in: allocFeeIds } },
       select: { id: true, studentId: true },
     });
     const feeMap = new Map(fees.map((f) => [f.id, f.studentId]));
 
-    for (const alloc of data.allocations) {
+    for (const alloc of opts.allocations) {
       if (!familyStudentIds.has(alloc.studentId)) {
         throw new Error("All allocations must be for students in the payment family");
       }
@@ -1025,128 +1398,164 @@ export async function recordFamilyPayment(input: RecordPaymentInput) {
       }
     }
   } else {
-    for (const alloc of data.allocations) {
+    for (const alloc of opts.allocations) {
       if (!familyStudentIds.has(alloc.studentId)) {
         throw new Error("All allocations must be for students in the payment family");
       }
     }
   }
 
-  const branding = await getBrandingBySchoolId(schoolId);
+  const branding = await getBrandingBySchoolId(opts.schoolId, tx);
 
-  return prisma.$transaction(async (tx) => {
-    const receiptNo = await generateReceiptNoInTx(tx, schoolId);
-    const expanded: Array<{
-      studentId: string;
-      studentFeeId: string | null;
-      amount: Prisma.Decimal;
-    }> = [];
+  const receiptNo = await generateReceiptNoInTx(tx, opts.schoolId);
+  const expanded: Array<{
+    studentId: string;
+    studentFeeId: string | null;
+    amount: Prisma.Decimal;
+  }> = [];
 
-    const allocationResults = await Promise.all(
-      data.allocations.map((alloc) =>
-        expandAllocationToFees(
-          tx,
-          alloc.studentId,
-          toDecimal(alloc.amount),
-          alloc.studentFeeId,
-        )
+  const allocationResults = await Promise.all(
+    opts.allocations.map((alloc) =>
+      expandAllocationToFees(
+        tx,
+        alloc.studentId,
+        toDecimal(alloc.amount),
+        alloc.studentFeeId,
       )
-    );
+    )
+  );
 
-    for (const rows of allocationResults) {
-      expanded.push(...rows);
-    }
+  for (const rows of allocationResults) {
+    expanded.push(...rows);
+  }
 
-    const payment = await tx.familyPayment.create({
-      data: {
-        familyId: data.familyId,
-        amount: paymentAmount,
-        method: data.method,
-        referenceNo: data.referenceNo,
-        paidAt: data.paidAt ?? new Date(),
-        receiptNo,
-        notes: data.notes,
-        recordedById: user.id,
-        allocations: {
-          create: expanded.map((a) => ({
-            studentId: a.studentId,
-            studentFeeId: a.studentFeeId,
-            amount: a.amount,
-          })),
+  const payment = await tx.familyPayment.create({
+    data: {
+      familyId: opts.familyId,
+      amount: paymentAmount,
+      method: opts.method,
+      referenceNo: opts.referenceNo,
+      paidAt: opts.paidAt ?? new Date(),
+      receiptNo,
+      notes: opts.notes,
+      recordedById: opts.userId ?? null,
+      allocations: {
+        create: expanded.map((a) => ({
+          studentId: a.studentId,
+          studentFeeId: a.studentFeeId,
+          amount: a.amount,
+        })),
+      },
+    },
+    include: {
+      family: true,
+      allocations: {
+        include: {
+          student: true,
+          studentFee: { include: { feeHead: true } },
         },
       },
-      include: {
-        family: true,
-        allocations: {
-          include: {
-            student: true,
-            studentFee: { include: { feeHead: true } },
-          },
-        },
-      },
+    },
+  });
+
+  const feeIds = [
+    ...new Set(
+      expanded.map((a) => a.studentFeeId).filter((id): id is string => !!id),
+    ),
+  ];
+
+  await Promise.all(
+    feeIds.map((feeId) => recalcStudentFeeStatus(tx, feeId))
+  );
+
+  // Part 1: Credit excess payment to FamilyAdvanceWallet
+  if (excessAmount.greaterThan(0)) {
+    const { recordWalletTransactionInTx } = await import("@/server/services/wallet.service");
+    await recordWalletTransactionInTx(tx, {
+      familyId: opts.familyId,
+      type: AdvanceTransactionType.CREDIT_FROM_PAYMENT,
+      amount: excessAmount,
+      paymentId: payment.id,
+      reason: "Excess payment credited to advance wallet",
+      userId: opts.userId,
     });
+  }
 
-    const feeIds = [
-      ...new Set(
-        expanded.map((a) => a.studentFeeId).filter((id): id is string => !!id),
-      ),
-    ];
+  // Part 4: Auto-reconciliation trigger
+  const { reconcileFamilyAdvanceInTx } = await import("@/server/services/wallet.service");
+  await reconcileFamilyAdvanceInTx(tx, {
+    schoolId: opts.schoolId,
+    familyId: opts.familyId,
+    userId: opts.userId,
+  });
 
-    await Promise.all(
-      feeIds.map((feeId) => recalcStudentFeeStatus(tx, feeId))
-    );
+  const snapshot = {
+    receiptNo: payment.receiptNo,
+    paidAt: payment.paidAt.toISOString(),
+    amount: decimalToNumber(payment.amount),
+    amountFormatted: formatCurrency(decimalToNumber(payment.amount)),
+    advanceCredited: decimalToNumber(excessAmount),
+    method: payment.method,
+    referenceNo: payment.referenceNo,
+    notes: payment.notes,
+    family: {
+      id: payment.family.id,
+      fatherName: payment.family.fatherName,
+      motherName: payment.family.motherName,
+      primaryPhone: payment.family.primaryPhone,
+    },
+    branding: {
+      schoolName: branding.schoolName,
+      address: branding.address,
+      phone: branding.phone,
+      email: branding.email,
+      receiptFooter: branding.receiptFooter,
+      logoDocumentId: branding.logoDocumentId,
+    },
+    allocations: payment.allocations.map((a) => ({
+      studentName: a.student.fullName,
+      admissionNo: a.student.admissionNo,
+      feeHead: a.studentFee?.feeHead.name ?? "General",
+      amount: decimalToNumber(a.amount),
+      amountFormatted: formatCurrency(decimalToNumber(a.amount)),
+    })),
+    recordedBy: opts.userId ?? "System",
+    generatedAt: new Date().toISOString(),
+  };
 
-    const snapshot = {
-      receiptNo: payment.receiptNo,
-      paidAt: payment.paidAt.toISOString(),
-      amount: decimalToNumber(payment.amount),
-      amountFormatted: formatCurrency(decimalToNumber(payment.amount)),
-      method: payment.method,
-      referenceNo: payment.referenceNo,
-      notes: payment.notes,
-      family: {
-        id: payment.family.id,
-        fatherName: payment.family.fatherName,
-        motherName: payment.family.motherName,
-        primaryPhone: payment.family.primaryPhone,
-      },
-      branding: {
-        schoolName: branding.schoolName,
-        address: branding.address,
-        phone: branding.phone,
-        email: branding.email,
-        receiptFooter: branding.receiptFooter,
-        logoDocumentId: branding.logoDocumentId,
-      },
-      allocations: payment.allocations.map((a) => ({
-        studentName: a.student.fullName,
-        admissionNo: a.student.admissionNo,
-        feeHead: a.studentFee?.feeHead.name ?? "General",
-        amount: decimalToNumber(a.amount),
-        amountFormatted: formatCurrency(decimalToNumber(a.amount)),
-      })),
-      recordedBy: user.name,
-      generatedAt: new Date().toISOString(),
-    };
+  const receipt = await tx.feeReceipt.create({
+    data: { paymentId: payment.id, snapshot },
+  });
 
-    const receipt = await tx.feeReceipt.create({
-      data: { paymentId: payment.id, snapshot },
-    });
-
+  if (opts.userId) {
     await writeAuditLog(
       {
-        schoolId,
-        userId: user.id,
+        schoolId: opts.schoolId,
+        userId: opts.userId,
         action: "create",
         module: "payment",
         entityType: "FamilyPayment",
         entityId: payment.id,
-        newValue: { receiptNo, amount: decimalToNumber(payment.amount) },
+        newValue: { receiptNo, amount: decimalToNumber(payment.amount), excess: decimalToNumber(excessAmount) },
       },
       tx,
     );
+  }
 
-    return { payment, receipt };
+  return { payment, receipt };
+}
+
+export async function recordFamilyPayment(input: RecordPaymentInput) {
+  const { user } = await requirePermission("payment.create");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(recordPaymentSchema, input);
+
+  return prisma.$transaction(async (tx) => {
+    return recordFamilyPaymentInTx(tx, {
+      ...data,
+      schoolId,
+      userId: user.id,
+    });
   }, { timeout: 35000 });
 }
 
@@ -1194,4 +1603,21 @@ export async function getPaymentReceipt(paymentId: string) {
   };
 
   return { paymentId: payment.id, snapshot, generatedAt: payment.createdAt };
+}
+
+export async function generateStudentMonthlyLedger(input: GenerateMonthlyLedgerInput) {
+  const { user } = await requirePermission("fee.create");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(generateMonthlyLedgerSchema, input);
+
+  return prisma.$transaction(async (tx) => {
+    return generateStudentMonthlyLedgerInTx(tx, {
+      schoolId,
+      studentId: data.studentId,
+      sessionId: data.sessionId,
+      classId: data.classId,
+      userId: user.id,
+      requireStructure: true,
+    });
+  });
 }

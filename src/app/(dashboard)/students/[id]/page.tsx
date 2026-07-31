@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getStudent } from "@/server/services/student.service";
 import { getStudentFeeLedger, getStudentPortalFees } from "@/server/services/fee.service";
+import { getStudentFinancialProfile } from "@/server/services/financial-profile.service";
 import { requirePermission, resolveEffectivePermissions } from "@/server/permissions/guard";
 import { StudentProfileCard } from "./student-profile-card";
+import { StudentFinancialDashboard } from "@/components/fee-dashboard/student-financial-dashboard";
 import { PageHeader } from "@/components/shared/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,17 +20,16 @@ export default async function StudentDetailPage({
 
   console.time(`[perf] StudentDetailPage ${id}`);
 
-  // requirePermission is cache()-wrapped — resolves from the layout's already
-  // cached call. resolveEffectivePermissions is also cache()-wrapped.
   const { user } = await requirePermission("student.view");
   const isStudentSelf = user.role === "STUDENT" && user.studentId === id;
   const perms = await resolveEffectivePermissions(user.id, user.role);
   const canDelete = perms.has("student.delete") && !isStudentSelf;
 
   // ── Fire all independent data queries simultaneously ──────────────────────
-  const [studentResult, ledgerResult, portalResult] = await Promise.allSettled([
+  const [studentResult, ledgerResult, financialProfileResult, portalResult] = await Promise.allSettled([
     getStudent(id),
     getStudentFeeLedger(id),
+    getStudentFinancialProfile(id),
     isStudentSelf ? getStudentPortalFees() : Promise.resolve(null),
   ]);
 
@@ -38,6 +39,7 @@ export default async function StudentDetailPage({
 
   const student = studentResult.value;
   const ledger = ledgerResult.status === "fulfilled" ? ledgerResult.value : null;
+  const financialProfile = financialProfileResult.status === "fulfilled" ? financialProfileResult.value : null;
   const portalSiblings =
     portalResult.status === "fulfilled" && portalResult.value
       ? portalResult.value.siblings
@@ -519,6 +521,13 @@ export default async function StudentDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* ── CONSOLIDATED STUDENT FINANCIAL DASHBOARD ── */}
+      {financialProfile && (
+        <div className="mt-8 border-t border-slate-800 pt-6">
+          <StudentFinancialDashboard profile={financialProfile} userRole={user.role} />
+        </div>
+      )}
     </div>
   );
 }

@@ -55,7 +55,7 @@ async function profileRoute(
   // Enable CDP tracing for trace.json
   const cdpSession = await context.newCDPSession(context.pages()[0] || (await context.newPage()));
 
-  await cdpSession.send("Tracing.start", {
+  await (cdpSession.send as any)("Tracing.start", {
     transferMode: "ReportEvents",
     traceConfig: {
       includedCategories: [
@@ -208,7 +208,7 @@ async function profileRoute(
 
   const result: RouteMetrics = {
     route,
-    ...perfMetrics,
+    ...(perfMetrics as any),
     totalRequests: requests.length,
     largestRequestBytes,
     slowestRequestMs: Math.round(slowestRequestMs),

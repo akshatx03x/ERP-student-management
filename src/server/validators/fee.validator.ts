@@ -1,4 +1,4 @@
-import { FeeFrequency, PaymentMethod, StudentFeeStatus } from "@prisma/client";
+import { FeeFrequency, FeeMonth, PaymentMethod, StudentFeeStatus } from "@prisma/client";
 import { z } from "zod";
 import { idSchema, paginationSchema, positiveDecimalSchema } from "./common";
 
@@ -26,9 +26,23 @@ export const createFeeStructureSchema = z.object({
       z.object({
         feeHeadId: idSchema,
         amount: positiveDecimalSchema,
+        months: z.array(z.nativeEnum(FeeMonth)).optional(),
       }),
     )
-    .min(1, "Add at least one fee head"),
+    .min(1, "Add at least one fee head")
+    .refine(
+      (items) => {
+        for (const item of items) {
+          if (item.months && item.months.length > 0) {
+            if (new Set(item.months).size !== item.months.length) {
+              return false;
+            }
+          }
+        }
+        return true;
+      },
+      { message: "Duplicate month mappings for a fee head are not allowed" },
+    ),
 });
 
 export const updateFeeStructureSchema = z.object({
@@ -39,9 +53,23 @@ export const updateFeeStructureSchema = z.object({
       z.object({
         feeHeadId: idSchema,
         amount: positiveDecimalSchema,
+        months: z.array(z.nativeEnum(FeeMonth)).optional(),
       }),
     )
-    .min(1, "Add at least one fee head"),
+    .min(1, "Add at least one fee head")
+    .refine(
+      (items) => {
+        for (const item of items) {
+          if (item.months && item.months.length > 0) {
+            if (new Set(item.months).size !== item.months.length) {
+              return false;
+            }
+          }
+        }
+        return true;
+      },
+      { message: "Duplicate month mappings for a fee head are not allowed" },
+    ),
 });
 
 export const createStudentFeeSchema = z.object({
@@ -49,9 +77,17 @@ export const createStudentFeeSchema = z.object({
   feeHeadId: idSchema,
   sessionId: idSchema,
   amount: positiveDecimalSchema,
+  month: z.nativeEnum(FeeMonth).optional().nullable(),
+  dueYear: z.number().int().optional().nullable(),
   dueDate: z.coerce.date().optional().nullable(),
   status: z.nativeEnum(StudentFeeStatus).default(StudentFeeStatus.PENDING),
   remarks: z.string().trim().optional().nullable(),
+});
+
+export const generateMonthlyLedgerSchema = z.object({
+  studentId: idSchema,
+  sessionId: idSchema,
+  classId: idSchema,
 });
 
 export const recordPaymentSchema = z
@@ -86,6 +122,7 @@ export const listStudentFeesSchema = paginationSchema.extend({
   studentId: idSchema.optional(),
   familyId: idSchema.optional(),
   status: z.nativeEnum(StudentFeeStatus).optional(),
+  month: z.nativeEnum(FeeMonth).optional(),
 });
 
 export const listPaymentsSchema = paginationSchema.extend({
@@ -96,4 +133,5 @@ export type CreateFeeHeadInput = z.infer<typeof createFeeHeadSchema>;
 export type CreateFeeStructureInput = z.infer<typeof createFeeStructureSchema>;
 export type UpdateFeeStructureInput = z.infer<typeof updateFeeStructureSchema>;
 export type CreateStudentFeeInput = z.infer<typeof createStudentFeeSchema>;
+export type GenerateMonthlyLedgerInput = z.infer<typeof generateMonthlyLedgerSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;

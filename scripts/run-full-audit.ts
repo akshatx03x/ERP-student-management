@@ -30,7 +30,7 @@ async function generatePerformanceReport() {
   const topOperations = [
     { op: "Database Connection Pool ($connect / pgBouncer startup)", timeMs: dbMetrics.connectionTimeMs, area: "Database / Network" },
     { op: "Complex Dashboard Queries (StudentFee + Allocations aggregate)", timeMs: dbMetrics.complexQueryMs, area: "Prisma / Database" },
-    { op: "Supabase DB Round-trip Network Latency (SELECT 1)", timeMs: dbMetrics.supabaseLatencyMs, area: "Supabase Postgres" },
+    { op: "Supabase DB Round-trip Network Latency (SELECT 1)", timeMs: dbMetrics.simpleQueryMs, area: "Supabase Postgres" },
     { op: "Client Bundle Download & Parse (lucide-react + jspdf + exceljs)", timeMs: 480, area: "Browser / Bundle" },
     { op: "React Client Hydration & Main Thread Execution", timeMs: 310, area: "React Client" },
     { op: "Better Auth Session Validation (auth.api.getSession)", timeMs: 182, area: "Auth Server" },

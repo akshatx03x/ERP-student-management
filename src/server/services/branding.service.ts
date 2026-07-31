@@ -1,4 +1,5 @@
 import { prisma } from "@/server/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
 import { schoolIdFromUser } from "@/server/lib/helpers";
@@ -15,14 +16,15 @@ export async function getSchoolBranding(schoolId?: string) {
 }
 
 /** Internal branding lookup (no permission check) for receipts/report cards. */
-export async function getBrandingBySchoolId(schoolId: string) {
-  const branding = await prisma.schoolBranding.findUnique({
+export async function getBrandingBySchoolId(schoolId: string, tx?: Prisma.TransactionClient) {
+  const db = tx ?? prisma;
+  const branding = await db.schoolBranding.findUnique({
     where: { schoolId },
   });
 
   if (!branding) {
-    const school = await prisma.school.findUniqueOrThrow({ where: { id: schoolId } });
-    return prisma.schoolBranding.create({
+    const school = await db.school.findUniqueOrThrow({ where: { id: schoolId } });
+    return db.schoolBranding.create({
       data: {
         schoolId,
         schoolName: school.name,

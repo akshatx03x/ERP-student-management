@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   listFeeHeads,
   createFeeHead,
+  updateFeeHead,
   listStudentFees,
   listPayments,
   recordFamilyPayment,
@@ -14,10 +15,12 @@ import {
   getStudentFeeLedger,
   getStudentPortalFees,
   getFamilyFeeDues,
+  generateStudentMonthlyLedger,
 } from "@/server/services/fee.service";
 import type {
   CreateFeeHeadInput,
   CreateFeeStructureInput,
+  GenerateMonthlyLedgerInput,
   RecordPaymentInput,
   UpdateFeeStructureInput,
 } from "@/server/validators/fee.validator";
@@ -29,6 +32,14 @@ export async function listFeeHeadsAction(activeOnly = false) {
 export async function createFeeHeadAction(input: CreateFeeHeadInput) {
   const r = await createFeeHead(input);
   revalidatePath("/fees");
+  revalidatePath("/fees/fee-heads");
+  return r;
+}
+
+export async function updateFeeHeadAction(input: { id: string; name?: string; description?: string | null; isActive?: boolean }) {
+  const r = await updateFeeHead(input);
+  revalidatePath("/fees");
+  revalidatePath("/fees/fee-heads");
   return r;
 }
 
@@ -62,7 +73,7 @@ export async function createFeeStructureAction(input: CreateFeeStructureInput) {
 export async function updateFeeStructureAction(input: UpdateFeeStructureInput) {
   const r = await updateFeeStructure(input);
   revalidatePath("/fees");
-  return { success: true, id: r.id };
+  return { success: true, id: r.structure.id, stats: r.stats };
 }
 
 export async function listFeeStructuresAction(sessionId?: string, classId?: string) {
@@ -79,4 +90,11 @@ export async function getStudentPortalFeesAction() {
 
 export async function getFamilyFeeDuesAction(familyId: string) {
   return getFamilyFeeDues(familyId);
+}
+
+export async function generateStudentMonthlyLedgerAction(input: GenerateMonthlyLedgerInput) {
+  const r = await generateStudentMonthlyLedger(input);
+  revalidatePath("/fees");
+  revalidatePath("/students");
+  return { success: true, generated: r.generated };
 }

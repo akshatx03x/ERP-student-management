@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   ]);
 
   const firstStaffUser = users.items.find(
-    (u) => u.role === "ACCOUNTANT" || u.role === "TEACHER",
+    (u: any) => u.role === "ACCOUNTANT" || u.role === "TEACHER",
   );
 
   const overrides = firstStaffUser

@@ -32,6 +32,13 @@ import {
   UserMinus,
   Award,
   TrendingUp,
+  CreditCard,
+  Layers,
+  TableProperties,
+  Tag,
+  Clock,
+  Percent,
+  Receipt,
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -57,6 +64,13 @@ const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
   UserMinus,
   Award,
   TrendingUp,
+  CreditCard,
+  Layers,
+  TableProperties,
+  Tag,
+  Clock,
+  Percent,
+  Receipt,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +139,9 @@ export function Sidebar({
                       ? activePath.startsWith("/students/") &&
                         !activePath.startsWith("/students/former") &&
                         !activePath.startsWith("/students/alumni")
-                      : activePath.startsWith(`${item.href}/`));
+                      : item.href === "/fees"
+                      ? activePath === "/fees"
+                      : activePath.startsWith(`${item.href}/`) || activePath === item.href);
 
                   const IconComp = ICON_MAP[item.icon] ?? HelpCircle;
 

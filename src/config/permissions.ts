@@ -137,7 +137,14 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { title: "Families", href: "/families", resource: "family", icon: "Users" },
       { title: "Staff", href: "/staff", resource: "user", icon: "Contact" },
       { title: "Classes", href: "/classes", resource: "class", icon: "School" },
-      { title: "Fees", href: "/fees", resource: "fee", icon: "Wallet" },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { title: "Fee Collection", href: "/fees", resource: "fee", icon: "CreditCard" },
+      { title: "Fee Setup", href: "/fees/setup", resource: "fee", icon: "Settings" },
+      { title: "Reports", href: "/fees/reports", resource: "fee", icon: "BarChart3" },
     ],
   },
   {
