@@ -29,6 +29,9 @@ import {
   Megaphone,
   Settings,
   HelpCircle,
+  UserMinus,
+  Award,
+  TrendingUp,
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -51,6 +54,9 @@ const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
   BarChart3,
   Megaphone,
   Settings,
+  UserMinus,
+  Award,
+  TrendingUp,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,7 +120,12 @@ export function Sidebar({
                 {items.map((item) => {
                   const activePath = optimisticPathname ?? pathname ?? "";
                   const active =
-                    activePath === item.href || activePath.startsWith(`${item.href}/`);
+                    activePath === item.href ||
+                    (item.href === "/students"
+                      ? activePath.startsWith("/students/") &&
+                        !activePath.startsWith("/students/former") &&
+                        !activePath.startsWith("/students/alumni")
+                      : activePath.startsWith(`${item.href}/`));
 
                   const IconComp = ICON_MAP[item.icon] ?? HelpCircle;
 

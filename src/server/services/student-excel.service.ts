@@ -4,7 +4,7 @@ import { buildFullName } from "@/server/lib/helpers";
 import { writeAuditLog } from "@/server/services/audit.service";
 import { attachFeeStructureInTx } from "@/server/services/fee.service";
 import { createStudentUser } from "@/server/services/student.service";
-import { EnrollmentStatus } from "@prisma/client";
+import { EnrollmentStatus, StudentStatus } from "@prisma/client";
 import { hashPassword } from "better-auth/crypto";
 import { studentDobPassword } from "@/lib/utils";
 
@@ -349,7 +349,7 @@ export async function importStudents(
               gender: genderVal,
               bloodGroup: row.bloodGroup || null,
               aadhaar: row.aadhaar || null,
-              status: row.status === "ACTIVE" || row.status === "INACTIVE" || row.status === "ALUMNI" || row.status === "TRANSFERRED" ? row.status : "ACTIVE",
+              status: (row.status === "ACTIVE" || row.status === "LEFT" || row.status === "ARCHIVED" ? row.status : "ACTIVE") as StudentStatus,
             },
           });
 

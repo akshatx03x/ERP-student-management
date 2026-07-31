@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { appConfig } from "../../config/app-config";
-import { prisma, ensureSqlitePragmas } from "@/server/lib/prisma";
+import { prisma, ensureSqlitePragmas } from "../lib/prisma";
 
 export interface BackupMetadata {
   id: string;

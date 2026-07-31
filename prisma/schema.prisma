@@ -77,6 +77,8 @@ model User {
   marksEntered       MarkEntry[]            @relation("MarksEnterer")
   noticesCreated     Notice[]               @relation("NoticeCreator")
   promotions         PromotionHistory[]     @relation("PromotionActor")
+  studentExitsCreated StudentExit[]         @relation("ExitRecordCreator")
+  promotionBatchesCreated PromotionBatch[]  @relation("PromotionBatchCreator")
   sessions           Session[]
   school             School?                @relation(fields: [schoolId], references: [id])
   staffProfile       StaffProfile?          @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
@@ -214,6 +216,8 @@ model AcademicSession {
   homework                Homework[]
   promotionsFrom          PromotionHistory[]       @relation("FromSession")
   promotionsTo            PromotionHistory[]       @relation("ToSession")
+  promotionBatchesFrom    PromotionBatch[]         @relation("BatchFromSession")
+  promotionBatchesTo      PromotionBatch[]         @relation("BatchToSession")
   reportCards             ReportCard[]
   enrollments             StudentEnrollment[]
   studentFees             StudentFee[]
@@ -441,6 +445,7 @@ model Student {
   studentFees          StudentFee[]
   guardians            StudentGuardian[]
   medical              StudentMedical?
+  exitInfo             StudentExit?
   user                 User?
 
   @@unique([schoolId, admissionNo])
@@ -461,23 +466,59 @@ model StudentMedical {
 }
 
 model StudentEnrollment {
-  id        String           @id @default(cuid())
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  studentId String
-  sessionId String
-  classId   String
-  sectionId String
-  rollNo    String?
-  status    EnrollmentStatus @default(ACTIVE)
-  class     Class            @relation(fields: [classId], references: [id])
-  section   Section          @relation(fields: [sectionId], references: [id])
-  session   AcademicSession  @relation(fields: [sessionId], references: [id])
-  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id               String           @id @default(cuid())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  studentId        String
+  sessionId        String
+  classId          String
+  sectionId        String
+  rollNo           String?
+  house            String?
+  status           EnrollmentStatus @default(ACTIVE)
+  promotionBatchId String?
+  class            Class            @relation(fields: [classId], references: [id])
+  section          Section          @relation(fields: [sectionId], references: [id])
+  session          AcademicSession  @relation(fields: [sessionId], references: [id])
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  promotionBatch   PromotionBatch?  @relation(fields: [promotionBatchId], references: [id], onDelete: SetNull)
 
   @@unique([studentId, sessionId])
   @@index([sessionId, sectionId])
   @@index([sessionId, classId])
+}
+
+model StudentExit {
+  id          String     @id @default(cuid())
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  studentId   String     @unique
+  leavingDate DateTime
+  reason      ExitReason @default(TRANSFERRED)
+  tcNumber    String?
+  tcDate      DateTime?
+  remarks     String?
+  createdById String?
+  createdBy   User?      @relation("ExitRecordCreator", fields: [createdById], references: [id])
+  student     Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([leavingDate])
+}
+
+model PromotionBatch {
+  id            String               @id @default(cuid())
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  fromSessionId String
+  toSessionId   String
+  createdById   String?
+  status        PromotionBatchStatus @default(COMPLETED)
+  createdBy     User?                @relation("PromotionBatchCreator", fields: [createdById], references: [id])
+  fromSession   AcademicSession      @relation("BatchFromSession", fields: [fromSessionId], references: [id])
+  toSession     AcademicSession      @relation("BatchToSession", fields: [toSessionId], references: [id])
+  enrollments   StudentEnrollment[]
+
+  @@index([fromSessionId, toSessionId])
 }
 
 model PromotionHistory {
@@ -1007,23 +1048,40 @@ enum Role {
 enum SessionStatus {
   DRAFT
   ACTIVE
+  LOCKED
   CLOSED
   ARCHIVED
 }
 
 enum StudentStatus {
   ACTIVE
-  INACTIVE
-  ALUMNI
-  TRANSFERRED
+  LEFT
+  ARCHIVED
 }
 
 enum EnrollmentStatus {
   ACTIVE
   PROMOTED
-  DETAINED
+  RETAINED
   TRANSFERRED
+  WITHDRAWN
+  GRADUATED
+  EXPELLED
+  DETAINED
   COMPLETED
+}
+
+enum ExitReason {
+  TRANSFERRED
+  WITHDRAWN
+  GRADUATED
+  EXPELLED
+  OTHER
+}
+
+enum PromotionBatchStatus {
+  COMPLETED
+  ROLLED_BACK
 }
 
 enum AdmissionStatus {

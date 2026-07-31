@@ -60,6 +60,7 @@ export function AdmissionsClient({
   const [matchDialog, setMatchDialog] = useState<MatchedFamily | null>(null);
   const [approvingApp, setApprovingApp] = useState<Admission | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("");
+  const [selectedAdmissionNo, setSelectedAdmissionNo] = useState<string>("");
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [pendingSubmitState, setPendingSubmitState] = useState<UnifiedFormState | null>(null);
 
@@ -153,6 +154,8 @@ export function AdmissionsClient({
       declarationAccepted: formState.declarationAccepted,
       declarationDate: formState.declarationDate ? new Date(formState.declarationDate) : null,
       declarationParentName: formState.declarationParentName.trim() || null,
+      admissionDate: formState.admissionDate ? new Date(formState.admissionDate) : new Date(),
+      admissionNo: formState.admissionNo.trim() || null,
       photoUrl: formState.photoUrl || null,
       familyId,
       allowDuplicate,
@@ -350,6 +353,7 @@ export function AdmissionsClient({
                               const secs = clsInfo?.sections ?? [];
                               setApprovingApp(a);
                               setSelectedSectionId(secs[0]?.id ?? "");
+                              setSelectedAdmissionNo(a.admissionNo || "");
                             }}
                           >
                             Approve
@@ -508,7 +512,16 @@ export function AdmissionsClient({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Select Section</Label>
+                <Label>Admission No *</Label>
+                <Input
+                  required
+                  placeholder="e.g. ADM-2026-0001"
+                  value={selectedAdmissionNo}
+                  onChange={(e) => setSelectedAdmissionNo(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Select Section *</Label>
                 <Select
                   value={selectedSectionId}
                   onChange={(e) => setSelectedSectionId(e.target.value)}
@@ -532,16 +545,20 @@ export function AdmissionsClient({
                 <Button
                   type="button"
                   loading={pending}
-                  disabled={!selectedSectionId}
+                  disabled={!selectedSectionId || !selectedAdmissionNo.trim()}
                   onClick={() => {
                     startTransition(async () => {
                       try {
-                        const result = await approveAdmissionAction({ id: approvingApp.id, sectionId: selectedSectionId });
+                        const result = await approveAdmissionAction({
+                          id: approvingApp.id,
+                          sectionId: selectedSectionId,
+                          admissionNo: selectedAdmissionNo.trim(),
+                        });
                         if (!result.success) {
                           toast.error(result.error || "Failed to approve admission");
                           return;
                         }
-                        toast.success("Approved — admission number assigned");
+                        toast.success("Approved successfully");
                         setApprovingApp(null);
                       } catch (e) {
                         toast.error(e instanceof Error ? e.message : "Failed");

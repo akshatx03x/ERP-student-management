@@ -19,6 +19,7 @@ export type GuardianItem = {
 export type UnifiedFormState = {
   // 1. Academic & Personal
   admissionNo: string;
+  admissionDate: string;
   sessionId: string;
   appliedClassId: string;
   sectionId: string;
@@ -128,6 +129,7 @@ export function UnifiedStudentForm({
     sectionId: classes[0]?.sections[0]?.id ?? "",
     rollNo: "",
     admissionNo: "",
+    admissionDate: new Date().toISOString().split("T")[0],
 
     fatherName: "",
     fatherQualification: "",
@@ -252,17 +254,25 @@ export function UnifiedStudentForm({
             </div>
           </div>
 
-          {mode === "direct" && (
-            <div className="space-y-2">
-              <Label>Admission No *</Label>
-              <Input
-                required
-                placeholder="ADM-2026-0001"
-                value={form.admissionNo}
-                onChange={(e) => handleChange("admissionNo", e.target.value)}
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label>Admission No {mode === "direct" ? "*" : "(Optional)"}</Label>
+            <Input
+              required={mode === "direct"}
+              placeholder="e.g. ADM-2026-0001"
+              value={form.admissionNo}
+              onChange={(e) => handleChange("admissionNo", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Admission Date *</Label>
+            <Input
+              required
+              type="date"
+              value={form.admissionDate}
+              onChange={(e) => handleChange("admissionDate", e.target.value)}
+            />
+          </div>
 
           <div className="space-y-2">
             <Label>Academic Session *</Label>

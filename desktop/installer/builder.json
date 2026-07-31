@@ -17,7 +17,9 @@
   ],
   "asar": true,
   "asarUnpack": [
-    "**/*.node"
+    "**/*.node",
+    "**/node_modules/.prisma/**/*",
+    "**/node_modules/@prisma/client/**/*"
   ],
   "extraResources": [
     {
@@ -31,6 +33,18 @@
     {
       "from": "../prisma",
       "to": "prisma"
+    },
+    {
+      "from": "../node_modules/.prisma",
+      "to": "app/node_modules/.prisma"
+    },
+    {
+      "from": "../node_modules/@prisma/client",
+      "to": "app/node_modules/@prisma/client"
+    },
+    {
+      "from": "../node_modules/prisma",
+      "to": "app/node_modules/prisma"
     }
   ],
   "win": {

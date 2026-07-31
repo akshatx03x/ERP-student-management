@@ -1,4 +1,4 @@
-import { EnrollmentStatus, Role } from "@prisma/client";
+import { EnrollmentStatus, ExitReason, Role, StudentStatus } from "@prisma/client";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
@@ -91,7 +91,7 @@ export async function listStudents(input?: {
     schoolId,
     ...(user.role === Role.STUDENT && user.studentId ? { id: user.studentId } : {}),
     ...(params.familyId ? { familyId: params.familyId } : {}),
-    ...(params.status ? { status: params.status } : {}),
+    status: params.status ? (params.status as any) : StudentStatus.ACTIVE,
     ...(enrollmentFilter ? { enrollments: enrollmentFilter } : {}),
     ...(params.search
       ? {
@@ -148,6 +148,133 @@ export async function listStudents(input?: {
   return { items, total, page, pageSize };
 }
 
+export async function listFormerStudents(input?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  reason?: string;
+}) {
+  const { user } = await requirePermission("student.view");
+  const schoolId = schoolIdFromUser(user);
+  const params = parseOrThrow(listStudentsSchema, input ?? {});
+  const { skip, take, page, pageSize } = parsePagination(params.page, params.pageSize);
+
+  const where = {
+    schoolId,
+    status: StudentStatus.LEFT,
+    exitInfo: {
+      reason: input?.reason && input.reason !== "ALL"
+        ? (input.reason as ExitReason)
+        : { not: ExitReason.GRADUATED },
+    },
+    ...(params.search
+      ? {
+          OR: [
+            { fullName: { contains: params.search } },
+            { admissionNo: { contains: params.search } },
+          ],
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.student.findMany({
+      where,
+      select: {
+        id: true,
+        admissionNo: true,
+        fullName: true,
+        photoUrl: true,
+        dateOfBirth: true,
+        gender: true,
+        status: true,
+        family: { select: { fatherName: true, motherName: true, primaryPhone: true } },
+        exitInfo: {
+          select: {
+            leavingDate: true,
+            reason: true,
+            tcNumber: true,
+            tcDate: true,
+            remarks: true,
+          },
+        },
+        enrollments: {
+          include: { class: true, section: true, session: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { fullName: "asc" },
+      skip,
+      take,
+    }),
+    prisma.student.count({ where }),
+  ]);
+
+  return { items, total, page, pageSize };
+}
+
+export async function listAlumniStudents(input?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}) {
+  const { user } = await requirePermission("student.view");
+  const schoolId = schoolIdFromUser(user);
+  const params = parseOrThrow(listStudentsSchema, input ?? {});
+  const { skip, take, page, pageSize } = parsePagination(params.page, params.pageSize);
+
+  const where = {
+    schoolId,
+    status: StudentStatus.LEFT,
+    exitInfo: { reason: ExitReason.GRADUATED },
+    ...(params.search
+      ? {
+          OR: [
+            { fullName: { contains: params.search } },
+            { admissionNo: { contains: params.search } },
+          ],
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.student.findMany({
+      where,
+      select: {
+        id: true,
+        admissionNo: true,
+        fullName: true,
+        photoUrl: true,
+        dateOfBirth: true,
+        gender: true,
+        status: true,
+        family: { select: { fatherName: true, motherName: true, primaryPhone: true } },
+        exitInfo: {
+          select: {
+            leavingDate: true,
+            reason: true,
+            tcNumber: true,
+            tcDate: true,
+            remarks: true,
+          },
+        },
+        enrollments: {
+          include: { class: true, section: true, session: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { fullName: "asc" },
+      skip,
+      take,
+    }),
+    prisma.student.count({ where }),
+  ]);
+
+  return { items, total, page, pageSize };
+}
+
 export async function getStudent(studentId: string) {
   const { user } = await requirePermission("student.view");
   const schoolId = schoolIdFromUser(user);
@@ -170,6 +297,11 @@ export async function getStudent(studentId: string) {
         },
       },
       medical: true,
+      exitInfo: {
+        include: {
+          createdBy: { select: { id: true, name: true } },
+        },
+      },
       user: { select: { id: true, email: true, isActive: true, mustChangePassword: true } },
       enrollments: {
         include: { class: true, section: true, session: true },
@@ -679,6 +811,18 @@ export async function updateStudent(input: UpdateStudentInput) {
       where: { id },
       data: { ...rest, ...(fullName ? { fullName } : {}) },
     });
+
+    if (data.status === StudentStatus.ACTIVE) {
+      await tx.studentExit.deleteMany({ where: { studentId: id } });
+      await tx.studentEnrollment.updateMany({
+        where: {
+          studentId: id,
+          status: { in: [EnrollmentStatus.TRANSFERRED, EnrollmentStatus.WITHDRAWN, EnrollmentStatus.GRADUATED, EnrollmentStatus.EXPELLED] },
+        },
+        data: { status: EnrollmentStatus.ACTIVE },
+      });
+    }
+
     await writeAuditLog(
       {
         schoolId,

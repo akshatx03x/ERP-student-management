@@ -52,7 +52,7 @@ function analyzeAnomalies(log: QueryLogEntry, recentLogs: QueryLogEntry[]) {
   return anomalies;
 }
 
-import { getDatabaseUrl } from "@/server/providers/database.provider";
+import { getDatabaseUrl } from "../providers/database.provider";
 
 const basePrisma =
   globalForPrisma.prisma ??

@@ -5,7 +5,7 @@
   "main": "dist/desktop/electron/main.js",
   "scripts": {
     "clean": "node -e \"const f=require('fs'),p='C:/Users/Akshat/AppData/Local/SchoolERPBuild';try{if(f.existsSync(p))f.rmSync(p,{recursive:true,force:true,maxRetries:10,retryDelay:500});}catch(e){console.error('clean failed:',e.message);process.exit(1)}\"",
-    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/splash.html', 'dist/desktop/electron/splash.html')\"",
+    "build:electron": "npx prisma generate --schema=../prisma/schema.prisma && tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/splash.html', 'dist/desktop/electron/splash.html')\"",
     "build:seed": "tsc ../prisma/seed.ts --outDir ../dist/seed --module commonjs --target es2022 --moduleResolution node --skipLibCheck",
     "start": "npm run build:electron && electron .",
     "predist": "npm run clean",
@@ -13,7 +13,9 @@
     "postdist": "node -e \"const f=require('fs'),p=require('path'),s='C:/Users/Akshat/AppData/Local/SchoolERPBuild',d='../dist/installer';f.mkdirSync(d,{recursive:true});['SchoolERP_Setup.exe','SchoolERP_Setup.exe.blockmap','builder-debug.yml'].forEach(n=>{const sf=p.join(s,n);if(f.existsSync(sf))f.copyFileSync(sf,p.join(d,n));});console.log('Artifacts copied to dist/installer')\""
   },
   "dependencies": {
-    "dotenv": "^17.4.2"
+    "@prisma/client": "^6.19.3",
+    "dotenv": "^17.4.2",
+    "prisma": "^6.19.3"
   },
   "devDependencies": {
     "electron": "^34.2.0",

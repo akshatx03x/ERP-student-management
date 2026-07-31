@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import {
   listStudents,
+  listFormerStudents,
+  listAlumniStudents,
   getStudent,
   createStudent,
   createStudentWithFamily,
@@ -29,6 +31,14 @@ import type {
 
 export async function listStudentsAction(input?: Parameters<typeof listStudents>[0]) {
   return listStudents(input);
+}
+
+export async function listFormerStudentsAction(input?: Parameters<typeof listFormerStudents>[0]) {
+  return listFormerStudents(input);
+}
+
+export async function listAlumniStudentsAction(input?: Parameters<typeof listAlumniStudents>[0]) {
+  return listAlumniStudents(input);
 }
 
 export async function getStudentAction(id: string) {

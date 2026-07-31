@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { EditStudentForm } from "./edit-student-form";
+import { RecordExitModal } from "./record-exit-modal";
 import { deleteStudentAction } from "@/server/actions/student.actions";
 
 export function StudentProfileCard({
@@ -26,6 +27,7 @@ export function StudentProfileCard({
     lastName: string | null;
     fullName: string;
     dateOfBirth: string | Date;
+    admissionDate?: string | Date | null;
     gender: string | null;
     bloodGroup: string | null;
     aadhaar: string | null;
@@ -210,6 +212,14 @@ export function StudentProfileCard({
             </div>
             <div>
               <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
+                Admission Date
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                {student.admissionDate ? formatDate(student.admissionDate) : "—"}
+              </span>
+            </div>
+            <div>
+              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
                 Category / Religion
               </span>
               <span className="text-sm font-medium text-foreground">
@@ -257,8 +267,11 @@ export function StudentProfileCard({
               </span>
             </div>
           </div>
-          {canDelete && (
-            <div className="mt-5 pt-4 border-t flex justify-end">
+          <div className="mt-5 pt-4 border-t flex flex-wrap gap-2 justify-end">
+            {student.status !== "LEFT" && (
+              <RecordExitModal studentId={student.id} studentName={student.fullName} />
+            )}
+            {canDelete && (
               <Button
                 size="sm"
                 variant="outline"
@@ -267,8 +280,8 @@ export function StudentProfileCard({
               >
                 Delete Student
               </Button>
-            </div>
-          )}
+            )}
+          </div>
           </>
         )}
       </CardContent>

@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import type { AppUser } from "@/server/auth/session";
+import type { AppUser } from "../auth/session";
 
 export function requireSchoolId(schoolId: string | null | undefined): string {
   if (!schoolId || schoolId.trim() === "") {

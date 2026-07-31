@@ -96,6 +96,7 @@ export function NewStudentForm({
       declarationAccepted: formState.declarationAccepted,
       declarationDate: formState.declarationDate ? new Date(formState.declarationDate) : null,
       declarationParentName: formState.declarationParentName.trim() || null,
+      admissionDate: formState.admissionDate ? new Date(formState.admissionDate) : new Date(),
       photoUrl: formState.photoUrl || null,
       familyId,
       allowDuplicate,

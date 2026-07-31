@@ -20,6 +20,7 @@ export function EditStudentForm({
     middleName: string | null;
     lastName: string | null;
     dateOfBirth: string | Date;
+    admissionDate?: string | Date | null;
     gender: string | null;
     bloodGroup: string | null;
     aadhaar: string | null;
@@ -42,6 +43,7 @@ export function EditStudentForm({
     middleName: student.middleName ?? "",
     lastName: student.lastName ?? "",
     dateOfBirth: formatDateString(student.dateOfBirth),
+    admissionDate: formatDateString(student.admissionDate ?? new Date()),
     gender: student.gender ?? "",
     bloodGroup: student.bloodGroup ?? "",
     aadhaar: student.aadhaar ?? "",
@@ -63,10 +65,11 @@ export function EditStudentForm({
           middleName: form.middleName.trim() || null,
           lastName: form.lastName.trim() || null,
           dateOfBirth: new Date(form.dateOfBirth),
+          admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
           gender: (form.gender as "MALE" | "FEMALE" | "OTHER") || null,
           bloodGroup: form.bloodGroup.trim() || null,
           aadhaar: form.aadhaar.trim() || null,
-          status: form.status as "ACTIVE" | "INACTIVE" | "TRANSFERRED" | "ALUMNI",
+          status: (form.status === "ALUMNI" || form.status === "TRANSFERRED" || form.status === "INACTIVE" ? "LEFT" : form.status) as "ACTIVE" | "LEFT" | "ARCHIVED",
         };
 
         await updateStudentAction(input);
@@ -108,7 +111,7 @@ export function EditStudentForm({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <div className="space-y-2">
           <Label htmlFor="dateOfBirth">Date of birth</Label>
           <Input
@@ -117,6 +120,15 @@ export function EditStudentForm({
             value={form.dateOfBirth}
             onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
             required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="admissionDate">Admission Date</Label>
+          <Input
+            id="admissionDate"
+            type="date"
+            value={form.admissionDate}
+            onChange={(e) => setForm((f) => ({ ...f, admissionDate: e.target.value }))}
           />
         </div>
         <div className="space-y-2">

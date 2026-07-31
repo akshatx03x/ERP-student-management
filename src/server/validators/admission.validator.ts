@@ -62,6 +62,7 @@ export const createAdmissionSchema = z.object({
   declarationDate: dateSchema.optional().nullable(),
   declarationParentName: z.string().trim().optional().nullable(),
   admissionDate: dateSchema.optional().nullable(),
+  admissionNo: z.string().trim().optional().nullable(),
   photoDocumentId: z.string().trim().optional().nullable(),
   photoUrl: z.string().optional().nullable(),
   allowDuplicate: z.boolean().optional().default(false),
@@ -76,6 +77,7 @@ export const reviewAdmissionSchema = z.object({
   remarks: z.string().trim().optional().nullable(),
   sectionId: idSchema.optional(),
   familyId: idSchema.optional(),
+  admissionNo: z.string().trim().optional().nullable(),
 });
 
 export const listAdmissionsSchema = paginationSchema.extend({

@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { appConfig } from "../../config/app-config";
-import { prisma } from "@/server/lib/prisma";
+import { prisma } from "../lib/prisma";
 
 export interface SaveUploadParams {
   documentId: string;

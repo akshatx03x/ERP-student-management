@@ -135,6 +135,35 @@ export async function updateSession(input: UpdateSessionInput) {
   });
 }
 
+export async function toggleSessionLock(sessionId: string, lock: boolean) {
+  const { user } = await requirePermission("session.update");
+  const schoolId = schoolIdFromUser(user);
+  const session = await getSession(sessionId);
+
+  const newStatus = lock ? SessionStatus.LOCKED : SessionStatus.ACTIVE;
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.academicSession.update({
+      where: { id: sessionId },
+      data: { status: newStatus },
+    });
+    await writeAuditLog(
+      {
+        schoolId,
+        userId: user.id,
+        action: "update",
+        module: "session",
+        entityType: "AcademicSession",
+        entityId: sessionId,
+        oldValue: { status: session.status },
+        newValue: { status: newStatus },
+      },
+      tx
+    );
+    return updated;
+  });
+}
+
 export async function deleteSession(sessionId: string) {
   const { user } = await requirePermission("session.delete");
   const schoolId = schoolIdFromUser(user);

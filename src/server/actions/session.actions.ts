@@ -9,6 +9,7 @@ import {
   archiveSession,
   getCurrentSession,
   promoteStudents,
+  toggleSessionLock,
 } from "@/server/services/session.service";
 import type { CreateSessionInput, PromoteStudentsInput } from "@/server/validators/session.validator";
 
@@ -29,6 +30,13 @@ export async function createSessionAction(input: CreateSessionInput) {
 export async function setCurrentSessionAction(sessionId: string) {
   const result = await setCurrentSession(sessionId);
   revalidatePath("/academics");
+  return result;
+}
+
+export async function toggleSessionLockAction(sessionId: string, lock: boolean) {
+  const result = await toggleSessionLock(sessionId, lock);
+  revalidatePath("/academics");
+  revalidatePath("/promotion");
   return result;
 }
 

@@ -156,6 +156,7 @@ export default async function StudentDetailPage({
               lastName: student.lastName,
               fullName: student.fullName,
               dateOfBirth: student.dateOfBirth,
+              admissionDate: student.admissionDate,
               gender: student.gender,
               bloodGroup: student.bloodGroup,
               aadhaar: student.aadhaar,
@@ -410,45 +411,110 @@ export default async function StudentDetailPage({
         </div>
       </div>
 
-      {/* Section 5: Enrollment History */}
+      {/* Section 5: Student Exit Details (if former student) */}
+      {student.exitInfo && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardHeader className="px-5 py-3 border-b border-destructive/20">
+            <CardTitle className="text-sm font-semibold text-destructive flex items-center justify-between">
+              <span>Student Exit Details</span>
+              <Badge variant="destructive" className="uppercase text-[10px]">
+                {student.exitInfo.reason}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 py-4 text-xs space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <span className="block uppercase text-[10px] font-semibold text-muted-foreground mb-0.5">Leaving Date</span>
+                <span className="font-semibold text-foreground">{formatDate(student.exitInfo.leavingDate)}</span>
+              </div>
+              <div>
+                <span className="block uppercase text-[10px] font-semibold text-muted-foreground mb-0.5">TC Number</span>
+                <span className="font-mono font-semibold text-foreground">{student.exitInfo.tcNumber || "—"}</span>
+              </div>
+              <div>
+                <span className="block uppercase text-[10px] font-semibold text-muted-foreground mb-0.5">TC Date</span>
+                <span className="font-semibold text-foreground">{student.exitInfo.tcDate ? formatDate(student.exitInfo.tcDate) : "—"}</span>
+              </div>
+              <div>
+                <span className="block uppercase text-[10px] font-semibold text-muted-foreground mb-0.5">Recorded By</span>
+                <span className="font-semibold text-foreground">{student.exitInfo.createdBy?.name || "—"}</span>
+              </div>
+            </div>
+            {student.exitInfo.remarks && (
+              <div className="pt-2 border-t border-destructive/10">
+                <span className="block uppercase text-[10px] font-semibold text-muted-foreground mb-0.5">Remarks</span>
+                <p className="text-foreground">{student.exitInfo.remarks}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Section 6: Chronological Academic Timeline */}
       <Card className="border-border">
-        <CardHeader className="px-5 py-3 border-b">
-          <CardTitle className="text-sm font-semibold">Enrollment History</CardTitle>
+        <CardHeader className="px-5 py-3 border-b flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-semibold">Academic Lifecycle Timeline</CardTitle>
+          <span className="text-xs text-muted-foreground font-medium">Session-by-Session Progression</span>
         </CardHeader>
-        <CardContent className="px-5 py-4">
+        <CardContent className="px-5 py-5">
           {student.enrollments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No enrollments recorded.</p>
+            <p className="text-sm text-muted-foreground">No enrollment history recorded.</p>
           ) : (
-            <div className="overflow-hidden rounded border">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/40 border-b text-xs uppercase font-semibold text-muted-foreground">
-                  <tr>
-                    <th className="py-2.5 pl-4 pr-3">Session</th>
-                    <th className="py-2.5 px-3">Class</th>
-                    <th className="py-2.5 px-3">Section</th>
-                    <th className="py-2.5 px-3">Roll No</th>
-                    <th className="py-2.5 pl-3 pr-4 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {student.enrollments.map((e) => (
-                    <tr key={e.id} className="border-b last:border-0 hover:bg-muted/10">
-                      <td className="py-2.5 pl-4 pr-3 font-semibold text-foreground">{e.session.name}</td>
-                      <td className="py-2.5 px-3">{e.class.name}</td>
-                      <td className="py-2.5 px-3">{e.section.name}</td>
-                      <td className="py-2.5 px-3">{e.rollNo || "—"}</td>
-                      <td className="py-2.5 pl-3 pr-4 text-right">
-                        <Badge
-                          variant={e.status === "ACTIVE" ? "success" : "outline"}
-                          className="h-5 px-2 text-[10px] font-semibold"
-                        >
-                          {e.status === "ACTIVE" ? "Current" : e.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-6">
+              {/* Visual Step-by-Step Flow */}
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-muted-foreground/20">
+                {[...student.enrollments].reverse().map((e, index, arr) => {
+                  const isLatest = index === arr.length - 1;
+                  return (
+                    <div key={e.id} className="relative flex items-start gap-4">
+                      {/* Timeline Node Dot */}
+                      <div
+                        className={`absolute -left-6 top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[10px] font-bold ${
+                          isLatest && e.status === "ACTIVE"
+                            ? "border-emerald-600 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                            : "border-muted-foreground/40 bg-background text-muted-foreground"
+                        }`}
+                      >
+                        {index + 1}
+                      </div>
+
+                      <div className="flex-1 rounded-lg border bg-card p-3 shadow-2xs space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-foreground">
+                            {e.session.name}
+                          </span>
+                          <Badge
+                            variant={
+                              e.status === "ACTIVE"
+                                ? "success"
+                                : e.status === "PROMOTED"
+                                  ? "secondary"
+                                  : e.status === "RETAINED"
+                                    ? "warning"
+                                    : "outline"
+                            }
+                            className="text-[10px] h-5 px-2 font-semibold"
+                          >
+                            {e.status === "ACTIVE" ? "ACTIVE (Current)" : e.status}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>
+                            Class: <strong className="text-foreground font-semibold">{e.class.name}&#8209;{e.section.name}</strong>
+                          </span>
+                          <span>
+                            Roll No: <strong className="text-foreground font-semibold">{e.rollNo || "—"}</strong>
+                          </span>
+                          <span>
+                            House: <strong className="text-foreground font-semibold">{e.house || "—"}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>

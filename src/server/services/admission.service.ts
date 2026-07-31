@@ -202,6 +202,7 @@ export async function createAdmission(input: CreateAdmissionInput) {
         declarationDate: data.declarationDate,
         declarationParentName: data.declarationParentName,
         admissionDate: data.admissionDate ?? new Date(),
+        admissionNo: data.admissionNo ?? null,
         photoDocumentId: data.photoDocumentId,
         photoUrl: data.photoUrl,
 
@@ -291,12 +292,23 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
     throw new Error(`Student "${fullName}" is already enrolled in the school (Admission No: ${existingStudent.admissionNo}). Cannot approve duplicate admission.`);
   }
 
+  const admissionNo = data.admissionNo?.trim() || admission.admissionNo?.trim();
+  if (!admissionNo) {
+    throw new Error("Admission number is required for approval");
+  }
+
+  const existingDupNo = await prisma.student.findUnique({
+    where: { schoolId_admissionNo: { schoolId, admissionNo } },
+  });
+  if (existingDupNo) {
+    throw new Error(`Admission number "${admissionNo}" is already assigned to another student`);
+  }
+
   // Compute password hash outside transaction (CPU-bound bcrypt)
   const tempPassword = studentDobPassword(admission.dateOfBirth);
   const hashed = await hashPassword(tempPassword);
 
   return prisma.$transaction(async (tx) => {
-    const admissionNo = await generateAdmissionNoInTx(tx, schoolId);
     const email = studentSyntheticEmail(admissionNo);
 
     let familyId = data.familyId ?? admission.familyId;
