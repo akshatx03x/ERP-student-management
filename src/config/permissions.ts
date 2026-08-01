@@ -153,6 +153,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { title: "Academic Sessions", href: "/academics", resource: "session", icon: "BookOpen" },
       { title: "Student Promotion", href: "/promotion", resource: "session", icon: "TrendingUp" },
       { title: "Attendance", href: "/attendance", resource: "attendance", icon: "CalendarCheck" },
+      { title: "Results & Exams", href: "/results", resource: "result", icon: "NotebookPen" },
     ],
   },
   {

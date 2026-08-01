@@ -17,7 +17,29 @@ import {
   ClasswisePendingListFilters,
   getClassWiseFeeStatusReport,
   ClassWiseFeeStatusFilters,
+  // New hub report functions
+  getReceiptRegister,
+  getCashBook,
+  getDiscountRegister,
+  getRefundRegister,
+  getWalletRegister,
+  getWalletDetail,
+  ReceiptRegisterFilters,
+  CashBookFilters,
+  DiscountRegisterFilters,
+  RefundRegisterFilters,
+  WalletRegisterFilters,
 } from "@/server/services/financial-reports.service";
+import {
+  addCashBookEntry,
+  voidCashBookEntry,
+  listCashBookEntries,
+  AddCashBookEntryInput,
+  VoidCashBookEntryInput,
+  ListCashBookEntriesInput,
+} from "@/server/services/cash-book.service";
+
+// ── Existing actions (unchanged) ──────────────────────────────────────────────
 
 export async function getCollectionReportAction(filters?: CollectionReportFilter) {
   return getCollectionReport(filters);
@@ -67,3 +89,42 @@ export async function getClassWiseFeeStatusReportAction(filters: ClassWiseFeeSta
   return getClassWiseFeeStatusReport(filters);
 }
 
+// ── Finance Reports Hub actions ───────────────────────────────────────────────
+
+export async function getReceiptRegisterAction(filters?: ReceiptRegisterFilters) {
+  return getReceiptRegister(filters);
+}
+
+export async function getCashBookAction(filters?: CashBookFilters) {
+  return getCashBook(filters);
+}
+
+export async function getDiscountRegisterAction(filters?: DiscountRegisterFilters) {
+  return getDiscountRegister(filters);
+}
+
+export async function getRefundRegisterAction(filters?: RefundRegisterFilters) {
+  return getRefundRegister(filters);
+}
+
+export async function getWalletRegisterAction(filters?: WalletRegisterFilters) {
+  return getWalletRegister(filters);
+}
+
+export async function getWalletDetailAction(familyId: string) {
+  return getWalletDetail(familyId);
+}
+
+// ── Cash Book manual entry actions ────────────────────────────────────────────
+
+export async function addCashBookEntryAction(input: AddCashBookEntryInput) {
+  return addCashBookEntry(input);
+}
+
+export async function voidCashBookEntryAction(input: VoidCashBookEntryInput) {
+  return voidCashBookEntry(input);
+}
+
+export async function listCashBookEntriesAction(input?: ListCashBookEntriesInput) {
+  return listCashBookEntries(input);
+}

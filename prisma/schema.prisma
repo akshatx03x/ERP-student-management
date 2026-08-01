@@ -32,6 +32,7 @@ model School {
   students             Student[]
   subjects             Subject[]
   users                User[]
+  cashBookEntries      CashBookEntry[]
 }
 
 model SchoolBranding {
@@ -87,6 +88,9 @@ model User {
   sessions                    Session[]
   studentExitsCreated         StudentExit[]          @relation("ExitRecordCreator")
   finesWaived                 StudentFeeFine[]       @relation("FineWaiver")
+  cashBookEntriesRecorded     CashBookEntry[]        @relation("CashBookRecorder")
+  cashBookEntriesVoided       CashBookEntry[]        @relation("CashBookVoider")
+  resultsEdited               ResultChangeLog[]      @relation("ResultEditor")
   student                     Student?               @relation(fields: [studentId], references: [id], onDelete: Cascade)
   staffProfile                StaffProfile?          @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
   school                      School?                @relation(fields: [schoolId], references: [id])
@@ -231,6 +235,7 @@ model AcademicSession {
   enrollments             StudentEnrollment[]
   studentFees             StudentFee[]
   timetableSlots          TimetableSlot[]
+  termResults             StudentTermResult[]
 
   @@unique([schoolId, name])
   @@index([schoolId, isCurrent])
@@ -281,6 +286,8 @@ model Subject {
   schoolId       String
   name           String
   code           String
+  subjectType    SubjectType     @default(SCHOLASTIC)
+  displayOrder   Int             @default(0)
   classSubjects  ClassSubject[]
   examSubjects   ExamSubject[]
   homework       Homework[]
@@ -298,9 +305,10 @@ model ClassSubject {
   sessionId String
   classId   String
   subjectId String
-  subject   Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  session   AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  class     Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  isOptional Boolean         @default(false)
+  subject    Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  session    AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  class      Class           @relation(fields: [classId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, classId, subjectId])
 }
@@ -461,6 +469,7 @@ model Student {
   guardians            StudentGuardian[]
   medical              StudentMedical?
   user                 User?
+  termResults          StudentTermResult[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, fullName])
@@ -768,11 +777,17 @@ model Exam {
   name        String
   startDate   DateTime?
   endDate     DateTime?
-  session     AcademicSession @relation(fields: [sessionId], references: [id])
-  examType    ExamType        @relation(fields: [examTypeId], references: [id])
-  class       Class           @relation(fields: [classId], references: [id])
-  subjects    ExamSubject[]
-  reportCards ReportCard[]
+  term             Int               @default(1)
+  displayOrder     Int               @default(0)
+  maxMarks         Decimal?
+  passMarks        Decimal?
+  publishStatus    ExamPublishStatus @default(DRAFT)
+  visibilityStatus Boolean           @default(true)
+  session          AcademicSession   @relation(fields: [sessionId], references: [id])
+  examType         ExamType          @relation(fields: [examTypeId], references: [id])
+  class            Class             @relation(fields: [classId], references: [id])
+  subjects         ExamSubject[]
+  reportCards      ReportCard[]
 
   @@index([sessionId, classId])
 }
@@ -1455,4 +1470,100 @@ enum GuardianRelationship {
   AUNT
   LEGAL_GUARDIAN
   OTHER
+}
+
+model CashBookEntry {
+  id           String            @id @default(cuid())
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  schoolId     String
+  date         DateTime          @default(now())
+  entryType    CashBookEntryType
+  amount       Decimal
+  description  String
+  remarks      String?
+  voucherNo    String?
+  recordedById String?
+  // Void / Cancel tracking — entries are NEVER deleted
+  isVoided     Boolean           @default(false)
+  voidedAt     DateTime?
+  voidedById   String?
+  voidReason   String?
+  school       School            @relation(fields: [schoolId], references: [id])
+  recordedBy   User?             @relation("CashBookRecorder", fields: [recordedById], references: [id])
+  voidedBy     User?             @relation("CashBookVoider", fields: [voidedById], references: [id])
+
+  @@index([schoolId, date])
+  @@index([schoolId, entryType])
+  @@index([schoolId, isVoided])
+}
+
+enum CashBookEntryType {
+  MISC_INCOME
+  MISC_EXPENSE
+  PETTY_CASH
+  ELECTRICITY_BILL
+  STATIONERY
+  MAINTENANCE
+  SALARY_ADVANCE
+  OTHER_EXPENSE
+  OTHER_INCOME
+}
+
+model StudentTermResult {
+  id               String            @id @default(cuid())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  studentId        String
+  sessionId        String
+  status           ResultStatus      @default(DRAFT)
+  workingDays      Int?
+  presentDays      Int?
+  remarksMid       String?
+  remarksFinal     String?
+  resultOutcome    ResultOutcome?
+  principalRemarks String?
+  
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session          AcademicSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  logs             ResultChangeLog[]
+
+  @@unique([studentId, sessionId])
+}
+
+model ResultChangeLog {
+  id          String            @id @default(cuid())
+  createdAt   DateTime          @default(now())
+  resultId    String
+  editedById  String
+  reason      String
+  changes     Json
+  
+  result      StudentTermResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  editedBy    User              @relation("ResultEditor", fields: [editedById], references: [id])
+}
+
+enum SubjectType {
+  SCHOLASTIC
+  CO_SCHOLASTIC
+}
+
+enum ExamPublishStatus {
+  DRAFT
+  PUBLISHED
+  LOCKED
+}
+
+enum ResultStatus {
+  DRAFT
+  COMPLETED
+  PUBLISHED
+  LOCKED
+}
+
+enum ResultOutcome {
+  PASS
+  FAIL
+  PROMOTED_WITH_GRACE
+  WITHHELD
 }

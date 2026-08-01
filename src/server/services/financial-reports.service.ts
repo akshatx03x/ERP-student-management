@@ -1,7 +1,7 @@
 import { Prisma, Role, StudentFeeStatus } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
-import { decimalToNumber, schoolIdFromUser, sumDecimals } from "@/server/lib/helpers";
+import { decimalToNumber, parsePagination, schoolIdFromUser, sumDecimals } from "@/server/lib/helpers";
 
 // ── Types & Interfaces ────────────────────────────────────────────────────────
 export interface CollectionReportFilter {
@@ -1679,3 +1679,736 @@ export async function getClassWiseFeeStatusReport(filters: ClassWiseFeeStatusFil
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FINANCE REPORTS HUB — NEW REPORT FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Shared universal search filter builder ────────────────────────────────────
+function buildUniversalStudentSearch(q: string) {
+  return {
+    OR: [
+      { fullName: { contains: q } },
+      { admissionNo: { contains: q } },
+      { srNo: { contains: q } },
+      { family: { fatherName: { contains: q } } },
+      { family: { motherName: { contains: q } } },
+      { family: { primaryPhone: { contains: q } } },
+      { family: { secondaryPhone: { contains: q } } },
+    ],
+  };
+}
+
+function buildUniversalFamilySearch(q: string) {
+  return {
+    OR: [
+      { fatherName: { contains: q } },
+      { motherName: { contains: q } },
+      { primaryPhone: { contains: q } },
+      { secondaryPhone: { contains: q } },
+      { students: { some: { fullName: { contains: q } } } },
+      { students: { some: { admissionNo: { contains: q } } } },
+      { students: { some: { srNo: { contains: q } } } },
+    ],
+  };
+}
+
+// ── RECEIPT REGISTER FILTERS ──────────────────────────────────────────────────
+export interface ReceiptRegisterFilters {
+  page?: number;
+  pageSize?: number;
+  sessionId?: string;
+  classId?: string;
+  sectionId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  paymentMethod?: string;
+  receiptNo?: string;
+  search?: string;
+}
+
+// ── 1. RECEIPT REGISTER ───────────────────────────────────────────────────────
+export async function getReceiptRegister(filters: ReceiptRegisterFilters = {}) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+  const { skip, take, page, pageSize } = parsePagination(filters.page, filters.pageSize ?? 20);
+
+  const paymentWhere: Prisma.FamilyPaymentWhereInput = {
+    family: {
+      schoolId,
+      ...(filters.search ? buildUniversalFamilySearch(filters.search.trim()) : {}),
+    },
+    ...(filters.startDate || filters.endDate
+      ? {
+          paidAt: {
+            ...(filters.startDate ? { gte: filters.startDate } : {}),
+            ...(filters.endDate ? { lte: filters.endDate } : {}),
+          },
+        }
+      : {}),
+    ...(filters.paymentMethod ? { method: filters.paymentMethod as any } : {}),
+    ...(filters.receiptNo ? { receiptNo: { contains: filters.receiptNo.trim() } } : {}),
+    // Class/section filter via allocations → studentFee → student → enrollments
+    ...(filters.classId || filters.sectionId || filters.sessionId
+      ? {
+          allocations: {
+            some: {
+              studentFee: {
+                ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                student: {
+                  enrollments: {
+                    some: {
+                      ...(filters.classId ? { classId: filters.classId } : {}),
+                      ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }
+      : {}),
+  };
+
+  const [payments, total] = await Promise.all([
+    prisma.familyPayment.findMany({
+      where: paymentWhere,
+      orderBy: { paidAt: "desc" },
+      skip,
+      take,
+      include: {
+        recordedBy: { select: { id: true, name: true } },
+        family: {
+          select: {
+            id: true,
+            fatherName: true,
+            motherName: true,
+            primaryPhone: true,
+          },
+        },
+        allocations: {
+          include: {
+            student: { select: { id: true, fullName: true, admissionNo: true } },
+            studentFee: {
+              include: {
+                feeHead: { select: { name: true } },
+                student: {
+                  select: {
+                    fullName: true,
+                    admissionNo: true,
+                    enrollments: {
+                      orderBy: { createdAt: "desc" },
+                      take: 1,
+                      include: { class: { select: { name: true } }, section: { select: { name: true } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.familyPayment.count({ where: paymentWhere }),
+  ]);
+
+  const items = payments.map((p) => {
+    // Derive "status" from whether all allocated fees are paid
+    const allPaid = p.allocations.every((a) => {
+      if (!a.studentFee) return true;
+      return a.studentFee.status === "PAID";
+    });
+
+    // Collect unique students from allocations
+    const studentsMap = new Map<string, { id: string; name: string; admissionNo: string; classSection: string }>();
+    p.allocations.forEach((a) => {
+      const s = a.studentFee?.student ?? a.student;
+      if (s && !studentsMap.has(s.fullName)) {
+        const enrollment = a.studentFee?.student?.enrollments?.[0];
+        studentsMap.set(s.fullName, {
+          id: a.studentId,
+          name: s.fullName,
+          admissionNo: s.admissionNo,
+          classSection: enrollment ? `${enrollment.class.name}-${enrollment.section.name}` : "—",
+        });
+      }
+    });
+
+    const students = Array.from(studentsMap.values());
+
+    return {
+      id: p.id,
+      receiptNo: p.receiptNo,
+      paidAt: p.paidAt,
+      amount: decimalToNumber(p.amount),
+      method: p.method as string,
+      referenceNo: p.referenceNo,
+      notes: p.notes,
+      status: allPaid ? "SETTLED" : "PARTIAL",
+      recordedBy: p.recordedBy,
+      family: p.family,
+      students,
+      allocationCount: p.allocations.length,
+    };
+  });
+
+  return { items, total, page, pageSize };
+}
+
+// ── CASH BOOK FILTERS ─────────────────────────────────────────────────────────
+export interface CashBookFilters {
+  page?: number;
+  pageSize?: number;
+  startDate?: Date;
+  endDate?: Date;
+}
+
+// ── 2. CASH BOOK (DAY BOOK) ───────────────────────────────────────────────────
+export async function getCashBook(filters: CashBookFilters = {}) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+  const { skip, take, page, pageSize } = parsePagination(filters.page, filters.pageSize ?? 20);
+
+  // Default to today if no dates given
+  const now = new Date();
+  const startDate = filters.startDate ?? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const endDate = filters.endDate ?? new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  // ── Compute Opening Balance ───────────────────────────────────────────────
+  // Opening = sum of all credits − debits BEFORE startDate
+  const [priorPayments, priorAdvanceTx, priorCashBook] = await Promise.all([
+    prisma.familyPayment.aggregate({
+      where: { family: { schoolId }, paidAt: { lt: startDate } },
+      _sum: { amount: true },
+    }),
+    prisma.advanceTransaction.findMany({
+      where: { family: { schoolId }, createdAt: { lt: startDate } },
+      select: { type: true, amount: true },
+    }),
+    prisma.cashBookEntry.aggregate({
+      where: { schoolId, date: { lt: startDate }, isVoided: false },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  // All fee payments are credits; advance tx varies; cash book entries vary
+  let openingBalance = decimalToNumber(priorPayments._sum.amount ?? 0);
+  priorAdvanceTx.forEach((tx) => {
+    const amt = decimalToNumber(tx.amount);
+    if (tx.type === "CREDIT_FROM_PAYMENT" || tx.type === "CREDIT_NOTE_ADJUSTMENT") {
+      // wallet top-ups are internal, not cash-in, skip
+    } else if (tx.type === "MANUAL_REFUND") {
+      openingBalance -= amt; // cash refund is an outflow
+    }
+  });
+  // CashBook entries — income types add, expense types subtract
+  // We'll handle this in the summary computation
+
+  // ── Fetch transactions for the selected period ──────────────────────────
+  const [feePayments, advanceTx, cashEntries] = await Promise.all([
+    prisma.familyPayment.findMany({
+      where: { family: { schoolId }, paidAt: { gte: startDate, lte: endDate } },
+      orderBy: { paidAt: "asc" },
+      include: {
+        recordedBy: { select: { name: true } },
+        family: { select: { fatherName: true } },
+        allocations: {
+          take: 1,
+          include: { student: { select: { fullName: true } } },
+        },
+      },
+    }),
+    prisma.advanceTransaction.findMany({
+      where: {
+        family: { schoolId },
+        createdAt: { gte: startDate, lte: endDate },
+        type: { in: ["MANUAL_REFUND", "CREDIT_FROM_PAYMENT"] },
+      },
+      orderBy: { createdAt: "asc" },
+      include: {
+        recordedBy: { select: { name: true } },
+        family: { select: { fatherName: true } },
+        targetStudent: { select: { fullName: true } },
+      },
+    }),
+    prisma.cashBookEntry.findMany({
+      where: { schoolId, date: { gte: startDate, lte: endDate }, isVoided: false },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      include: {
+        recordedBy: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  // ── Build unified rows ──────────────────────────────────────────────────
+  type DayBookRow = {
+    id: string;
+    date: Date;
+    voucherNo: string | null;
+    transactionType: string;
+    description: string;
+    remarks: string | null;
+    credit: number;
+    debit: number;
+    recordedBy: string | null;
+    sourceType: "FEE_PAYMENT" | "WALLET_TX" | "CASH_BOOK";
+  };
+
+  const rows: DayBookRow[] = [];
+
+  feePayments.forEach((p) => {
+    const studentName = p.allocations[0]?.student?.fullName ?? p.family?.fatherName ?? "—";
+    rows.push({
+      id: p.id,
+      date: p.paidAt,
+      voucherNo: p.receiptNo,
+      transactionType: "Fee Collection",
+      description: `Fee received — ${studentName}`,
+      remarks: p.notes,
+      credit: decimalToNumber(p.amount),
+      debit: 0,
+      recordedBy: p.recordedBy?.name ?? null,
+      sourceType: "FEE_PAYMENT",
+    });
+  });
+
+  advanceTx.forEach((tx) => {
+    const isCredit = tx.type === "CREDIT_FROM_PAYMENT";
+    rows.push({
+      id: tx.id,
+      date: tx.createdAt,
+      voucherNo: null,
+      transactionType: isCredit ? "Wallet Deposit" : "Refund",
+      description: tx.reason,
+      remarks: tx.remarks,
+      credit: isCredit ? decimalToNumber(tx.amount) : 0,
+      debit: isCredit ? 0 : decimalToNumber(tx.amount),
+      recordedBy: tx.recordedBy?.name ?? null,
+      sourceType: "WALLET_TX",
+    });
+  });
+
+  cashEntries.forEach((e) => {
+    const isIncome = e.entryType === "MISC_INCOME" || e.entryType === "OTHER_INCOME";
+    rows.push({
+      id: e.id,
+      date: e.date,
+      voucherNo: e.voucherNo,
+      transactionType: e.entryType.replace(/_/g, " "),
+      description: e.description,
+      remarks: e.remarks,
+      credit: isIncome ? decimalToNumber(e.amount) : 0,
+      debit: isIncome ? 0 : decimalToNumber(e.amount),
+      recordedBy: e.recordedBy?.name ?? null,
+      sourceType: "CASH_BOOK",
+    });
+  });
+
+  // Sort all rows chronologically
+  rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Compute summary
+  let totalFeeCollection = 0;
+  let totalWalletDeposit = 0;
+  let totalRefunds = 0;
+  let totalMiscIncome = 0;
+  let totalMiscExpense = 0;
+
+  rows.forEach((r) => {
+    if (r.sourceType === "FEE_PAYMENT") totalFeeCollection += r.credit;
+    else if (r.sourceType === "WALLET_TX") {
+      if (r.credit > 0) totalWalletDeposit += r.credit;
+      else totalRefunds += r.debit;
+    } else {
+      totalMiscIncome += r.credit;
+      totalMiscExpense += r.debit;
+    }
+  });
+
+  const totalCredits = totalFeeCollection + totalWalletDeposit + totalMiscIncome;
+  const totalDebits = totalRefunds + totalMiscExpense;
+  const closingBalance = openingBalance + totalCredits - totalDebits;
+
+  // Paginate rows
+  const total = rows.length;
+  const paginatedRows = rows.slice(skip, skip + take);
+
+  return {
+    items: paginatedRows,
+    total,
+    page,
+    pageSize,
+    summary: {
+      openingBalance,
+      totalFeeCollection,
+      totalWalletDeposit,
+      totalMiscIncome,
+      totalMiscExpense,
+      totalRefunds,
+      closingBalance,
+    },
+  };
+}
+
+// ── DISCOUNT REGISTER FILTERS ─────────────────────────────────────────────────
+export interface DiscountRegisterFilters {
+  page?: number;
+  pageSize?: number;
+  sessionId?: string;
+  classId?: string;
+  sectionId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+}
+
+// ── 3. DISCOUNT REGISTER ─────────────────────────────────────────────────────
+export async function getDiscountRegister(filters: DiscountRegisterFilters = {}) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+  const { skip, take, page, pageSize } = parsePagination(filters.page, filters.pageSize ?? 20);
+
+  const where: Prisma.FeeDiscountWhereInput = {
+    schoolId,
+    ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+    ...(filters.startDate || filters.endDate
+      ? {
+          createdAt: {
+            ...(filters.startDate ? { gte: filters.startDate } : {}),
+            ...(filters.endDate ? { lte: filters.endDate } : {}),
+          },
+        }
+      : {}),
+    ...(filters.search
+      ? {
+          student: buildUniversalStudentSearch(filters.search.trim()),
+        }
+      : {}),
+    ...(filters.classId || filters.sectionId
+      ? {
+          student: {
+            enrollments: {
+              some: {
+                ...(filters.classId ? { classId: filters.classId } : {}),
+                ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+              },
+            },
+          },
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.feeDiscount.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+      include: {
+        student: {
+          select: {
+            id: true,
+            fullName: true,
+            admissionNo: true,
+            srNo: true,
+            enrollments: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              include: {
+                class: { select: { name: true } },
+                section: { select: { name: true } },
+              },
+            },
+          },
+        },
+        feeHead: { select: { name: true } },
+        approvedBy: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.feeDiscount.count({ where }),
+  ]);
+
+  return {
+    items: items.map((d) => ({
+      id: d.id,
+      createdAt: d.createdAt,
+      studentName: d.student?.fullName ?? "—",
+      admissionNo: d.student?.admissionNo ?? "—",
+      srNo: d.student?.srNo ?? null,
+      classSection: d.student?.enrollments?.[0]
+        ? `${d.student.enrollments[0].class.name}-${d.student.enrollments[0].section.name}`
+        : "—",
+      feeHeadName: d.feeHead?.name ?? "All Heads",
+      discountType: d.discountType,
+      value: decimalToNumber(d.value),
+      category: d.category,
+      reason: d.reason,
+      status: d.status,
+      approvedBy: d.approvedBy?.name ?? "System",
+    })),
+    total,
+    page,
+    pageSize,
+  };
+}
+
+// ── REFUND REGISTER FILTERS ───────────────────────────────────────────────────
+export interface RefundRegisterFilters {
+  page?: number;
+  pageSize?: number;
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+}
+
+// ── 4. REFUND REGISTER ────────────────────────────────────────────────────────
+/**
+ * Source of truth: AdvanceTransaction WHERE type = MANUAL_REFUND
+ * These are cash refunds from wallet balance back to the parent.
+ */
+export async function getRefundRegister(filters: RefundRegisterFilters = {}) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+  const { skip, take, page, pageSize } = parsePagination(filters.page, filters.pageSize ?? 20);
+
+  const where: Prisma.AdvanceTransactionWhereInput = {
+    family: {
+      schoolId,
+      ...(filters.search ? buildUniversalFamilySearch(filters.search.trim()) : {}),
+    },
+    type: "MANUAL_REFUND",
+    ...(filters.startDate || filters.endDate
+      ? {
+          createdAt: {
+            ...(filters.startDate ? { gte: filters.startDate } : {}),
+            ...(filters.endDate ? { lte: filters.endDate } : {}),
+          },
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.advanceTransaction.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+      include: {
+        family: {
+          select: {
+            id: true,
+            fatherName: true,
+            motherName: true,
+            primaryPhone: true,
+            students: {
+              select: {
+                id: true,
+                fullName: true,
+                admissionNo: true,
+                enrollments: {
+                  orderBy: { createdAt: "desc" },
+                  take: 1,
+                  include: {
+                    class: { select: { name: true } },
+                    section: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        recordedBy: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.advanceTransaction.count({ where }),
+  ]);
+
+  return {
+    items: items.map((tx) => ({
+      id: tx.id,
+      createdAt: tx.createdAt,
+      fatherName: tx.family?.fatherName ?? "—",
+      motherName: tx.family?.motherName ?? null,
+      phone: tx.family?.primaryPhone ?? null,
+      students: tx.family?.students?.map((s) => ({
+        id: s.id,
+        fullName: s.fullName,
+        admissionNo: s.admissionNo,
+        classSection: s.enrollments?.[0]
+          ? `${s.enrollments[0].class.name}-${s.enrollments[0].section.name}`
+          : "—",
+      })) ?? [],
+      refundAmount: decimalToNumber(tx.amount),
+      walletBefore: decimalToNumber(tx.balanceBefore),
+      walletAfter: decimalToNumber(tx.balanceAfter),
+      reason: tx.reason,
+      remarks: tx.remarks,
+      processedBy: tx.recordedBy?.name ?? "System",
+    })),
+    total,
+    page,
+    pageSize,
+  };
+}
+
+// ── WALLET REGISTER FILTERS ───────────────────────────────────────────────────
+export interface WalletRegisterFilters {
+  page?: number;
+  pageSize?: number;
+  sessionId?: string;
+  classId?: string;
+  sectionId?: string;
+  search?: string;
+}
+
+// ── 5. WALLET REGISTER ────────────────────────────────────────────────────────
+/**
+ * Family-wise wallet summary. Top level: one row per family.
+ * Expanded detail (loaded via familyId): full AdvanceTransaction history
+ * with fee head info via targetStudentFeeId → StudentFee → FeeHead.
+ */
+export async function getWalletRegister(filters: WalletRegisterFilters = {}) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+  const { skip, take, page, pageSize } = parsePagination(filters.page, filters.pageSize ?? 20);
+
+  const familyWhere: Prisma.FamilyWhereInput = {
+    schoolId,
+    advanceWallet: { isNot: null },
+    ...(filters.search ? buildUniversalFamilySearch(filters.search.trim()) : {}),
+    ...(filters.sessionId || filters.classId || filters.sectionId
+      ? {
+          students: {
+            some: {
+              enrollments: {
+                some: {
+                  ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                  ...(filters.classId ? { classId: filters.classId } : {}),
+                  ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+                },
+              },
+            },
+          },
+        }
+      : {}),
+  };
+
+  const [families, total] = await Promise.all([
+    prisma.family.findMany({
+      where: familyWhere,
+      orderBy: { fatherName: "asc" },
+      skip,
+      take,
+      include: {
+        advanceWallet: { select: { id: true, balance: true } },
+        students: {
+          select: {
+            id: true,
+            fullName: true,
+            admissionNo: true,
+            srNo: true,
+            enrollments: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              include: {
+                class: { select: { name: true } },
+                section: { select: { name: true } },
+              },
+            },
+          },
+        },
+        advanceTransactions: {
+          select: {
+            type: true,
+            amount: true,
+          },
+        },
+      },
+    }),
+    prisma.family.count({ where: familyWhere }),
+  ]);
+
+  const items = families.map((f) => {
+    let totalDeposited = 0;
+    let totalUtilized = 0;
+    let totalRefunded = 0;
+
+    f.advanceTransactions.forEach((tx) => {
+      const amt = decimalToNumber(tx.amount);
+      if (tx.type === "CREDIT_FROM_PAYMENT" || tx.type === "CREDIT_NOTE_ADJUSTMENT") {
+        totalDeposited += amt;
+      } else if (tx.type === "DEBIT_FEE_SETTLEMENT") {
+        totalUtilized += amt;
+      } else if (tx.type === "MANUAL_REFUND") {
+        totalRefunded += amt;
+      }
+    });
+
+    return {
+      familyId: f.id,
+      fatherName: f.fatherName ?? "—",
+      motherName: f.motherName ?? null,
+      primaryPhone: f.primaryPhone ?? null,
+      walletBalance: f.advanceWallet ? decimalToNumber(f.advanceWallet.balance) : 0,
+      totalDeposited,
+      totalUtilized,
+      totalRefunded,
+      children: f.students.map((s) => ({
+        id: s.id,
+        fullName: s.fullName,
+        admissionNo: s.admissionNo,
+        srNo: s.srNo,
+        classSection: s.enrollments?.[0]
+          ? `${s.enrollments[0].class.name}-${s.enrollments[0].section.name}`
+          : "—",
+      })),
+    };
+  });
+
+  return { items, total, page, pageSize };
+}
+
+// ── WALLET DETAIL (for expanded row) ─────────────────────────────────────────
+export async function getWalletDetail(familyId: string) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+
+  const family = await prisma.family.findFirst({
+    where: { id: familyId, schoolId },
+    select: { id: true, fatherName: true },
+  });
+  if (!family) throw new Error("Family not found");
+
+  const transactions = await prisma.advanceTransaction.findMany({
+    where: { familyId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      recordedBy: { select: { name: true } },
+      targetStudent: { select: { fullName: true, admissionNo: true } },
+      targetStudentFee: {
+        include: {
+          feeHead: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  return {
+    familyId,
+    fatherName: family.fatherName,
+    transactions: transactions.map((tx) => ({
+      id: tx.id,
+      createdAt: tx.createdAt,
+      type: tx.type,
+      amount: decimalToNumber(tx.amount),
+      balanceBefore: decimalToNumber(tx.balanceBefore),
+      balanceAfter: decimalToNumber(tx.balanceAfter),
+      reason: tx.reason,
+      remarks: tx.remarks,
+      recordedBy: tx.recordedBy?.name ?? "System",
+      targetStudent: tx.targetStudent
+        ? { fullName: tx.targetStudent.fullName, admissionNo: tx.targetStudent.admissionNo }
+        : null,
+      feeHead: tx.targetStudentFee?.feeHead?.name ?? null,
+    })),
+  };
+}

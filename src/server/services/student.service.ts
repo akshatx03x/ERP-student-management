@@ -4,7 +4,7 @@ import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
 import { attachFeeStructureInTx } from "@/server/services/fee.service";
-import { buildFullName, parsePagination, schoolIdFromUser } from "@/server/lib/helpers";
+import { buildFullName, decimalToNumber, parsePagination, schoolIdFromUser } from "@/server/lib/helpers";
 import {
   studentDobPassword,
   studentSyntheticEmail,
@@ -346,7 +346,17 @@ export async function getStudent(studentId: string) {
     orderBy: { fullName: "asc" },
   });
 
-  return { ...student, siblings };
+  const serializedSiblings = siblings.map((sibling) => ({
+    ...sibling,
+    studentFees: sibling.studentFees.map((fee) => ({
+      amount: decimalToNumber(fee.amount),
+      allocations: fee.allocations.map((alloc) => ({
+        amount: decimalToNumber(alloc.amount),
+      })),
+    })),
+  }));
+
+  return { ...student, siblings: serializedSiblings };
 }
 
 export async function createStudent(input: CreateStudentInput) {

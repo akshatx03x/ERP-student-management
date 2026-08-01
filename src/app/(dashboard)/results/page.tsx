@@ -1,13 +1,14 @@
 import { requirePermission } from "@/server/permissions/guard";
 import { prisma } from "@/server/lib/prisma";
 import { schoolIdFromUser } from "@/server/lib/helpers";
-import { ReportsClient } from "./reports-client";
+import { ResultsClient } from "./results-client";
 
-export default async function ReportsHubPage() {
-  const { user } = await requirePermission("fee.view");
+export default async function ResultsPage() {
+  const { user } = await requirePermission("result.view");
   const schoolId = schoolIdFromUser(user);
 
-  const [sessions, classes] = await Promise.all([
+  // Pre-load Sessions, Classes (with sections) and Global Subjects for modal management
+  const [sessions, classes, globalSubjects, examTypes] = await Promise.all([
     prisma.academicSession.findMany({
       where: { schoolId },
       orderBy: { startDate: "desc" },
@@ -25,6 +26,14 @@ export default async function ReportsHubPage() {
         },
       },
     }),
+    prisma.subject.findMany({
+      where: { schoolId },
+      orderBy: { displayOrder: "asc" },
+    }),
+    prisma.examType.findMany({
+      where: { session: { schoolId } },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const currentSessionId = sessions.find((s) => s.isCurrent)?.id ?? sessions[0]?.id ?? null;
@@ -32,15 +41,18 @@ export default async function ReportsHubPage() {
   return (
     <div className="max-w-[1600px] mx-auto space-y-4">
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-stone-900">Finance Reports</h1>
+        <h1 className="text-xl font-bold text-stone-900">Examination & Results</h1>
         <p className="text-sm text-stone-500 mt-0.5">
-          Centralized finance reports — receipts, cash book, discounts, refunds and wallet ledger
+          Manage school subjects, configure exam structure, enter marks, and track student outcomes.
         </p>
       </div>
-      <ReportsClient
+      <ResultsClient
         sessions={sessions}
         classes={classes}
+        globalSubjects={globalSubjects}
+        examTypes={examTypes}
         currentSessionId={currentSessionId}
+        userRole={user.role}
       />
     </div>
   );
