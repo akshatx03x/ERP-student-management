@@ -129,6 +129,7 @@ export async function createFeeDiscountInTx(
     where: {
       studentId: opts.studentId,
       sessionId: opts.sessionId,
+      status: { not: "PAID" }, // Only apply concessions to unpaid/partial fees
       ...feeHeadFilter,
       ...monthFilter,
     },
@@ -137,6 +138,10 @@ export async function createFeeDiscountInTx(
       feeHead: true,
     },
   });
+
+  if (matchingFees.length === 0) {
+    throw new Error("No unpaid fees found to apply this concession");
+  }
 
   let totalRetrospectiveCredit = toDecimal(0);
   let affectedFeesCount = 0;

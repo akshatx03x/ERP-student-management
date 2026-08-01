@@ -30,7 +30,7 @@ export function AuthShell({
               <rect x="8" y="18" width="6" height="1.5" rx="0.75" fill="white" opacity="0.7" />
             </svg>
             <div>
-              <p className="text-[16px] font-bold tracking-[0.12em] uppercase text-[#1a1a2e] leading-none">Vidhyanjali Public School</p>
+              <p className="text-[16px] font-bold tracking-[0.12em] uppercase text-[#1a1a2e] leading-none">Vidyanjali Public School</p>
               <p className="text-[9px] tracking-[0.14em] uppercase text-slate-400 leading-none mt-1">School Management System</p>
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, Fragment } from "react";
+import { useState, useTransition, useMemo, Fragment, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,10 +57,12 @@ export function FeeCollectionClient({
   students,
   sessions,
   currentSessionId,
+  initialStudentId,
 }: {
   students: StudentItem[];
   sessions: Session[];
   currentSessionId: string | null;
+  initialStudentId?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [studentSearch, setStudentSearch] = useState("");
@@ -68,6 +70,18 @@ export function FeeCollectionClient({
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   const [profile, setProfile] = useState<any | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+
+  // Auto-select student when navigated from student profile
+  useEffect(() => {
+    if (!initialStudentId) return;
+    const s = students.find((st) => st.id === initialStudentId);
+    if (s) {
+      setSelectedStudentId(s.id);
+      setStudentSearch(s.fullName);
+      loadProfile(s.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStudentId]);
 
   // Selected payment months & accordion toggles
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -1028,7 +1042,10 @@ export function FeeCollectionClient({
             </div>
             <div className="flex justify-end gap-2 border-t pt-3">
               <Button variant="outline" size="sm" onClick={() => setShowDiscountModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleDiscount} disabled={pending} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold">Apply Concession</Button>
+              <Button size="sm" onClick={handleDiscount} disabled={pending} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold gap-2">
+                {pending && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {pending ? "Applying..." : "Apply Concession"}
+              </Button>
             </div>
           </div>
         </div>
@@ -1123,7 +1140,7 @@ export function FeeCollectionClient({
             </div>
             <div className="border border-stone-300 rounded-xl p-6 text-xs space-y-4">
               <div className="text-center border-b pb-3">
-                <h2 className="text-lg font-black uppercase">{receiptSnapshot.branding?.schoolName || "Vidhyanjali Public School"}</h2>
+                <h2 className="text-lg font-black uppercase">{receiptSnapshot.branding?.schoolName || "Vidyanjali Public School"}</h2>
                 {receiptSnapshot.branding?.address && <p className="text-stone-500 text-[11px]">{receiptSnapshot.branding.address}</p>}
                 <div className="mt-2 inline-block bg-stone-100 rounded-full px-3 py-0.5 text-[10px] font-bold uppercase">FEE RECEIPT</div>
               </div>

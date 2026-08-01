@@ -5,7 +5,12 @@ import { getCurrentSession, listSessions } from "@/server/services/session.servi
 import { StudentFeesPortal } from "./student-fees-portal";
 import { FeeCollectionClient } from "./fee-collection-client";
 
-export default async function FeeCollectionPage() {
+export default async function FeeCollectionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ student?: string }>;
+}) {
+  const { student: initialStudentId } = await searchParams;
   const { user } = await requirePermission("fee.view");
 
   if (user.role === "STUDENT") {
@@ -45,6 +50,7 @@ export default async function FeeCollectionPage() {
         }))}
         sessions={sessions.items}
         currentSessionId={current?.id ?? null}
+        initialStudentId={initialStudentId ?? null}
       />
     </div>
   );

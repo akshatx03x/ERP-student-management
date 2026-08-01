@@ -11,7 +11,7 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Vidhyanjali School ERP",
+  title: "Vidyanjali School ERP",
   description: "School management system",
 };
 

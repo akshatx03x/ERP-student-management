@@ -21,7 +21,7 @@ export default async function CashierClosingPage() {
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl space-y-6 print:border-none print:p-0">
         <div className="border-b border-slate-800 pb-4 flex justify-between items-start">
           <div>
-            <h2 className="text-xl font-bold text-slate-100">Vidhyanjali Public School</h2>
+            <h2 className="text-xl font-bold text-slate-100">Vidyanjali Public School</h2>
             <p className="text-sm text-slate-400">Daily Cashier Closing Statement</p>
           </div>
           <div className="text-right text-xs text-slate-300">

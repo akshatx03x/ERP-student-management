@@ -11,6 +11,12 @@ import {
   getPrincipalFinancialDashboard,
   searchFinancialRecords,
   CollectionReportFilter,
+  getPrincipalFinanceDashboardDynamic,
+  getClasswisePendingList,
+  FinanceDashboardFilters,
+  ClasswisePendingListFilters,
+  getClassWiseFeeStatusReport,
+  ClassWiseFeeStatusFilters,
 } from "@/server/services/financial-reports.service";
 
 export async function getCollectionReportAction(filters?: CollectionReportFilter) {
@@ -48,3 +54,16 @@ export async function getPrincipalFinancialDashboardAction() {
 export async function searchFinancialRecordsAction(query: string) {
   return searchFinancialRecords(query);
 }
+
+export async function getPrincipalFinanceDashboardDynamicAction(filters: FinanceDashboardFilters) {
+  return getPrincipalFinanceDashboardDynamic(filters);
+}
+
+export async function getClasswisePendingListAction(filters: ClasswisePendingListFilters) {
+  return getClasswisePendingList(filters);
+}
+
+export async function getClassWiseFeeStatusReportAction(filters: ClassWiseFeeStatusFilters) {
+  return getClassWiseFeeStatusReport(filters);
+}
+

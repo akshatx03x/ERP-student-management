@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,11 +25,16 @@ export function EditStudentForm({
     gender: string | null;
     bloodGroup: string | null;
     aadhaar: string | null;
+    apaarId?: string | null;
+    penId?: string | null;
+    previousSchoolName?: string | null;
+    religion?: string | null;
     status: string;
   };
   onCancel: () => void;
   onSaved: () => void;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   // Helper to format date for input field
@@ -47,6 +53,10 @@ export function EditStudentForm({
     gender: student.gender ?? "",
     bloodGroup: student.bloodGroup ?? "",
     aadhaar: student.aadhaar ?? "",
+    apaarId: student.apaarId ?? "",
+    penId: student.penId ?? "",
+    previousSchoolName: student.previousSchoolName ?? "",
+    religion: student.religion ?? "",
     status: student.status,
   });
 
@@ -69,12 +79,17 @@ export function EditStudentForm({
           gender: (form.gender as "MALE" | "FEMALE" | "OTHER") || null,
           bloodGroup: form.bloodGroup.trim() || null,
           aadhaar: form.aadhaar.trim() || null,
+          apaarId: form.apaarId.trim() || null,
+          penId: form.penId.trim() || null,
+          previousSchoolName: form.previousSchoolName.trim() || null,
+          religion: form.religion.trim() || null,
           status: (form.status === "ALUMNI" || form.status === "TRANSFERRED" || form.status === "INACTIVE" ? "LEFT" : form.status) as "ACTIVE" | "LEFT" | "ARCHIVED",
         };
 
         await updateStudentAction(input);
         toast.success("Student profile updated successfully");
-        onSaved();
+        router.push(`/students/${student.id}`);
+        router.refresh();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to update profile");
       }
@@ -177,6 +192,48 @@ export function EditStudentForm({
             <option value="TRANSFERRED">Transferred</option>
             <option value="ALUMNI">Alumni</option>
           </Select>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 border-t pt-3">
+        <div className="space-y-2">
+          <Label htmlFor="apaarId">APAAR ID</Label>
+          <Input
+            id="apaarId"
+            placeholder="APAAR ID"
+            value={(form as any).apaarId || ""}
+            onChange={(e) => setForm((f) => ({ ...f, apaarId: e.target.value }))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="penId">PEN ID</Label>
+          <Input
+            id="penId"
+            placeholder="PEN ID"
+            value={(form as any).penId || ""}
+            onChange={(e) => setForm((f) => ({ ...f, penId: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="previousSchoolName">Previous School Name</Label>
+          <Input
+            id="previousSchoolName"
+            placeholder="Previous School"
+            value={(form as any).previousSchoolName || ""}
+            onChange={(e) => setForm((f) => ({ ...f, previousSchoolName: e.target.value }))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="religion">Religion</Label>
+          <Input
+            id="religion"
+            placeholder="e.g. Hindu / Christian"
+            value={(form as any).religion || ""}
+            onChange={(e) => setForm((f) => ({ ...f, religion: e.target.value }))}
+          />
         </div>
       </div>
 

@@ -44,9 +44,7 @@ export async function listExamTypesAction(sessionId: string) {
   return listExamTypes(sessionId);
 }
 export async function createExamTypeAction(input: CreateExamTypeInput) {
-  const r = await createExamType(input);
-  revalidatePath("/examinations");
-  return r;
+  return createExamType(input);
 }
 export async function listExamsAction(input?: Parameters<typeof listExams>[0]) {
   return listExams(input);
@@ -55,24 +53,16 @@ export async function getExamAction(id: string) {
   return getExam(id);
 }
 export async function createExamAction(input: CreateExamInput) {
-  const r = await createExam(input);
-  revalidatePath("/examinations");
-  return r;
+  return createExam(input);
 }
 export async function createExamSubjectAction(input: CreateExamSubjectInput) {
-  const r = await createExamSubject(input);
-  revalidatePath("/examinations");
-  return r;
+  return createExamSubject(input);
 }
 export async function enterMarksAction(input: MarkEntryInput) {
-  const r = await enterMarks(input);
-  revalidatePath("/examinations");
-  return r;
+  return enterMarks(input);
 }
 export async function generateReportCardAction(input: GenerateReportCardInput) {
-  const r = await generateReportCard(input);
-  revalidatePath("/examinations");
-  return r;
+  return generateReportCard(input);
 }
 
 export async function listHomeworkAction(input?: Parameters<typeof listHomework>[0]) {

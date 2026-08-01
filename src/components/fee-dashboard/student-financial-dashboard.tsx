@@ -572,7 +572,7 @@ export function StudentFinancialDashboard({ profile }: DashboardProps) {
             <div className="border border-stone-300 rounded-xl p-6 bg-white text-black font-sans text-xs space-y-4">
               <div className="text-center border-b pb-3">
                 <h2 className="text-lg font-black uppercase text-stone-900">
-                  {selectedReceipt.branding?.schoolName || "Vidhyanjali Public School"}
+                  {selectedReceipt.branding?.schoolName || "Vidyanjali Public School"}
                 </h2>
                 <p className="text-[10px] uppercase font-bold tracking-wider text-stone-600 mt-1">FEE RECEIPT</p>
               </div>

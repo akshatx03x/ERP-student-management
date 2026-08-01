@@ -34,9 +34,9 @@ export function studentDobPassword(dob: Date, format = "DDMMYYYY") {
 }
 
 export function staffSyntheticEmail(employeeCode: string) {
-  return `${employeeCode.toLowerCase().trim()}@staff.vidhyanjali.local`;
+  return `${employeeCode.toLowerCase().trim()}@staff.vidyanjali.local`;
 }
 
 export function studentSyntheticEmail(admissionNo: string) {
-  return `${admissionNo.toLowerCase().trim()}@student.vidhyanjali.local`;
+  return `${admissionNo.toLowerCase().trim()}@student.vidyanjali.local`;
 }

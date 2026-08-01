@@ -1,23 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
-import { EditStudentForm } from "./edit-student-form";
-import { RecordExitModal } from "./record-exit-modal";
-import { deleteStudentAction } from "@/server/actions/student.actions";
+import { Edit3, Eye, FileText } from "lucide-react";
+import Link from "next/link";
 
 export function StudentProfileCard({
   student,
   isStudentSelf,
   currentEnrollment,
-  canDelete,
-  isEditing: isEditingProp,
-  onEditClose,
+  siblings = [],
+  familyDetails = {} as any,
 }: {
   student: {
     id: string;
@@ -51,53 +46,15 @@ export function StudentProfileCard({
     section: { name: string };
     session: { name: string };
   } | null;
-  canDelete: boolean;
-  /** Controlled from page-level Actions dropdown */
-  isEditing?: boolean;
-  onEditClose?: () => void;
-}) {
-  const router = useRouter();
-  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [pending, startTransition] = useTransition();
-
-  // Support both controlled (page Actions) and internal edit mode
-  const isEditing = isEditingProp ?? false;
-  const closeEdit = () => { onEditClose?.(); };
-
-  const handleDelete = () => {
-    startTransition(async () => {
-      try {
-        await deleteStudentAction(student.id);
-        toast.success("Student deleted successfully");
-        router.push("/students");
-        router.refresh();
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to delete student");
-        setShowConfirmDelete(false);
-      }
-    });
+  siblings?: any[];
+  familyDetails?: {
+    fatherName?: string | null;
+    motherName?: string | null;
+    primaryPhone?: string | null;
+    secondaryPhone?: string | null;
+    email?: string | null;
   };
-
-  if (isEditing) {
-    return (
-      <Card className="border-border">
-        <CardHeader className="px-4 py-3 border-b">
-          <p className="text-sm font-semibold text-foreground">Edit Student Profile</p>
-        </CardHeader>
-        <CardContent className="px-4 py-3">
-          <EditStudentForm
-            student={student}
-            onCancel={closeEdit}
-            onSaved={() => {
-              closeEdit();
-              router.refresh();
-            }}
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
+}) {
   const initials = student.fullName
     ? student.fullName
         .split(" ")
@@ -109,182 +66,163 @@ export function StudentProfileCard({
 
   const avatarColorClass =
     student.gender === "MALE"
-      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+      ? "bg-blue-50 text-blue-700 border-blue-200"
       : student.gender === "FEMALE"
-        ? "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300"
-        : "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300";
+        ? "bg-rose-50 text-rose-700 border-rose-200"
+        : "bg-stone-50 text-stone-700 border-stone-200";
 
   return (
-    <Card className="border-border">
-      {/* Card Header: Avatar + Name + Key Identifiers */}
-      <CardHeader className="px-5 py-5 border-b">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <div
-            className={`relative flex h-24 w-24 sm:h-28 sm:w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 text-2xl font-bold shadow-md ${avatarColorClass}`}
-          >
-            {student.photoUrl ? (
-              <img src={student.photoUrl} alt={student.fullName} className="h-full w-full object-cover" />
-            ) : (
-              initials
-            )}
-          </div>
-          <div className="min-w-0 flex-1 space-y-1">
-            <h2 className="text-xl sm:text-2xl font-bold leading-tight text-foreground">
-              {student.fullName}
-            </h2>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
-              <span className="text-xs text-muted-foreground">
-                Adm.{" "}
-                <span className="font-medium text-foreground">{student.admissionNo}</span>
-              </span>
-              {currentEnrollment && (
-                <>
-                  <span className="text-muted-foreground/40 text-xs">·</span>
-                  <span className="text-xs text-muted-foreground">
-                    Class{" "}
-                    <span className="font-medium text-foreground">
-                      {currentEnrollment.class.name}&#8209;{currentEnrollment.section.name}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground/40 text-xs">·</span>
-                  <span className="text-xs text-muted-foreground">
-                    {currentEnrollment.session.name}
-                  </span>
-                </>
+    <div className="space-y-4">
+      {/* ── CARD HEADER CONTROLS ── */}
+      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden shadow-sm">
+        <div className="px-5 py-4 border-b bg-stone-50/50 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <div
+              className={`relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 text-lg font-bold shadow-xs ${avatarColorClass}`}
+            >
+              {student.photoUrl ? (
+                <img src={student.photoUrl} alt={student.fullName} className="h-full w-full object-cover" />
+              ) : (
+                initials
               )}
-              <Badge
-                variant={student.status === "ACTIVE" ? "success" : "secondary"}
-                className="h-5 px-2 text-[10px] font-semibold"
-              >
+            </div>
+            <div>
+              <h2 className="text-base font-black text-stone-900 leading-tight">
+                {student.fullName}
+              </h2>
+              <p className="text-xs text-stone-500 font-medium">
+                Adm. <span className="font-bold text-stone-900">{student.admissionNo}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Link
+              href={`/students/${student.id}/details`}
+              className="flex items-center gap-1 px-3 py-1.5 border border-stone-200 text-stone-700 bg-white hover:bg-stone-50 rounded-lg text-xs font-bold transition-all shadow-2xs"
+            >
+              <Eye className="w-3.5 h-3.5" /> View More
+            </Link>
+            <Link
+              href={`/students/${student.id}/edit`}
+              className="flex items-center gap-1 px-3 py-1.5 border border-stone-200 text-stone-700 bg-white hover:bg-stone-50 rounded-lg text-xs font-bold transition-all shadow-2xs"
+            >
+              <Edit3 className="w-3.5 h-3.5" /> Edit Profile
+            </Link>
+          </div>
+        </div>
+
+        {/* ── CARD INFORMATION GRID ── */}
+        <div className="px-5 py-4">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Gender</span>
+              <span className="font-medium text-stone-900">{student.gender || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Date of Birth</span>
+              <span className="font-medium text-stone-900">{formatDate(student.dateOfBirth)}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Admission Date</span>
+              <span className="font-medium text-stone-900">
+                {student.admissionDate ? formatDate(student.admissionDate) : "—"}
+              </span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Roll Number</span>
+              <span className="font-medium text-stone-900">{currentEnrollment?.rollNo || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Class & Section</span>
+              <span className="font-medium text-stone-900">
+                {currentEnrollment ? `${currentEnrollment.class.name}-${currentEnrollment.section.name}` : "—"}
+              </span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Academic Session</span>
+              <span className="font-medium text-stone-900">{currentEnrollment?.session.name || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">APAAR ID</span>
+              <span className="font-medium text-stone-900">{student.apaarId || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">PEN ID</span>
+              <span className="font-medium text-stone-900">{student.penId || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Aadhaar Number</span>
+              <span className="font-medium text-stone-900">{student.aadhaar || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Blood Group</span>
+              <span className="font-medium text-stone-900">{student.bloodGroup || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Primary Contact</span>
+              <span className="font-medium text-stone-900">{familyDetails?.primaryPhone || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-[10px] uppercase font-bold text-stone-500 mb-0.5">Status</span>
+              <Badge variant={student.status === "ACTIVE" ? "success" : "secondary"} className="h-5 px-2 text-[9px] rounded font-bold">
                 {student.status}
               </Badge>
             </div>
           </div>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="px-5 py-4">
-        {showConfirmDelete ? (
-          <div className="rounded border border-destructive/40 bg-destructive/5 p-4 space-y-2">
-            <p className="text-sm font-semibold text-destructive">
-              Permanently delete this student record?
-            </p>
-            <p className="text-xs text-muted-foreground">
-              This will remove the student along with payment history, attendance, and exam grades.
-            </p>
-            <div className="flex gap-2 justify-end pt-1">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-4 text-sm"
-                onClick={() => setShowConfirmDelete(false)}
-                disabled={pending}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="h-8 px-4 text-sm"
-                onClick={handleDelete}
-                disabled={pending}
-              >
-                {pending ? "Deleting…" : "Yes, Delete"}
-              </Button>
-            </div>
+      {/* ── RELOCATED SIBLINGS SECTION ── */}
+      <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 shadow-xs">
+        <h4 className="text-[10px] font-black text-stone-500 uppercase tracking-wider mb-3">Linked Family Siblings</h4>
+        {siblings.length === 0 ? (
+          <div className="text-center py-4 bg-white border border-dashed rounded-xl text-stone-400 font-medium">
+            No Linked Siblings
           </div>
         ) : (
-          <>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Gender
-              </span>
-              <span className="text-sm font-medium text-foreground">{student.gender || "—"}</span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Date of Birth
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {formatDate(student.dateOfBirth)}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Admission Date
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {student.admissionDate ? formatDate(student.admissionDate) : "—"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Category / Religion
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {student.category || "—"} {student.religion ? `(${student.religion})` : ""}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Roll Number
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {currentEnrollment?.rollNo || "—"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Aadhaar Number
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {student.aadhaar || "—"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                APAAR ID / PEN ID
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {student.apaarId || "—"} {student.penId ? `/ ${student.penId}` : ""}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Previous School
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {student.previousSchoolName || "—"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wider font-medium text-muted-foreground mb-1">
-                Transport
-              </span>
-              <span className="text-sm font-medium text-foreground">
-                {student.transportRequired ? `Required (${student.transportPickupPoint || "Stop specified"})` : "Not Required"}
-              </span>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {siblings.map((s: any) => {
+              const enrollment = s.enrollments?.[0];
+              const classLabel = enrollment ? `${enrollment.class.name}-${enrollment.section.name}` : "—";
+              const sibAvatarInitials = s.fullName
+                ? s.fullName.split(" ").map((n: any) => n[0]).join("").slice(0, 2).toUpperCase()
+                : "ST";
+
+              const genderClass =
+                s.gender === "MALE"
+                  ? "bg-blue-50 text-blue-700 border-blue-150"
+                  : s.gender === "FEMALE"
+                    ? "bg-rose-50 text-rose-700 border-rose-150"
+                    : "bg-stone-50 text-stone-700 border-stone-150";
+
+              return (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between gap-3 bg-white border border-stone-200 rounded-xl p-3 shadow-sm hover:border-stone-300 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold border ${genderClass}`}>
+                      {sibAvatarInitials}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-stone-900 text-xs truncate">{s.fullName}</p>
+                      <p className="text-[9px] text-stone-500">
+                        Adm: {s.admissionNo} · {classLabel}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/students/${s.id}`}
+                    className="shrink-0 px-2.5 py-1.5 bg-stone-905 hover:bg-stone-850 text-white rounded-lg font-bold text-[9px]"
+                  >
+                    Open Profile
+                  </Link>
+                </div>
+              );
+            })}
           </div>
-          <div className="mt-5 pt-4 border-t flex flex-wrap gap-2 justify-end">
-            {student.status !== "LEFT" && (
-              <RecordExitModal studentId={student.id} studentName={student.fullName} />
-            )}
-            {canDelete && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-4 text-xs text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
-                onClick={() => setShowConfirmDelete(true)}
-              >
-                Delete Student
-              </Button>
-            )}
-          </div>
-          </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -53,14 +53,14 @@ async function main() {
   const school = await prisma.school.upsert({
     where: { code: "VPS" },
     create: {
-      name: "Vidhyanjali Public School",
+      name: "Vidyanjali Public School",
       code: "VPS",
       branding: {
         create: {
-          schoolName: "Vidhyanjali Public School",
+          schoolName: "Vidyanjali Public School",
           address: "",
           phone: "",
-          email: process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidhyanjali.edu",
+          email: process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu",
           website: "",
           principalName: process.env.SEED_PRINCIPAL_NAME ?? "Principal",
           receiptFooter: "Thank you for your payment.",
@@ -69,7 +69,7 @@ async function main() {
       },
     },
     update: {
-      name: "Vidhyanjali Public School",
+      name: "Vidyanjali Public School",
     },
     include: { branding: true },
   });
@@ -78,7 +78,7 @@ async function main() {
     await prisma.schoolBranding.create({
       data: {
         schoolId: school.id,
-        schoolName: "Vidhyanjali Public School",
+        schoolName: "Vidyanjali Public School",
         principalName: process.env.SEED_PRINCIPAL_NAME ?? "Principal",
         email: process.env.SEED_PRINCIPAL_EMAIL,
         receiptFooter: "Thank you for your payment.",
@@ -87,7 +87,7 @@ async function main() {
     });
   }
 
-  const email = process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidhyanjali.edu";
+  const email = process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu";
   const password = process.env.SEED_PRINCIPAL_PASSWORD ?? "Principal@123";
   const name = process.env.SEED_PRINCIPAL_NAME ?? "Principal";
 
@@ -168,7 +168,7 @@ async function main() {
     });
   }
 
-  console.log("Seed completed for Vidhyanjali Public School");
+  console.log("Seed completed for Vidyanjali Public School");
 }
 
 main()

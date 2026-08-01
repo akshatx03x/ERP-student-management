@@ -134,8 +134,6 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { title: "Active Students", href: "/students", resource: "student", icon: "GraduationCap" },
       { title: "Former Students", href: "/students/former", resource: "student", icon: "UserMinus" },
       { title: "Alumni", href: "/students/alumni", resource: "student", icon: "Award" },
-      { title: "Families", href: "/families", resource: "family", icon: "Users" },
-      { title: "Staff", href: "/staff", resource: "user", icon: "Contact" },
       { title: "Classes", href: "/classes", resource: "class", icon: "School" },
     ],
   },
@@ -144,6 +142,8 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { title: "Fee Collection", href: "/fees", resource: "fee", icon: "CreditCard" },
       { title: "Fee Setup", href: "/fees/setup", resource: "fee", icon: "Settings" },
+      { title: "Class Wise Fee Status", href: "/fees/class-wise-status", resource: "fee", icon: "Layers" },
+      { title: "Pending Dues", href: "/fees/pending", resource: "fee", icon: "Clock" },
       { title: "Reports", href: "/fees/reports", resource: "fee", icon: "BarChart3" },
     ],
   },
@@ -152,11 +152,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { title: "Academic Sessions", href: "/academics", resource: "session", icon: "BookOpen" },
       { title: "Student Promotion", href: "/promotion", resource: "session", icon: "TrendingUp" },
-      { title: "Timetable", href: "/timetable", resource: "timetable", icon: "CalendarDays" },
       { title: "Attendance", href: "/attendance", resource: "attendance", icon: "CalendarCheck" },
-      { title: "Holidays", href: "/holidays", resource: "holiday", icon: "Palmtree" },
-      { title: "Homework", href: "/homework", resource: "homework", icon: "NotebookPen" },
-      { title: "Examinations", href: "/examinations", resource: "exam", icon: "FileSpreadsheet" },
     ],
   },
   {

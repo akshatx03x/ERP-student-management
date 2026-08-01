@@ -28,7 +28,7 @@ async function runPhase5Tests() {
   let school = await prisma.school.findFirst();
   if (!school) {
     school = await prisma.school.create({
-      data: { name: "Vidhyanjali Phase 5 School", code: `VTS-P5-${Date.now()}` },
+      data: { name: "Vidyanjali Phase 5 School", code: `VTS-P5-${Date.now()}` },
     });
   }
   const schoolId = school.id;

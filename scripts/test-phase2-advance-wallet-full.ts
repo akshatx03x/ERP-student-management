@@ -28,7 +28,7 @@ async function runFullPhase2Tests() {
   let school = await prisma.school.findFirst();
   if (!school) {
     school = await prisma.school.create({
-      data: { name: "Vidhyanjali Full Test School", code: `VTS-F2-${Date.now()}` },
+      data: { name: "Vidyanjali Full Test School", code: `VTS-F2-${Date.now()}` },
     });
   }
   const schoolId = school.id;

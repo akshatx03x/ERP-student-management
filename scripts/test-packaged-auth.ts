@@ -51,7 +51,7 @@ async function testAuth() {
 
   // 3. Test POST /api/auth/sign-in/email
   const payload = JSON.stringify({
-    email: "principal@vidhyanjali.edu",
+    email: "principal@vidyanjali.edu",
     password: "Principal@123",
   });
 

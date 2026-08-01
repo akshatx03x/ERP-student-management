@@ -49,3 +49,32 @@ export async function getBrandingAction() {
   const { getSchoolBranding } = await import("@/server/services/branding.service");
   return getSchoolBranding();
 }
+
+export async function createStaffSettingsAction(input: any) {
+  const { createStaff } = await import("@/server/services/staff.service");
+  const result = await createStaff(input);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function updateStaffSettingsAction(input: any) {
+  const { updateStaff } = await import("@/server/services/staff.service");
+  const result = await updateStaff(input);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function deleteStaffSettingsAction(id: string) {
+  const { deleteStaff } = await import("@/server/services/staff.service");
+  const result = await deleteStaff(id);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function createStaffLoginSettingsAction(input: any) {
+  const { createStaffLogin } = await import("@/server/services/staff.service");
+  const result = await createStaffLogin(input);
+  revalidatePath("/settings");
+  return result;
+}
+
