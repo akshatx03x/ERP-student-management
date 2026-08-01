@@ -99,6 +99,16 @@ export async function listStudents(input?: {
           { fullName: { contains: params.search } },
           { admissionNo: { contains: params.search } },
           { aadhaar: { contains: params.search } },
+          {
+            family: {
+              OR: [
+                { fatherName: { contains: params.search } },
+                { motherName: { contains: params.search } },
+                { primaryPhone: { contains: params.search } },
+                { secondaryPhone: { contains: params.search } },
+              ],
+            },
+          },
         ],
       }
       : {}),
@@ -807,13 +817,127 @@ export async function updateStudent(input: UpdateStudentInput) {
       )
       : undefined;
 
-  const { id, ...rest } = data;
+  const { id, primaryPhone, classId, sectionId, familyId, unlinkFamily, exitReason, ...rest } = data;
 
   return prisma.$transaction(async (tx) => {
+    let targetFamilyId = familyId;
+
+    if (unlinkFamily) {
+      const currentFamily = await tx.family.findUnique({
+        where: { id: existing.familyId },
+        include: { guardians: true },
+      });
+      if (currentFamily) {
+        const newFamily = await tx.family.create({
+          data: {
+            schoolId,
+            fatherName: currentFamily.fatherName,
+            motherName: currentFamily.motherName,
+            guardianName: currentFamily.guardianName,
+            primaryPhone: currentFamily.primaryPhone,
+            secondaryPhone: currentFamily.secondaryPhone,
+            email: currentFamily.email,
+            addressLine1: currentFamily.addressLine1,
+            addressLine2: currentFamily.addressLine2,
+            city: currentFamily.city,
+            state: currentFamily.state,
+            pincode: currentFamily.pincode,
+            resAddressLine1: currentFamily.resAddressLine1,
+            resAddressLine2: currentFamily.resAddressLine2,
+            resCity: currentFamily.resCity,
+            resState: currentFamily.resState,
+            resPincode: currentFamily.resPincode,
+            sameAsResidential: currentFamily.sameAsResidential,
+            permAddressLine1: currentFamily.permAddressLine1,
+            permAddressLine2: currentFamily.permAddressLine2,
+            permCity: currentFamily.permCity,
+            permState: currentFamily.permState,
+            permPincode: currentFamily.permPincode,
+            declarationAccepted: currentFamily.declarationAccepted,
+            declarationDate: currentFamily.declarationDate,
+            declarationParentName: currentFamily.declarationParentName,
+          }
+        });
+
+        for (const g of currentFamily.guardians) {
+          const newG = await tx.guardian.create({
+            data: {
+              schoolId,
+              familyId: newFamily.id,
+              fullName: g.fullName,
+              gender: g.gender,
+              phone: g.phone,
+              secondaryPhone: g.secondaryPhone,
+              email: g.email,
+              qualification: g.qualification,
+              isWorking: g.isWorking,
+              occupation: g.occupation,
+              designation: g.designation,
+              annualIncome: g.annualIncome,
+              officeAddress: g.officeAddress,
+              employerName: g.employerName,
+              aadhaarNumber: g.aadhaarNumber,
+              panNumber: g.panNumber,
+            }
+          });
+
+          const oldSg = await tx.studentGuardian.findFirst({
+            where: { studentId: id, guardianId: g.id }
+          });
+
+          await tx.studentGuardian.create({
+            data: {
+              studentId: id,
+              guardianId: newG.id,
+              relationshipType: oldSg?.relationshipType ?? "OTHER",
+              isPrimaryContact: oldSg?.isPrimaryContact ?? false,
+              isEmergencyContact: oldSg?.isEmergencyContact ?? false,
+              isFeePayer: oldSg?.isFeePayer ?? false,
+              hasCustody: oldSg?.hasCustody ?? true,
+              canPickUp: oldSg?.canPickUp ?? true,
+            }
+          });
+        }
+
+        await tx.studentGuardian.deleteMany({
+          where: { studentId: id, guardianId: { in: currentFamily.guardians.map(g => g.id) } }
+        });
+
+        targetFamilyId = newFamily.id;
+      }
+    }
+
     const updated = await tx.student.update({
       where: { id },
-      data: { ...rest, ...(fullName ? { fullName } : {}) },
+      data: {
+        ...rest,
+        ...(fullName ? { fullName } : {}),
+        ...(targetFamilyId !== undefined ? { familyId: targetFamilyId || null } : {}),
+      } as any,
     });
+
+    if (primaryPhone !== undefined) {
+      await tx.family.update({
+        where: { id: existing.familyId },
+        data: { primaryPhone: primaryPhone || null },
+      });
+    }
+
+    if (classId !== undefined || sectionId !== undefined) {
+      const latest = await tx.studentEnrollment.findFirst({
+        where: { studentId: id },
+        orderBy: { createdAt: "desc" },
+      });
+      if (latest) {
+        await tx.studentEnrollment.update({
+          where: { id: latest.id },
+          data: {
+            classId: classId !== undefined ? (classId || latest.classId) : latest.classId,
+            sectionId: sectionId !== undefined ? (sectionId || latest.sectionId) : latest.sectionId,
+          },
+        });
+      }
+    }
 
     if (data.status === StudentStatus.ACTIVE) {
       await tx.studentExit.deleteMany({ where: { studentId: id } });
@@ -823,6 +947,36 @@ export async function updateStudent(input: UpdateStudentInput) {
           status: { in: [EnrollmentStatus.TRANSFERRED, EnrollmentStatus.WITHDRAWN, EnrollmentStatus.GRADUATED, EnrollmentStatus.EXPELLED] },
         },
         data: { status: EnrollmentStatus.ACTIVE },
+      });
+    } else if (data.status === StudentStatus.LEFT) {
+      await tx.studentEnrollment.updateMany({
+        where: {
+          studentId: id,
+          status: EnrollmentStatus.ACTIVE,
+        },
+        data: {
+          status:
+            exitReason === ExitReason.GRADUATED
+              ? EnrollmentStatus.GRADUATED
+              : exitReason === ExitReason.EXPELLED
+                ? EnrollmentStatus.EXPELLED
+                : EnrollmentStatus.WITHDRAWN,
+        },
+      });
+
+      await tx.studentExit.upsert({
+        where: { studentId: id },
+        create: {
+          studentId: id,
+          leavingDate: new Date(),
+          reason: exitReason || ExitReason.TRANSFERRED,
+          remarks: "Status updated in student edit form",
+          tcNumber: rest.tcNumber || null,
+        },
+        update: {
+          reason: exitReason || ExitReason.TRANSFERRED,
+          tcNumber: rest.tcNumber || null,
+        },
       });
     }
 
@@ -1055,5 +1209,120 @@ export async function createStudentLogin(studentId: string) {
       tx,
     );
     return account;
+  });
+}
+
+export async function unlinkStudentFamily(studentId: string) {
+  const { user } = await requirePermission("student.update");
+  const schoolId = schoolIdFromUser(user);
+
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, schoolId },
+  });
+  if (!student) throw new Error("Student not found");
+  if (!student.familyId) throw new Error("Student does not belong to any family");
+
+  return prisma.$transaction(async (tx) => {
+    const currentFamily = await tx.family.findUnique({
+      where: { id: student.familyId },
+      include: { guardians: true },
+    });
+    if (!currentFamily) throw new Error("Family not found");
+
+    const newFamily = await tx.family.create({
+      data: {
+        schoolId,
+        fatherName: currentFamily.fatherName,
+        motherName: currentFamily.motherName,
+        guardianName: currentFamily.guardianName,
+        primaryPhone: currentFamily.primaryPhone,
+        secondaryPhone: currentFamily.secondaryPhone,
+        email: currentFamily.email,
+        addressLine1: currentFamily.addressLine1,
+        addressLine2: currentFamily.addressLine2,
+        city: currentFamily.city,
+        state: currentFamily.state,
+        pincode: currentFamily.pincode,
+        resAddressLine1: currentFamily.resAddressLine1,
+        resAddressLine2: currentFamily.resAddressLine2,
+        resCity: currentFamily.resCity,
+        resState: currentFamily.resState,
+        resPincode: currentFamily.resPincode,
+        sameAsResidential: currentFamily.sameAsResidential,
+        permAddressLine1: currentFamily.permAddressLine1,
+        permAddressLine2: currentFamily.permAddressLine2,
+        permCity: currentFamily.permCity,
+        permState: currentFamily.permState,
+        permPincode: currentFamily.permPincode,
+        declarationAccepted: currentFamily.declarationAccepted,
+        declarationDate: currentFamily.declarationDate,
+        declarationParentName: currentFamily.declarationParentName,
+      }
+    });
+
+    for (const g of currentFamily.guardians) {
+      const newG = await tx.guardian.create({
+        data: {
+          schoolId,
+          familyId: newFamily.id,
+          fullName: g.fullName,
+          gender: g.gender,
+          phone: g.phone,
+          secondaryPhone: g.secondaryPhone,
+          email: g.email,
+          qualification: g.qualification,
+          isWorking: g.isWorking,
+          occupation: g.occupation,
+          designation: g.designation,
+          annualIncome: g.annualIncome,
+          officeAddress: g.officeAddress,
+          employerName: g.employerName,
+          aadhaarNumber: g.aadhaarNumber,
+          panNumber: g.panNumber,
+        }
+      });
+
+      const oldSg = await tx.studentGuardian.findFirst({
+        where: { studentId: studentId, guardianId: g.id }
+      });
+
+      await tx.studentGuardian.create({
+        data: {
+          studentId: studentId,
+          guardianId: newG.id,
+          relationshipType: oldSg?.relationshipType ?? "OTHER",
+          isPrimaryContact: oldSg?.isPrimaryContact ?? false,
+          isEmergencyContact: oldSg?.isEmergencyContact ?? false,
+          isFeePayer: oldSg?.isFeePayer ?? false,
+          hasCustody: oldSg?.hasCustody ?? true,
+          canPickUp: oldSg?.canPickUp ?? true,
+        }
+      });
+    }
+
+    await tx.studentGuardian.deleteMany({
+      where: { studentId: studentId, guardianId: { in: currentFamily.guardians.map(g => g.id) } }
+    });
+
+    const updated = await tx.student.update({
+      where: { id: studentId },
+      data: { familyId: newFamily.id },
+    });
+
+    await writeAuditLog(
+      {
+        schoolId,
+        userId: user.id,
+        action: "update",
+        module: "student",
+        entityType: "Student",
+        entityId: studentId,
+        oldValue: { familyId: student.familyId },
+        newValue: { familyId: newFamily.id },
+      },
+      tx,
+    );
+
+    return updated;
   });
 }

@@ -1,4 +1,4 @@
-import { EnrollmentStatus, Gender, StudentCategory, StudentStatus } from "@prisma/client";
+import { EnrollmentStatus, Gender, StudentCategory, StudentStatus, ExitReason } from "@prisma/client";
 import { z } from "zod";
 import { dateSchema, idSchema, paginationSchema } from "./common";
 
@@ -138,6 +138,14 @@ export const updateStudentSchema = z.object({
   transportPickupPoint: z.string().trim().optional().nullable(),
   admissionDate: dateSchema.optional().nullable(),
   photoDocumentId: z.string().trim().optional().nullable(),
+  photoUrl: z.string().optional().nullable(),
+  srNo: z.string().trim().optional().nullable(),
+  primaryPhone: z.string().trim().optional().nullable(),
+  classId: idSchema.optional().nullable(),
+  sectionId: idSchema.optional().nullable(),
+  familyId: idSchema.optional().nullable(),
+  unlinkFamily: z.boolean().optional(),
+  exitReason: z.nativeEnum(ExitReason).optional().nullable(),
   status: z.nativeEnum(StudentStatus).optional(),
 });
 

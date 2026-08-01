@@ -14,6 +14,7 @@ import {
   createEnrollment,
   upsertMedical,
   createStudentLogin,
+  unlinkStudentFamily,
 } from "@/server/services/student.service";
 import { listClasses } from "@/server/services/class.service";
 import { getCurrentSession, listSessions } from "@/server/services/session.service";
@@ -128,6 +129,13 @@ export async function importStudentsAction(base64: string) {
   const { user } = await requirePermission("student.create");
   const schoolId = schoolIdFromUser(user);
   const result = await importStudents(base64, schoolId, user.id);
+  revalidatePath("/students");
+  revalidatePath("/families");
+  return result;
+}
+
+export async function unlinkStudentFamilyAction(studentId: string) {
+  const result = await unlinkStudentFamily(studentId);
   revalidatePath("/students");
   revalidatePath("/families");
   return result;

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 import { cancelStudentExitAction } from "@/server/actions/student-exit.actions";
+import { Eye } from "lucide-react";
 
 type FormerStudent = {
   id: string;
@@ -109,7 +110,7 @@ export function FormerStudentsClient({
             No former student records found matching the filter.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-stone-200 rounded-lg scrollbar-thin">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground uppercase text-[10px] font-semibold">
@@ -179,7 +180,7 @@ export function FormerStudentsClient({
                             href={`/students/${s.id}`}
                             className="inline-flex items-center gap-1 rounded bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
                           >
-                            View Profile
+                            <Eye className="w-3.5 h-3.5" /> View Profile
                           </Link>
                         </div>
                       </td>

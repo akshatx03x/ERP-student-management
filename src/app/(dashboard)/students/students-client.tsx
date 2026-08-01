@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,11 @@ type ClassRow = {
   sections: Array<{ id: string; name: string }>;
 };
 
+type SessionRow = {
+  id: string;
+  name: string;
+};
+
 export function StudentsClient({
   students,
   initialSearch,
@@ -48,6 +53,8 @@ export function StudentsClient({
   classes,
   initialClassId,
   initialSectionId,
+  sessions,
+  initialSessionId,
 }: {
   students: StudentRow[];
   initialSearch: string;
@@ -56,12 +63,17 @@ export function StudentsClient({
   classes: ClassRow[];
   initialClassId: string;
   initialSectionId: string;
+  sessions: SessionRow[];
+  initialSessionId: string;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState(initialSearch);
+  const [selectedSessionId, setSelectedSessionId] = useState(initialSessionId);
   const [selectedClassId, setSelectedClassId] = useState(initialClassId);
-  const [selectedSectionId, setSelectedSectionId] = useState(initialSectionId);
+  const [selectedSectionId, setSelectedSectionId] = useState((selectedClassId === "ALL" || selectedClassId === "") ? "" : initialSectionId);
   const [pending, startTransition] = useTransition();
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [importResult, setImportResult] = useState<{
     successCount: number;
@@ -69,12 +81,39 @@ export function StudentsClient({
     errors: Array<{ row: number; message: string }>;
   } | null>(null);
 
+  // Debounced search: fire server fetch 350ms after user stops typing
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      applyFilters(search, selectedSessionId, selectedClassId, selectedSectionId);
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   const activeClass = classes.find((c) => c.id === selectedClassId);
   const activeSections = activeClass?.sections ?? [];
 
-  const applyFilters = (searchVal: string, classIdVal: string, sectionIdVal: string) => {
+  const displayedStudents = useMemo(() => {
+    return students.filter((s) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase().trim();
+      return (
+        s.fullName.toLowerCase().includes(q) ||
+        s.admissionNo.toLowerCase().includes(q) ||
+        s.family?.fatherName?.toLowerCase().includes(q) ||
+        s.family?.motherName?.toLowerCase().includes(q) ||
+        s.family?.primaryPhone?.includes(q)
+      );
+    });
+  }, [students, search]);
+
+  const applyFilters = (searchVal: string, sessionIdVal: string, classIdVal: string, sectionIdVal: string) => {
     const params = new URLSearchParams();
     if (searchVal.trim()) params.set("q", searchVal.trim());
+    if (sessionIdVal) params.set("sessionId", sessionIdVal);
     if (classIdVal) params.set("classId", classIdVal);
     if (sectionIdVal) params.set("sectionId", sectionIdVal);
     
@@ -91,7 +130,8 @@ export function StudentsClient({
           search,
           classId: selectedClassId,
           sectionId: selectedSectionId,
-        });
+          sessionId: selectedSessionId,
+        } as any);
         const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
         const blob = new Blob([bytes], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -153,17 +193,22 @@ export function StudentsClient({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-3 items-center">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                applyFilters(search, selectedClassId, selectedSectionId);
-              }
+          <select
+            value={selectedSessionId}
+            onChange={(e) => {
+              const nextSessionId = e.target.value;
+              setSelectedSessionId(nextSessionId);
+              applyFilters(search, nextSessionId, selectedClassId, selectedSectionId);
             }}
-            placeholder="Search by name or admission no…"
-            className="max-w-xs"
-          />
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="" disabled>Select Session</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
 
           <select
             value={selectedClassId}
@@ -171,11 +216,12 @@ export function StudentsClient({
               const nextClassId = e.target.value;
               setSelectedClassId(nextClassId);
               setSelectedSectionId("");
-              applyFilters(search, nextClassId, "");
+              applyFilters(search, selectedSessionId, nextClassId, "");
             }}
             className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            <option value="">All Classes</option>
+            <option value="">Select Class</option>
+            <option value="ALL">All Students</option>
             {classes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -188,9 +234,9 @@ export function StudentsClient({
             onChange={(e) => {
               const nextSectionId = e.target.value;
               setSelectedSectionId(nextSectionId);
-              applyFilters(search, selectedClassId, nextSectionId);
+              applyFilters(search, selectedSessionId, selectedClassId, nextSectionId);
             }}
-            disabled={!selectedClassId}
+            disabled={!selectedClassId || selectedClassId === "ALL" || selectedClassId === ""}
             className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
           >
             <option value="">All Sections</option>
@@ -201,23 +247,105 @@ export function StudentsClient({
             ))}
           </select>
 
-          <Button
-            type="button"
-            variant="outline"
-            loading={pending}
-            onClick={() => applyFilters(search, selectedClassId, selectedSectionId)}
-          >
-            Search
-          </Button>
+          <div className="relative flex items-center gap-1.5">
+            <Input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setShowRecommendations(true);
+              }}
+              onFocus={() => setShowRecommendations(true)}
+              onBlur={() => setTimeout(() => setShowRecommendations(false), 250)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  // Immediate fetch on Enter (clears debounce)
+                  if (debounceRef.current) clearTimeout(debounceRef.current);
+                  setShowRecommendations(false);
+                  applyFilters(search, selectedSessionId, selectedClassId, selectedSectionId);
+                }
+              }}
+              placeholder="Search by name, adm no, parents, phone…"
+              className="w-[280px] h-9"
+            />
 
-          {(search || selectedClassId || selectedSectionId) && (
+            <Button
+              type="button"
+              variant="outline"
+              loading={pending}
+              onClick={() => {
+                setShowRecommendations(false);
+                applyFilters(search, selectedSessionId, selectedClassId, selectedSectionId);
+              }}
+              className="h-9 px-3"
+            >
+              Search
+            </Button>
+
+            {/* Auto-suggest dropdown popup */}
+            {showRecommendations && search.trim().length > 0 && (
+              <div className="absolute top-10 left-0 w-[280px] bg-white text-stone-900 border border-stone-200 rounded-lg shadow-lg z-50 max-h-[250px] overflow-y-auto scrollbar-thin divide-y">
+                {students
+                  .filter((s) => {
+                    const q = search.toLowerCase();
+                    return (
+                      s.fullName.toLowerCase().includes(q) ||
+                      s.admissionNo.toLowerCase().includes(q) ||
+                      s.family?.fatherName?.toLowerCase().includes(q) ||
+                      s.family?.motherName?.toLowerCase().includes(q) ||
+                      s.family?.primaryPhone?.includes(q)
+                    );
+                  })
+                  .slice(0, 10)
+                  .map((s) => (
+                    <div
+                      key={s.id}
+                      onMouseDown={(e) => {
+                        // Prevent blur event from firing before navigating
+                        e.preventDefault();
+                      }}
+                      onClick={() => {
+                        setShowRecommendations(false);
+                        router.push(`/students/${s.id}`);
+                      }}
+                      className="p-2.5 hover:bg-stone-100 cursor-pointer text-left transition-colors"
+                    >
+                      <div className="font-semibold text-xs text-stone-850 flex justify-between">
+                        <span>{s.fullName}</span>
+                        <span className="text-[10px] text-stone-500 font-mono">#{s.admissionNo}</span>
+                      </div>
+                      {s.family?.fatherName && (
+                        <div className="text-[10px] text-stone-500 mt-0.5">
+                          S/o or D/o: {s.family.fatherName}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                {students.filter((s) => {
+                  const q = search.toLowerCase();
+                  return (
+                    s.fullName.toLowerCase().includes(q) ||
+                    s.admissionNo.toLowerCase().includes(q) ||
+                    s.family?.fatherName?.toLowerCase().includes(q) ||
+                    s.family?.motherName?.toLowerCase().includes(q) ||
+                    s.family?.primaryPhone?.includes(q)
+                  );
+                }).length === 0 && (
+                  <div className="p-3 text-center text-xs text-muted-foreground">
+                    No matching student found
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {(search || (selectedClassId && selectedClassId !== "ALL") || selectedSectionId) && (
             <Button
               type="button"
               variant="ghost"
               disabled={pending}
               onClick={() => {
                 setSearch("");
-                setSelectedClassId("");
+                setSelectedClassId("ALL");
                 setSelectedSectionId("");
                 startTransition(() => {
                   router.push("/students");
@@ -260,71 +388,104 @@ export function StudentsClient({
         </div>
       </div>
 
-      <div className={cn("overflow-hidden rounded-lg border bg-card transition-opacity duration-200 relative", pending && "opacity-60 pointer-events-none")}>
-        {pending && (
-          <div className="absolute inset-0 bg-background/10 backdrop-blur-[0.5px] flex items-center justify-center z-10">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        )}
-        <table className="w-full text-sm">
-
-          <thead className="border-b bg-muted/40 text-left">
-            <tr>
-              <th className="px-4 py-3 font-medium">Admission</th>
-              <th className="px-4 py-3 font-medium">Name</th>
-              <th className="px-4 py-3 font-medium">Class</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((s) => {
-              const enrollment = s.enrollments[0];
-              return (
-                <tr key={s.id} className="border-b last:border-0 hover:bg-accent/10 transition-colors">
-                  <td className="px-4 py-3 font-mono font-medium">{s.admissionNo}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-xs font-semibold text-muted-foreground shadow-2xs">
-                        {s.photoUrl ? (
-                          <img src={s.photoUrl} alt={s.fullName} className="h-full w-full object-cover" />
-                        ) : (
-                          s.fullName.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <span className="font-semibold">{s.fullName}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {enrollment
-                      ? `${enrollment.class.name}-${enrollment.section.name}`
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={s.status === "ACTIVE" ? "success" : "secondary"}>{s.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end items-center gap-3">
-                      <Link href={`/students/${s.id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline">
-                        View
-                      </Link>
-                      {canDelete && s.id !== currentUserStudentId && (
-                        <button
-                          onClick={() => handleDelete(s.id, s.fullName)}
-                          disabled={pending}
-                          className="text-sm font-medium text-red-600 hover:text-red-900 hover:underline disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </td>
+      {!(search.trim() || (selectedSessionId && selectedClassId && selectedClassId !== "")) ? (
+        <Card className="border border-dashed border-stone-250 p-8 text-center bg-stone-50/50 rounded-xl shadow-xs">
+          <CardContent className="py-8 text-stone-500 space-y-2 flex flex-col items-center">
+            <span className="text-3xl block">📁</span>
+            <p className="font-semibold text-sm">Select Filters or Search</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Please select Academic Session and Class, or type in the search bar above to display the student list.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className={cn("overflow-hidden rounded-lg border bg-card transition-opacity duration-200 relative", pending && "opacity-60 pointer-events-none")}>
+          {pending && (
+            <div className="absolute inset-0 bg-background/10 backdrop-blur-[0.5px] flex items-center justify-center z-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          )}
+          <div className="max-h-[850px] overflow-y-auto scrollbar-thin">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left sticky top-0 bg-background z-10">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Admission</th>
+                  <th className="px-4 py-3 font-medium">Father's Name</th>
+                  <th className="px-4 py-3 font-medium">Phone No.</th>
+                  <th className="px-4 py-3 font-medium">Class</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium" />
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {displayedStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground font-medium text-sm">
+                      No students found matching your criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  displayedStudents.map((s) => {
+                    const enrollment = s.enrollments[0];
+                    return (
+                      <tr key={s.id} className="border-b last:border-0 hover:bg-accent/10 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-xs font-semibold text-muted-foreground shadow-2xs">
+                              {s.photoUrl ? (
+                                <img src={s.photoUrl} alt={s.fullName} className="h-full w-full object-cover" />
+                              ) : (
+                                s.fullName.charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <span className="font-semibold truncate max-w-[140px] inline-block" title={s.fullName}>
+                              {s.fullName}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-medium">{s.admissionNo}</td>
+                        <td className="px-4 py-3">
+                          <span className="truncate max-w-[140px] inline-block" title={s.family?.fatherName || ""}>
+                            {s.family?.fatherName || "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {s.family?.primaryPhone || "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {enrollment
+                            ? `${enrollment.class.name}-${enrollment.section.name}`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={s.status === "ACTIVE" ? "success" : "secondary"}>{s.status}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end items-center gap-3">
+                            <Link href={`/students/${s.id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline">
+                              View
+                            </Link>
+                            {canDelete && s.id !== currentUserStudentId && (
+                              <button
+                                onClick={() => handleDelete(s.id, s.fullName)}
+                                disabled={pending}
+                                className="text-sm font-medium text-red-600 hover:text-red-900 hover:underline disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {importResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

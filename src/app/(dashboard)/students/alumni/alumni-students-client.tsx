@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
+import { Eye } from "lucide-react";
+import { toast } from "sonner";
+import { cancelStudentExitAction } from "@/server/actions/student-exit.actions";
 
 type AlumniStudent = {
   id: string;
@@ -39,7 +43,21 @@ export function AlumniStudentsClient({
 }: {
   students: AlumniStudent[];
 }) {
+  const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
+
+  function handleReactivate(studentId: string, studentName: string) {
+    if (!confirm(`Are you sure you want to re-activate ${studentName}? This will restore their active status and enrollment.`)) return;
+
+    startTransition(async () => {
+      const res = await cancelStudentExitAction(studentId);
+      if (res.success) {
+        toast.success(`Successfully re-activated ${studentName}`);
+      } else {
+        toast.error(res.error || "Failed to re-activate student");
+      }
+    });
+  }
 
   const filtered = students.filter((s) => {
     if (search.trim()) {
@@ -75,7 +93,7 @@ export function AlumniStudentsClient({
             No alumni records found matching the search.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-stone-200 rounded-lg scrollbar-thin">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground uppercase text-[10px] font-semibold">
@@ -120,12 +138,24 @@ export function AlumniStudentsClient({
                         {s.exitInfo?.tcNumber || "—"}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/students/${s.id}`}
-                          className="inline-flex items-center gap-1 rounded bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
-                        >
-                          View Profile
-                        </Link>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={pending}
+                            className="h-7 text-[11px] px-2 text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100"
+                            onClick={() => handleReactivate(s.id, s.fullName)}
+                          >
+                            Re-activate
+                          </Button>
+                          <Link
+                            href={`/students/${s.id}`}
+                            className="inline-flex items-center gap-1 rounded bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View Profile
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

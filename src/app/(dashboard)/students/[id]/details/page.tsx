@@ -33,7 +33,7 @@ export default async function StudentDetailsPage({
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between border-b pb-3">
         <PageHeader
-          title="Student Digital Dossier"
+          title="Student Digital Portal"
           description={`Complete academic, family, and medical record for ${student.fullName}`}
         />
         <div className="flex gap-2">
@@ -41,7 +41,7 @@ export default async function StudentDetailsPage({
             href={`/students/${student.id}/edit`}
             className="text-xs font-bold bg-stone-900 text-white hover:bg-stone-850 px-3.5 py-2 rounded-lg shadow-sm transition-colors"
           >
-            Edit Dossier
+            Edit
           </Link>
           <Link
             href={`/students/${student.id}`}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listStudents } from "@/server/services/student.service";
 import { listClasses } from "@/server/services/class.service";
+import { listSessions, getCurrentSession } from "@/server/services/session.service";
 import { PageHeader, EmptyState } from "@/components/shared/states";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,22 +11,31 @@ import { requirePermission, resolveEffectivePermissions } from "@/server/permiss
 export default async function StudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; classId?: string; sectionId?: string }>;
+  searchParams: Promise<{ q?: string; classId?: string; sectionId?: string; sessionId?: string }>;
 }) {
   const params = await searchParams;
   const { user } = await requirePermission("student.view");
   const perms = await resolveEffectivePermissions(user.id, user.role);
   const canDelete = perms.has("student.delete");
 
-  const [students, classes] = await Promise.all([
-    listStudents({
-      pageSize: 50,
-      search: params.q,
-      classId: params.classId,
-      sectionId: params.sectionId,
-    }),
+  const [classes, sessionsResult, currentSession] = await Promise.all([
     listClasses({ pageSize: 100 }),
+    listSessions({ pageSize: 100 }),
+    getCurrentSession(),
   ]);
+
+  const initialSessionId = params.sessionId ?? currentSession?.id ?? "";
+  const initialClassId = params.classId ?? "";
+
+  const students = (initialClassId || params.q?.trim())
+    ? await listStudents({
+        pageSize: 500, // Fetch up to 500 records to let Client scroll
+        search: params.q,
+        classId: (initialClassId && initialClassId !== "ALL") ? initialClassId : undefined,
+        sectionId: params.sectionId || undefined,
+        sessionId: initialSessionId || undefined,
+      })
+    : { items: [], total: 0 };
 
   return (
     <div>
@@ -52,17 +62,11 @@ export default async function StudentsPage({
         canDelete={canDelete}
         currentUserStudentId={user.studentId ?? undefined}
         classes={classes.items}
-        initialClassId={params.classId ?? ""}
+        initialClassId={initialClassId}
         initialSectionId={params.sectionId ?? ""}
+        sessions={sessionsResult.items}
+        initialSessionId={initialSessionId}
       />
-      {students.items.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState
-            title="No students yet"
-            description="Click Add student to enter student and parent details in one place."
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
