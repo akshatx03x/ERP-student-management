@@ -13,6 +13,7 @@ export const createAdmissionSchema = z.object({
   aadhaar: z.string().trim().optional().nullable(),
   apaarId: z.string().trim().optional().nullable(),
   penId: z.string().trim().optional().nullable(),
+  srNo: z.string().trim().optional().nullable(),
   appliedClassId: idSchema,
   
   fatherName: z.string().trim().optional().nullable(),
@@ -23,6 +24,7 @@ export const createAdmissionSchema = z.object({
   fatherOfficeAddress: z.string().trim().optional().nullable(),
   fatherPhone: z.string().trim().optional().nullable(),
   fatherAadhaar: z.string().trim().optional().nullable(),
+  fatherEmail: z.string().trim().optional().nullable(),
 
   motherName: z.string().trim().optional().nullable(),
   motherQualification: z.string().trim().optional().nullable(),
@@ -33,6 +35,7 @@ export const createAdmissionSchema = z.object({
   motherOfficeAddress: z.string().trim().optional().nullable(),
   motherPhone: z.string().trim().optional().nullable(),
   motherAadhaar: z.string().trim().optional().nullable(),
+  motherEmail: z.string().trim().optional().nullable(),
 
   guardianName: z.string().trim().optional().nullable(),
   phone: z.string().trim().optional().nullable(),

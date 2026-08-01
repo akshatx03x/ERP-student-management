@@ -518,6 +518,7 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
           category: data.category,
           apaarId: data.apaarId,
           penId: data.penId,
+          srNo: data.srNo,
           previousSchoolName: data.previousSchoolName,
           previousClass: data.previousClass,
           tcNumber: data.tcNumber,
@@ -581,6 +582,7 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
             annualIncome: data.fatherAnnualIncome,
             officeAddress: data.fatherOfficeAddress,
             aadhaarNumber: data.fatherAadhaar,
+            email: data.fatherEmail,
           },
         });
         await tx.studentGuardian.create({
@@ -611,6 +613,7 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
             annualIncome: data.motherAnnualIncome,
             officeAddress: data.motherOfficeAddress,
             aadhaarNumber: data.motherAadhaar,
+            email: data.motherEmail,
           },
         });
         await tx.studentGuardian.create({

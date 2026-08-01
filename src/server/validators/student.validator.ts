@@ -44,6 +44,7 @@ export const createStudentWithFamilySchema = z.object({
   category: z.nativeEnum(StudentCategory).optional().nullable(),
   apaarId: z.string().trim().optional().nullable(),
   penId: z.string().trim().optional().nullable(),
+  srNo: z.string().trim().optional().nullable(),
   status: z.nativeEnum(StudentStatus).default(StudentStatus.ACTIVE),
   createLogin: z.boolean().default(true),
 
@@ -55,6 +56,7 @@ export const createStudentWithFamilySchema = z.object({
   fatherOfficeAddress: z.string().trim().optional().nullable(),
   fatherPhone: z.string().trim().optional().nullable(),
   fatherAadhaar: z.string().trim().optional().nullable(),
+  fatherEmail: z.string().trim().optional().nullable(),
 
   motherName: z.string().trim().optional().nullable(),
   motherQualification: z.string().trim().optional().nullable(),
@@ -65,6 +67,7 @@ export const createStudentWithFamilySchema = z.object({
   motherOfficeAddress: z.string().trim().optional().nullable(),
   motherPhone: z.string().trim().optional().nullable(),
   motherAadhaar: z.string().trim().optional().nullable(),
+  motherEmail: z.string().trim().optional().nullable(),
 
   guardianName: z.string().trim().optional().nullable(),
   phone: z.string().trim().min(1),

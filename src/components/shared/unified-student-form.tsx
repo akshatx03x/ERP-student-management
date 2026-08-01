@@ -16,6 +16,19 @@ export type GuardianItem = {
   isEmergencyContact: boolean;
 };
 
+export type PreviousSchoolItem = {
+  id: string;
+  schoolName: string;
+  class: string;
+  tcNumber: string;
+  tcDate: string;
+};
+
+export type TransportStopItem = {
+  id: string;
+  stop: string;
+};
+
 export type UnifiedFormState = {
   // 1. Academic & Personal
   admissionNo: string;
@@ -35,6 +48,7 @@ export type UnifiedFormState = {
   aadhaar: string;
   apaarId: string;
   penId: string;
+  srNo: string;
   photoUrl: string;
 
   // 2. Father
@@ -46,6 +60,7 @@ export type UnifiedFormState = {
   fatherOfficeAddress: string;
   fatherPhone: string;
   fatherAadhaar: string;
+  fatherEmail: string;
 
   // 3. Mother
   motherName: string;
@@ -57,6 +72,7 @@ export type UnifiedFormState = {
   motherOfficeAddress: string;
   motherPhone: string;
   motherAadhaar: string;
+  motherEmail: string;
 
   // 4. Guardians & Contact
   guardianName: string;
@@ -83,8 +99,10 @@ export type UnifiedFormState = {
   previousClass: string;
   tcNumber: string;
   tcDate: string;
+  additionalSchools: PreviousSchoolItem[];
   transportRequired: boolean;
   transportPickupPoint: string;
+  additionalTransportStops: TransportStopItem[];
   declarationAccepted: boolean;
   declarationDate: string;
   declarationParentName: string;
@@ -122,6 +140,7 @@ export function UnifiedStudentForm({
     aadhaar: "",
     apaarId: "",
     penId: "",
+    srNo: "",
     photoUrl: "",
 
     sessionId: currentSessionId ?? sessions[0]?.id ?? "",
@@ -139,6 +158,7 @@ export function UnifiedStudentForm({
     fatherOfficeAddress: "",
     fatherPhone: "",
     fatherAadhaar: "",
+    fatherEmail: "",
 
     motherName: "",
     motherQualification: "",
@@ -149,6 +169,7 @@ export function UnifiedStudentForm({
     motherOfficeAddress: "",
     motherPhone: "",
     motherAadhaar: "",
+    motherEmail: "",
 
     guardianName: "",
     phone: "",
@@ -172,8 +193,10 @@ export function UnifiedStudentForm({
     previousClass: "",
     tcNumber: "",
     tcDate: "",
+    additionalSchools: [],
     transportRequired: false,
     transportPickupPoint: "",
+    additionalTransportStops: [],
 
     declarationAccepted: true,
     declarationDate: new Date().toISOString().split("T")[0],
@@ -261,6 +284,15 @@ export function UnifiedStudentForm({
               placeholder="e.g. ADM-2026-0001"
               value={form.admissionNo}
               onChange={(e) => handleChange("admissionNo", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>SR Number</Label>
+            <Input
+              placeholder="e.g. SR-12345"
+              value={form.srNo}
+              onChange={(e) => handleChange("srNo", e.target.value)}
             />
           </div>
 
@@ -451,6 +483,15 @@ export function UnifiedStudentForm({
             />
           </div>
           <div className="space-y-2">
+            <Label>Father Email</Label>
+            <Input
+              type="email"
+              placeholder="father@example.com"
+              value={form.fatherEmail}
+              onChange={(e) => handleChange("fatherEmail", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>Annual Income (₹)</Label>
             <Input
               type="number"
@@ -528,12 +569,29 @@ export function UnifiedStudentForm({
             />
           </div>
           <div className="space-y-2">
+            <Label>Mother Email</Label>
+            <Input
+              type="email"
+              placeholder="mother@example.com"
+              value={form.motherEmail}
+              onChange={(e) => handleChange("motherEmail", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>Mother Aadhaar</Label>
             <Input
               placeholder="12-digit Aadhaar No"
               maxLength={12}
               value={form.motherAadhaar}
               onChange={(e) => handleChange("motherAadhaar", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2 md:col-span-3">
+            <Label>Office Address</Label>
+            <Input
+              placeholder="Work / Office Address"
+              value={form.motherOfficeAddress}
+              onChange={(e) => handleChange("motherOfficeAddress", e.target.value)}
             />
           </div>
         </CardContent>
@@ -858,6 +916,107 @@ export function UnifiedStudentForm({
             />
           </div>
 
+          {/* Additional Previous Schools */}
+          <div className="md:col-span-3 border-t pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="font-semibold text-sm">Additional Previous Schools</Label>
+                <p className="text-xs text-muted-foreground">Add any other schools attended before if any.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setForm((prev) => ({
+                    ...prev,
+                    additionalSchools: [
+                      ...prev.additionalSchools,
+                      {
+                        id: Math.random().toString(36).substring(2, 9),
+                        schoolName: "",
+                        class: "",
+                        tcNumber: "",
+                        tcDate: "",
+                      },
+                    ],
+                  }));
+                }}
+              >
+                + Add School
+              </Button>
+            </div>
+
+            {form.additionalSchools.map((s, idx) => (
+              <div key={s.id || idx} className="grid gap-3 rounded-md border p-3 bg-muted/20 md:grid-cols-4 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs">School Name</Label>
+                  <Input
+                    placeholder="School Name"
+                    value={s.schoolName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setForm((prev) => {
+                        const next = [...prev.additionalSchools];
+                        next[idx] = { ...next[idx], schoolName: val };
+                        return { ...prev, additionalSchools: next };
+                      });
+                    }}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Class</Label>
+                  <Input
+                    placeholder="Class"
+                    value={s.class}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setForm((prev) => {
+                        const next = [...prev.additionalSchools];
+                        next[idx] = { ...next[idx], class: val };
+                        return { ...prev, additionalSchools: next };
+                      });
+                    }}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">TC No</Label>
+                  <Input
+                    placeholder="TC No"
+                    value={s.tcNumber}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setForm((prev) => {
+                        const next = [...prev.additionalSchools];
+                        next[idx] = { ...next[idx], tcNumber: val };
+                        return { ...prev, additionalSchools: next };
+                      });
+                    }}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="flex items-center justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      setForm((prev) => ({
+                        ...prev,
+                        additionalSchools: prev.additionalSchools.filter((_, i) => i !== idx),
+                      }));
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <div className="space-y-2 border-t pt-4 md:col-span-3">
             <div className="flex items-center gap-2">
               <input
@@ -872,13 +1031,70 @@ export function UnifiedStudentForm({
               </Label>
             </div>
             {form.transportRequired && (
-              <div className="mt-3 max-w-sm">
-                <Label>Preferred Pickup / Drop Stop</Label>
-                <Input
-                  placeholder="e.g. Main Market Stop, Sector 14"
-                  value={form.transportPickupPoint}
-                  onChange={(e) => handleChange("transportPickupPoint", e.target.value)}
-                />
+              <div className="mt-3 space-y-4">
+                <div className="max-w-sm">
+                  <Label>Preferred Pickup / Drop Stop</Label>
+                  <Input
+                    placeholder="e.g. Main Market Stop, Sector 14"
+                    value={form.transportPickupPoint}
+                    onChange={(e) => handleChange("transportPickupPoint", e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between max-w-sm">
+                    <Label className="text-xs font-semibold text-muted-foreground">Additional Stops / Routes</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          additionalTransportStops: [
+                            ...prev.additionalTransportStops,
+                            { id: Math.random().toString(36).substring(2, 9), stop: "" },
+                          ],
+                        }));
+                      }}
+                    >
+                      + Add Stop
+                    </Button>
+                  </div>
+
+                  {form.additionalTransportStops.map((st, idx) => (
+                    <div key={st.id || idx} className="flex gap-2 items-center max-w-sm">
+                      <Input
+                        placeholder="Alternative stop point"
+                        value={st.stop}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setForm((prev) => {
+                            const next = [...prev.additionalTransportStops];
+                            next[idx] = { ...next[idx], stop: val };
+                            return { ...prev, additionalTransportStops: next };
+                          });
+                        }}
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs text-destructive px-2"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            additionalTransportStops: prev.additionalTransportStops.filter((_, i) => i !== idx),
+                          }));
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

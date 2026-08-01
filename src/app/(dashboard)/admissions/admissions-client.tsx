@@ -108,6 +108,7 @@ export function AdmissionsClient({
       aadhaar: formState.aadhaar.trim() || null,
       apaarId: formState.apaarId.trim() || null,
       penId: formState.penId.trim() || null,
+      srNo: formState.srNo.trim() || null,
 
       fatherName: formState.fatherName.trim() || null,
       fatherQualification: formState.fatherQualification.trim() || null,
@@ -117,6 +118,7 @@ export function AdmissionsClient({
       fatherOfficeAddress: formState.fatherOfficeAddress.trim() || null,
       fatherPhone: formState.fatherPhone.trim() || null,
       fatherAadhaar: formState.fatherAadhaar.trim() || null,
+      fatherEmail: formState.fatherEmail.trim() || null,
 
       motherName: formState.motherName.trim() || null,
       motherQualification: formState.motherQualification.trim() || null,
@@ -127,6 +129,7 @@ export function AdmissionsClient({
       motherOfficeAddress: formState.motherOfficeAddress.trim() || null,
       motherPhone: formState.motherPhone.trim() || null,
       motherAadhaar: formState.motherAadhaar.trim() || null,
+      motherEmail: formState.motherEmail.trim() || null,
 
       guardianName: formState.guardianName.trim() || null,
       phone: formState.phone.trim() || null,
@@ -143,13 +146,13 @@ export function AdmissionsClient({
       permState: formState.permState.trim() || null,
       permPincode: formState.permPincode.trim() || null,
 
-      previousSchoolName: formState.previousSchoolName.trim() || null,
-      previousClass: formState.previousClass.trim() || null,
-      tcNumber: formState.tcNumber.trim() || null,
+      previousSchoolName: [formState.previousSchoolName.trim(), ...formState.additionalSchools.map(s => s.schoolName.trim())].filter(Boolean).join(", ") || null,
+      previousClass: [formState.previousClass.trim(), ...formState.additionalSchools.map(s => s.class.trim())].filter(Boolean).join(", ") || null,
+      tcNumber: [formState.tcNumber.trim(), ...formState.additionalSchools.map(s => s.tcNumber.trim())].filter(Boolean).join(", ") || null,
       tcDate: formState.tcDate ? new Date(formState.tcDate) : null,
 
       transportRequired: formState.transportRequired,
-      transportPickupPoint: formState.transportPickupPoint.trim() || null,
+      transportPickupPoint: [formState.transportPickupPoint.trim(), ...formState.additionalTransportStops.map(s => s.stop.trim())].filter(Boolean).join(" / ") || null,
 
       declarationAccepted: formState.declarationAccepted,
       declarationDate: formState.declarationDate ? new Date(formState.declarationDate) : null,

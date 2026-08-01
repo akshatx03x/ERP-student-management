@@ -153,6 +153,7 @@ export async function createAdmission(input: CreateAdmissionInput) {
         aadhaar: data.aadhaar,
         apaarId: data.apaarId,
         penId: data.penId,
+        srNo: data.srNo,
         appliedClassId: data.appliedClassId,
 
         fatherName: data.fatherName,
@@ -163,6 +164,7 @@ export async function createAdmission(input: CreateAdmissionInput) {
         fatherOfficeAddress: data.fatherOfficeAddress,
         fatherPhone: data.fatherPhone,
         fatherAadhaar: data.fatherAadhaar,
+        fatherEmail: data.fatherEmail,
 
         motherName: data.motherName,
         motherQualification: data.motherQualification,
@@ -173,6 +175,7 @@ export async function createAdmission(input: CreateAdmissionInput) {
         motherOfficeAddress: data.motherOfficeAddress,
         motherPhone: data.motherPhone,
         motherAadhaar: data.motherAadhaar,
+        motherEmail: data.motherEmail,
 
         guardianName: data.guardianName,
         phone: data.phone,
@@ -326,6 +329,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
         aadhaar: admission.aadhaar,
         apaarId: admission.apaarId,
         penId: admission.penId,
+        srNo: admission.srNo,
         previousSchoolName: admission.previousSchoolName,
         previousClass: admission.previousClass,
         tcNumber: admission.tcNumber,
@@ -388,6 +392,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
           annualIncome: admission.fatherAnnualIncome,
           officeAddress: admission.fatherOfficeAddress,
           aadhaarNumber: admission.fatherAadhaar,
+          email: admission.fatherEmail,
         },
       });
       await tx.studentGuardian.create({
@@ -418,6 +423,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
           annualIncome: admission.motherAnnualIncome,
           officeAddress: admission.motherOfficeAddress,
           aadhaarNumber: admission.motherAadhaar,
+          email: admission.motherEmail,
         },
       });
       await tx.studentGuardian.create({
