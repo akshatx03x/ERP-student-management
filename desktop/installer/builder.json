@@ -14,6 +14,10 @@
   "files": [
     "dist/**/*",
     "package.json",
+    {
+      "from": "../node_modules/.prisma",
+      "to": "node_modules/.prisma"
+    },
     "!**/*.ts",
     "!**/src/**",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
@@ -24,8 +28,7 @@
 
   "asarUnpack": [
     "**/*.node",
-    "**/@prisma/**",
-    "**/.prisma/**"
+    "**/schema-engine-windows.exe"
   ],
 
   "extraResources": [

@@ -132,7 +132,12 @@ export async function saveStudentMarksAction(input: {
     resultOutcome?: ResultOutcome | null;
     principalRemarks?: string | null;
     status?: ResultStatus;
+    gkGrade?: string | null;
+    artGrade?: string | null;
+    rank?: number | null;
+    resultDate?: Date | null;
   } | null;
+  reason?: string;
 }) {
   return saveStudentMarks(input);
 }

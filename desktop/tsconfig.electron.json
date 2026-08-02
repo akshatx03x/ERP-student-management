@@ -16,8 +16,6 @@
     }
   },
   "include": [
-    "electron/**/*",
-    "../src/config/**/*",
-    "../src/server/providers/**/*"
+    "electron/**/*"
   ]
 }

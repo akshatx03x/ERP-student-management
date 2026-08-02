@@ -1,47 +1,565 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/server/lib/prisma";
-import { buildFullName } from "@/server/lib/helpers";
+import { buildFullName, schoolIdFromUser, decimalToNumber } from "@/server/lib/helpers";
 import { writeAuditLog } from "@/server/services/audit.service";
-import { attachFeeStructureInTx } from "@/server/services/fee.service";
-import { createStudentUser } from "@/server/services/student.service";
-import { EnrollmentStatus, StudentStatus } from "@prisma/client";
-import { hashPassword } from "better-auth/crypto";
-import { studentDobPassword } from "@/lib/utils";
+import { createStudentWithFamily } from "@/server/services/student.service";
+import { requirePermission } from "@/server/permissions/guard";
+import { Gender, StudentCategory, StudentStatus } from "@prisma/client";
 
-type RowError = { row: number; message: string };
+// Header synonyms for intelligent mapping
+const HEADER_SYNONYMS: Record<string, string[]> = {
+  admissionNo: ["admission no", "admission number", "admission_no", "adm no", "adm_no", "admissionno"],
+  name: ["name", "student name", "student_name", "fullname", "full name", "applicant name"],
+  gender: ["gender", "sex"],
+  penId: ["student pen", "pen", "pen id", "pen_id", "pen number", "student pen number", "student_pen"],
+  fatherName: ["father name", "father_name", "fathers name", "father's name"],
+  motherName: ["mother name", "mother_name", "mothers name", "mother's name"],
+  guardianName: ["guardian name", "guardian_name", "guardians name", "guardian's name"],
+  category: ["social category", "category", "social_category", "cast", "caste"],
+  aadhaar: ["aadhaar no.", "aadhaar no", "aadhaar", "aadhar", "aadhaar number", "aadhar number", "aadhaar_no", "aadhar_no"],
+  className: ["class", "standard", "grade", "class name"],
+  sectionName: ["section", "division", "stream", "section name"],
+  primaryPhone: ["primary phone", "primary_phone", "phone", "mobile", "mobile number", "contact", "contact number"],
+  secondaryPhone: ["secondary phone", "secondary_phone", "alternate phone", "alternate mobile"],
+  email: ["email", "email address", "email_address"],
+  address: ["address line 1", "address_line_1", "address", "residential address"],
+  addressLine2: ["address line 2", "address_line_2"],
+  city: ["city"],
+  state: ["state"],
+  pincode: ["pincode", "pin code", "zip", "zipcode"],
+  dateOfBirth: ["date of birth", "dob", "date_of_birth", "birth date"]
+};
 
-interface ParsedRow {
-  rowNumber: number;
-  admissionNo: string;
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  gender: string;
-  dateOfBirth: string;
-  bloodGroup: string;
-  aadhaar: string;
-  status: string;
-  fatherName: string;
-  motherName: string;
-  guardianName: string;
-  primaryPhone: string;
-  secondaryPhone: string;
-  email: string;
-  addressLine1: string;
-  addressLine2: string;
-  city: string;
-  state: string;
-  pincode: string;
-  className: string;
-  sectionName: string;
+// Map raw input value to standard synonyms
+function matchHeader(cellValue: string): string | null {
+  const clean = cellValue.trim().toLowerCase().replace(/[\s_\-\.]/g, " ");
+  for (const [key, synonyms] of Object.entries(HEADER_SYNONYMS)) {
+    if (synonyms.some(syn => clean.includes(syn) || syn.includes(clean) || clean === syn)) {
+      return key;
+    }
+  }
+  return null;
 }
 
-function getFamilyKey(row: ParsedRow) {
-  const f = (row.fatherName || "").trim().toLowerCase();
-  const m = (row.motherName || "").trim().toLowerCase();
-  const p = (row.primaryPhone || "").trim().toLowerCase();
-  if (p) return `phone:${p}`;
-  return `names:${f}|${m}`;
+// Convert Roman numerals to integers
+function romanToArabic(roman: string): number {
+  const map: Record<string, number> = { i: 1, v: 5, x: 10, l: 50 };
+  let total = 0;
+  let prev = 0;
+  const upper = roman.toLowerCase();
+  for (let i = upper.length - 1; i >= 0; i--) {
+    const curr = map[upper[i]] || 0;
+    if (curr < prev) total -= curr;
+    else total += curr;
+    prev = curr;
+  }
+  return total;
+}
+
+// Helper to normalize class inputs and find matches/suggestions
+function findClassMatch(className: string, dbClasses: Array<{ id: string; name: string }>) {
+  const cleanInput = className.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  if (!cleanInput) return { matchedClass: null, suggestion: null };
+
+  // Try direct match
+  const directMatch = dbClasses.find(c => {
+    const cleanDb = c.name.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    return cleanDb === cleanInput;
+  });
+  if (directMatch) return { matchedClass: directMatch, suggestion: null };
+
+  // Attempt Roman numeral conversion (e.g., "XII" -> "12" or "12th")
+  const romanMatch = cleanInput.match(/^(i{1,3}|iv|v|vi{1,3}|ix|x|xi{0,2}|xii)$/);
+  let convertedInput = cleanInput;
+  if (romanMatch) {
+    const arabic = romanToArabic(romanMatch[0]);
+    convertedInput = String(arabic);
+  }
+
+  // Search DB classes with converted numbers or arabic equivalent
+  const matchWithConversion = dbClasses.find(c => {
+    const cleanDb = c.name.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    // Compare translated arabic or Roman equivalents
+    if (cleanDb === convertedInput || cleanDb === convertedInput + "th") return true;
+    return false;
+  });
+  if (matchWithConversion) return { matchedClass: matchWithConversion, suggestion: null };
+
+  // Generate closest suggestion based on substring
+  const suggestion = dbClasses.find(c => {
+    const cleanDb = c.name.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    return cleanDb.includes(cleanInput) || cleanInput.includes(cleanDb);
+  });
+
+  return { matchedClass: null, suggestion: suggestion ? suggestion.name : null };
+}
+
+// Normalize blank placeholder values
+function normalizeString(val: any): string | null {
+  if (val === null || val === undefined) return null;
+  const str = String(val).trim();
+  const blanks = ["na", "n/a", "not available", "-", "--", "nil", "null", "undefined"];
+  if (!str || blanks.includes(str.toLowerCase())) {
+    return null;
+  }
+  return str;
+}
+
+// Normalize Gender values
+function normalizeGender(val: any): Gender | null {
+  const str = normalizeString(val);
+  if (!str) return null;
+  const clean = str.toLowerCase();
+  if (clean.startsWith("m") || clean === "boy") return Gender.MALE;
+  if (clean.startsWith("f") || clean === "girl") return Gender.FEMALE;
+  if (clean.startsWith("o")) return Gender.OTHER;
+  return null;
+}
+
+// Normalize Social Category
+function normalizeCategory(val: any): StudentCategory | null {
+  const str = normalizeString(val);
+  if (!str) return null;
+  const clean = str.toLowerCase();
+  if (clean.includes("general") || clean.includes("1")) return StudentCategory.GENERAL;
+  if (clean.includes("obc") || clean.includes("4")) return StudentCategory.OBC;
+  if (clean.includes("sc") || clean.includes("2")) return StudentCategory.SC;
+  if (clean.includes("st") || clean.includes("3")) return StudentCategory.ST;
+  if (clean.includes("ews")) return StudentCategory.EWS;
+  return StudentCategory.OTHER;
+}
+
+interface ValidationResultRow {
+  rowNumber: number;
+  studentName: string;
+  admissionNo: string;
+  className: string;
+  sectionName: string;
+  status: "READY" | "WARNING" | "ERROR";
+  reason: string;
+  data: any; // Mapped validated DTO payload
+}
+
+/**
+ * Step 1 & 2: Dry-run Parse and Validate the Excel rows without writing to the database
+ */
+export async function validateStudentsImport(
+  base64: string,
+  schoolId: string,
+  duplicateStrategy: "SKIP" | "FAIL"
+) {
+  const buffer = Buffer.from(base64, "base64");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) throw new Error("Excel file has no worksheets");
+
+  // Locate Header Row (up to first 10 rows)
+  let headerRowIndex = 1;
+  let headerMap: Record<string, number> = {};
+  
+  for (let r = 1; r <= 10; r++) {
+    const row = sheet.getRow(r);
+    let matchedCols = 0;
+    const tempMap: Record<string, number> = {};
+    
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const cellVal = String(cell.value || "");
+      const mappedKey = matchHeader(cellVal);
+      if (mappedKey) {
+        tempMap[mappedKey] = colNumber;
+        matchedCols++;
+      }
+    });
+
+    // If we matched at least 3 critical headers (like class, name, section, admissionNo)
+    if (tempMap.className && tempMap.name && (tempMap.admissionNo || tempMap.penId)) {
+      headerRowIndex = r;
+      headerMap = tempMap;
+      break;
+    }
+  }
+
+  // If we couldn't auto-detect headers, fallback to Row 1
+  if (Object.keys(headerMap).length === 0) {
+    const firstRow = sheet.getRow(1);
+    firstRow.eachCell((cell, colNumber) => {
+      const mappedKey = matchHeader(String(cell.value || ""));
+      if (mappedKey) headerMap[mappedKey] = colNumber;
+    });
+    headerRowIndex = 1;
+  }
+
+  // Fetch classes and sections for validation mapping
+  const dbClasses = await prisma.class.findMany({
+    where: { schoolId },
+    include: { sections: true }
+  });
+
+  const currentSession = await prisma.academicSession.findFirst({
+    where: { schoolId, isCurrent: true },
+  });
+
+  const rows: ValidationResultRow[] = [];
+  const processedAdmissions = new Set<string>();
+  const processedPens = new Set<string>();
+  const processedAadhaars = new Set<string>();
+
+  // Parse Row Data
+  const getValue = (row: ExcelJS.Row, key: string): string | null => {
+    const colIdx = headerMap[key];
+    if (!colIdx) return null;
+    const val = row.getCell(colIdx).value;
+    if (val == null) return null;
+    if (val instanceof Date) return val.toISOString().split("T")[0];
+    if (typeof val === "object" && "text" in val) return String(val.text || "").trim();
+    return String(val).trim();
+  };
+
+  sheet.eachRow(async (row, rowNumber) => {
+    if (rowNumber <= headerRowIndex) return; // Skip title / header rows
+
+    const rawName = normalizeString(getValue(row, "name"));
+    const rawClass = normalizeString(getValue(row, "className"));
+    const rawSection = normalizeString(getValue(row, "sectionName"));
+    const rawAdmissionNo = normalizeString(getValue(row, "admissionNo"));
+    const rawPen = normalizeString(getValue(row, "penId"));
+    const rawAadhaar = normalizeString(getValue(row, "aadhaar"));
+    const rawDob = getValue(row, "dateOfBirth");
+
+    // Skip empty lines
+    if (!rawName && !rawClass && !rawAdmissionNo && !rawPen) return;
+
+    let status: "READY" | "WARNING" | "ERROR" = "READY";
+    const reasons: string[] = [];
+
+    // 1. Mandatory Fields Validation
+    if (!rawName) {
+      status = "ERROR";
+      reasons.push("Student Name is required");
+    }
+    if (!rawAdmissionNo) {
+      status = "ERROR";
+      reasons.push("Admission number is required");
+    }
+
+    // Date of Birth check (now optional/nullable)
+    let dobDate: Date | null = null;
+    if (rawDob) {
+      const ts = Date.parse(rawDob);
+      if (isNaN(ts)) {
+        status = "ERROR";
+        reasons.push(`Invalid Date of Birth format: "${rawDob}". Use YYYY-MM-DD.`);
+      } else {
+        dobDate = new Date(ts);
+      }
+    }
+
+    // 2. Class & Section mapping validation
+    let classId: string | null = null;
+    let sectionId: string | null = null;
+    if (rawClass) {
+      const { matchedClass, suggestion } = findClassMatch(rawClass, dbClasses);
+      if (matchedClass) {
+        classId = matchedClass.id;
+        if (rawSection) {
+          const matchedSection = matchedClass.sections.find(
+            s => s.name.trim().toLowerCase() === rawSection.trim().toLowerCase()
+          );
+          if (matchedSection) {
+            sectionId = matchedSection.id;
+          } else {
+            status = "ERROR";
+            reasons.push(`Section "${rawSection}" not found in class "${matchedClass.name}"`);
+          }
+        } else {
+          status = "ERROR";
+          reasons.push("Section name is required when Class is specified");
+        }
+      } else {
+        status = "ERROR";
+        if (suggestion) {
+          reasons.push(`Class "${rawClass}" not found. Did you mean "${suggestion}"?`);
+        } else {
+          reasons.push(`Class "${rawClass}" not found in ERP`);
+        }
+      }
+    } else {
+      status = "ERROR";
+      reasons.push("Class name is required");
+    }
+
+    // 3. Duplicate checks within Excel sheet itself
+    if (rawAdmissionNo && processedAdmissions.has(rawAdmissionNo)) {
+      status = "ERROR";
+      reasons.push(`Duplicate Admission No "${rawAdmissionNo}" in Excel`);
+    } else if (rawAdmissionNo) {
+      processedAdmissions.add(rawAdmissionNo);
+    }
+
+    if (rawPen && processedPens.has(rawPen)) {
+      status = "ERROR";
+      reasons.push(`Duplicate Student PEN "${rawPen}" in Excel`);
+    } else if (rawPen) {
+      processedPens.add(rawPen);
+    }
+
+    if (rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*") && processedAadhaars.has(rawAadhaar)) {
+      status = "ERROR";
+      reasons.push(`Duplicate Aadhaar No. "${rawAadhaar}" in Excel`);
+    } else if (rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*")) {
+      processedAadhaars.add(rawAadhaar);
+    }
+
+    // 4. Database Unique Constraint Checks (AdmissionNo, PEN, Aadhaar)
+    if (status !== "ERROR" && rawAdmissionNo) {
+      const existing = await prisma.student.findUnique({
+        where: { schoolId_admissionNo: { schoolId, admissionNo: rawAdmissionNo } }
+      });
+      if (existing) {
+        if (duplicateStrategy === "FAIL") {
+          status = "ERROR";
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists in ERP`);
+        } else {
+          status = "WARNING";
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists (Row will be skipped)`);
+        }
+      }
+    }
+
+    if (status !== "ERROR" && rawPen) {
+      const existing = await prisma.student.findFirst({
+        where: { penId: rawPen, schoolId }
+      });
+      if (existing) {
+        if (duplicateStrategy === "FAIL") {
+          status = "ERROR";
+          reasons.push(`Student PEN "${rawPen}" already exists in ERP (Student: ${existing.fullName})`);
+        } else {
+          status = "WARNING";
+          reasons.push(`Student PEN "${rawPen}" already exists (Row will be skipped)`);
+        }
+      }
+    }
+
+    if (status !== "ERROR" && rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*")) {
+      const existing = await prisma.student.findFirst({
+        where: { aadhaar: rawAadhaar, schoolId }
+      });
+      if (existing) {
+        if (duplicateStrategy === "FAIL") {
+          status = "ERROR";
+          reasons.push(`Aadhaar No. "${rawAadhaar}" already exists in ERP (Student: ${existing.fullName})`);
+        } else {
+          status = "WARNING";
+          reasons.push(`Aadhaar No. "${rawAadhaar}" already exists (Row will be skipped)`);
+        }
+      }
+    }
+
+    // Normalize Full Name logic safely (preserve original fullName)
+    let firstName = "";
+    let middleName = "";
+    let lastName = "";
+    if (rawName) {
+      const nameParts = rawName.split(/\s+/);
+      firstName = nameParts[0] || "";
+      if (nameParts.length > 2) {
+        middleName = nameParts.slice(1, -1).join(" ");
+        lastName = nameParts[nameParts.length - 1] || "";
+      } else if (nameParts.length === 2) {
+        lastName = nameParts[1] || "";
+      }
+    }
+
+    const payload = {
+      admissionNo: rawAdmissionNo,
+      firstName,
+      middleName: middleName || null,
+      lastName: lastName || null,
+      fullName: rawName,
+      dateOfBirth: dobDate,
+      gender: normalizeGender(getValue(row, "gender")),
+      penId: rawPen,
+      category: normalizeCategory(getValue(row, "category")),
+      aadhaar: rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*") ? rawAadhaar : null,
+      fatherName: normalizeString(getValue(row, "fatherName")),
+      motherName: normalizeString(getValue(row, "motherName")),
+      guardianName: normalizeString(getValue(row, "guardianName")),
+      phone: normalizeString(getValue(row, "primaryPhone")),
+      secondaryPhone: normalizeString(getValue(row, "secondaryPhone")),
+      email: normalizeString(getValue(row, "email")),
+      address: normalizeString(getValue(row, "address")),
+      resAddressLine2: normalizeString(getValue(row, "addressLine2")),
+      resCity: normalizeString(getValue(row, "city")),
+      resState: normalizeString(getValue(row, "state")),
+      resPincode: normalizeString(getValue(row, "pincode")),
+      enroll: true,
+      sessionId: currentSession?.id || null,
+      classId,
+      sectionId,
+      allowDuplicate: true,
+      createLogin: true
+    };
+
+    rows.push({
+      rowNumber,
+      studentName: rawName || "",
+      admissionNo: rawAdmissionNo || "",
+      className: rawClass || "",
+      sectionName: rawSection || "",
+      status,
+      reason: reasons.join("; ") || "Ready",
+      data: payload
+    });
+  });
+
+  // Calculate summaries
+  const readyCount = rows.filter(r => r.status === "READY").length;
+  const warningCount = rows.filter(r => r.status === "WARNING").length;
+  const errorCount = rows.filter(r => r.status === "ERROR").length;
+
+  return {
+    summary: {
+      ready: readyCount,
+      warnings: warningCount,
+      errors: errorCount,
+      total: rows.length
+    },
+    rows
+  };
+}
+
+/**
+ * Step 14: Batch insert the validated rows inside a single global Prisma transaction.
+ * If any row insert fails, the transaction is automatically rolled back.
+ */
+export async function executeStudentsImport(
+  validatedRows: ValidationResultRow[],
+  schoolId: string,
+  userId: string
+) {
+  const { user } = await requirePermission("student.create");
+  let importedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
+  const rowsToProcess = validatedRows.filter(r => r.status !== "ERROR");
+
+  // Single global transaction execution
+  await prisma.$transaction(async (tx) => {
+    for (const item of rowsToProcess) {
+      if (item.status === "WARNING") {
+        // Skip duplicate warning rows under "Skip Duplicate" strategy
+        skippedCount++;
+        continue;
+      }
+
+      try {
+        const studentInput = {
+          ...item.data,
+          schoolId
+        };
+        
+        // Reuse original Student + Family creation logic inside this transaction client
+        await createStudentWithFamily(studentInput, tx);
+        importedCount++;
+      } catch (err) {
+        failedCount = rowsToProcess.length - importedCount;
+        throw new Error(
+          `Import aborted & rolled back. Failed on Excel Row ${item.rowNumber} (${item.studentName}): ${err instanceof Error ? err.message : "Database write error"}`
+        );
+      }
+    }
+
+    // Write audit log inside the transaction
+    await writeAuditLog({
+      schoolId,
+      userId,
+      action: "create",
+      module: "student",
+      entityType: "ImportJob",
+      entityId: `import-${Date.now()}`,
+      newValue: {
+        filename: "Excel Batch Student Import",
+        importedCount,
+        skippedCount,
+        failedCount
+      }
+    }, tx);
+  }, {
+    timeout: 60000 // 60s timeout for large batches
+  });
+
+  return {
+    imported: importedCount,
+    skipped: skippedCount,
+    failed: failedCount
+  };
+}
+
+/**
+ * Step 4: Generates the sample Excel file download template matching expected headers.
+ */
+export async function downloadImportSample() {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Students Template");
+
+  worksheet.columns = [
+    { header: "Admission No", key: "admissionNo", width: 15 },
+    { header: "Name", key: "name", width: 25 },
+    { header: "Gender", key: "gender", width: 12 },
+    { header: "Date of Birth", key: "dateOfBirth", width: 15 },
+    { header: "Student PEN", key: "penId", width: 15 },
+    { header: "Father Name", key: "fatherName", width: 20 },
+    { header: "Mother Name", key: "motherName", width: 20 },
+    { header: "Guardian Name", key: "guardianName", width: 20 },
+    { header: "Social Category", key: "category", width: 15 },
+    { header: "AADHAAR No.", key: "aadhaar", width: 15 },
+    { header: "Class", key: "className", width: 15 },
+    { header: "Section", key: "sectionName", width: 12 },
+    { header: "Primary Phone", key: "primaryPhone", width: 15 },
+    { header: "Secondary Phone", key: "secondaryPhone", width: 15 },
+    { header: "Email", key: "email", width: 25 },
+    { header: "Address Line 1", key: "address", width: 30 },
+    { header: "Address Line 2", key: "addressLine2", width: 30 },
+    { header: "City", key: "city", width: 15 },
+    { header: "State", key: "state", width: 15 },
+    { header: "Pincode", key: "pincode", width: 12 }
+  ];
+
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.getRow(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "F2F2F2" },
+  };
+
+  worksheet.addRow({
+    admissionNo: "ADM-2026-001",
+    name: "John Doe",
+    gender: "Male",
+    dateOfBirth: "2018-05-15",
+    penId: "23201140523",
+    fatherName: "Richard Doe",
+    motherName: "Jane Doe",
+    guardianName: "",
+    category: "General",
+    aadhaar: "123456789012",
+    className: "XII",
+    sectionName: "A",
+    primaryPhone: "9876543210",
+    secondaryPhone: "",
+    email: "john.doe@example.com",
+    address: "123 School Lane",
+    addressLine2: "",
+    city: "New Delhi",
+    state: "Delhi",
+    pincode: "110001"
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 export async function exportStudents(
@@ -181,281 +699,4 @@ export async function exportStudents(
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
-}
-
-export async function importStudents(
-  base64: string,
-  schoolId: string,
-  userId: string
-) {
-  const data = Buffer.from(base64, "base64");
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(data as unknown as ExcelJS.Buffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new Error("Excel file has no worksheet");
-
-  // Read headers
-  const headerRow = sheet.getRow(1);
-  const headerMap: Record<string, number> = {};
-  headerRow.eachCell((cell, colNumber) => {
-    const val = String(cell.value || "").trim().toLowerCase();
-    headerMap[val] = colNumber;
-  });
-
-  // Helper to get cell value by header name
-  const getValue = (row: ExcelJS.Row, headerName: string): string => {
-    const colNumber = headerMap[headerName.toLowerCase()];
-    if (!colNumber) return "";
-    const cellValue = row.getCell(colNumber).value;
-    if (cellValue == null) return "";
-    if (typeof cellValue === "object" && "text" in cellValue) return String(cellValue.text || "").trim();
-    if (cellValue instanceof Date) {
-      return cellValue.toISOString().split("T")[0]!;
-    }
-    return String(cellValue).trim();
-  };
-
-  const rows: ParsedRow[] = [];
-  sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // Skip header
-    const obj = {
-      rowNumber,
-      admissionNo: getValue(row, "Admission No") || getValue(row, "admissionNo"),
-      firstName: getValue(row, "First Name") || getValue(row, "firstName"),
-      middleName: getValue(row, "Middle Name") || getValue(row, "middleName"),
-      lastName: getValue(row, "Last Name") || getValue(row, "lastName"),
-      gender: getValue(row, "Gender") || getValue(row, "gender"),
-      dateOfBirth: getValue(row, "Date of Birth") || getValue(row, "dateOfBirth"),
-      bloodGroup: getValue(row, "Blood Group") || getValue(row, "bloodGroup"),
-      aadhaar: getValue(row, "Aadhaar") || getValue(row, "aadhaar"),
-      status: getValue(row, "Status") || getValue(row, "status") || "ACTIVE",
-      fatherName: getValue(row, "Father Name") || getValue(row, "fatherName"),
-      motherName: getValue(row, "Mother Name") || getValue(row, "motherName"),
-      guardianName: getValue(row, "Guardian Name") || getValue(row, "guardianName"),
-      primaryPhone: getValue(row, "Primary Phone") || getValue(row, "primaryPhone") || getValue(row, "phone"),
-      secondaryPhone: getValue(row, "Secondary Phone") || getValue(row, "secondaryPhone"),
-      email: getValue(row, "Email") || getValue(row, "email"),
-      addressLine1: getValue(row, "Address Line 1") || getValue(row, "addressLine1") || getValue(row, "address"),
-      addressLine2: getValue(row, "Address Line 2") || getValue(row, "addressLine2"),
-      city: getValue(row, "City") || getValue(row, "city"),
-      state: getValue(row, "State") || getValue(row, "state"),
-      pincode: getValue(row, "Pincode") || getValue(row, "pincode"),
-      className: getValue(row, "Class") || getValue(row, "className"),
-      sectionName: getValue(row, "Section") || getValue(row, "sectionName"),
-    };
-    
-    // Check if row has any data before processing
-    if (Object.values(obj).some((v) => v !== rowNumber && v)) {
-      rows.push(obj);
-    }
-  });
-
-  const errors: RowError[] = [];
-  const createdFamiliesMap = new Map<string, string>();
-  let successCount = 0;
-
-  // Fetch current session
-  const currentSession = await prisma.academicSession.findFirst({
-    where: { schoolId, isCurrent: true },
-  });
-
-  for (const row of rows) {
-    const errorMsg = await validateRow(row, schoolId);
-    if (errorMsg) {
-      errors.push({ row: row.rowNumber, message: errorMsg });
-      continue;
-    }
-
-    try {
-      // Precompute login password hash outside the transaction (CPU-bound bcrypt)
-      const dobDate = new Date(row.dateOfBirth);
-      const tempPassword = studentDobPassword(dobDate);
-      const hashedLoginPassword = await hashPassword(tempPassword);
-
-      await prisma.$transaction(async (tx) => {
-        // Resolve Family
-          const familyKey = getFamilyKey(row);
-          let familyId = createdFamiliesMap.get(familyKey);
-
-          if (!familyId) {
-            // Check DB
-            let dbFamily = null;
-            if (row.primaryPhone) {
-              dbFamily = await tx.family.findFirst({
-                where: { primaryPhone: row.primaryPhone, schoolId },
-              });
-            }
-            if (!dbFamily && row.fatherName && row.motherName) {
-              dbFamily = await tx.family.findFirst({
-                where: { fatherName: row.fatherName, motherName: row.motherName, schoolId },
-              });
-            }
-
-            if (dbFamily) {
-              familyId = dbFamily.id;
-            } else {
-              // Create family
-              const newFamily = await tx.family.create({
-                data: {
-                  schoolId,
-                  fatherName: row.fatherName || null,
-                  motherName: row.motherName || null,
-                  guardianName: row.guardianName || null,
-                  primaryPhone: row.primaryPhone || null,
-                  secondaryPhone: row.secondaryPhone || null,
-                  email: row.email || null,
-                  addressLine1: row.addressLine1 || null,
-                  addressLine2: row.addressLine2 || null,
-                  city: row.city || null,
-                  state: row.state || null,
-                  pincode: row.pincode || null,
-                },
-              });
-              familyId = newFamily.id;
-              await writeAuditLog(
-                {
-                  schoolId,
-                  userId,
-                  action: "create",
-                  module: "family",
-                  entityType: "Family",
-                  entityId: newFamily.id,
-                  newValue: newFamily,
-                },
-                tx,
-              );
-            }
-            createdFamiliesMap.set(familyKey, familyId);
-          }
-
-          // Create Student
-          const genderVal =
-            row.gender === "MALE" || row.gender === "FEMALE" || row.gender === "OTHER"
-              ? row.gender
-              : null;
-          
-          const fullName = buildFullName(row.firstName, row.middleName, row.lastName);
-
-          const newStudent = await tx.student.create({
-            data: {
-              schoolId,
-              familyId,
-              admissionNo: row.admissionNo,
-              firstName: row.firstName,
-              middleName: row.middleName || null,
-              lastName: row.lastName || null,
-              fullName,
-              dateOfBirth: dobDate,
-              gender: genderVal,
-              bloodGroup: row.bloodGroup || null,
-              aadhaar: row.aadhaar || null,
-              status: (row.status === "ACTIVE" || row.status === "LEFT" || row.status === "ARCHIVED" ? row.status : "ACTIVE") as StudentStatus,
-            },
-          });
-
-          await writeAuditLog(
-            {
-              schoolId,
-              userId,
-              action: "create",
-              module: "student",
-              entityType: "Student",
-              entityId: newStudent.id,
-              newValue: newStudent,
-            },
-            tx,
-          );
-
-          // Create User Account Login
-          await createStudentUser(tx, newStudent, schoolId, hashedLoginPassword);
-
-        // Register Enrollment and Fees
-        if (row.className && currentSession) {
-          const cls = await tx.class.findFirstOrThrow({
-            where: { name: row.className, schoolId },
-          });
-          const section = await tx.section.findFirstOrThrow({
-            where: { name: row.sectionName, classId: cls.id },
-          });
-
-          await tx.studentEnrollment.create({
-            data: {
-              studentId: newStudent.id,
-              sessionId: currentSession.id,
-              classId: cls.id,
-              sectionId: section.id,
-              status: EnrollmentStatus.ACTIVE,
-            },
-          });
-
-          await attachFeeStructureInTx(tx, {
-            schoolId,
-            studentId: newStudent.id,
-            sessionId: currentSession.id,
-            classId: cls.id,
-            userId,
-            requireStructure: false, // Don't crash if no structure is defined yet
-          });
-        }
-      });
-      successCount++;
-    } catch (e) {
-      errors.push({
-        row: row.rowNumber,
-        message: e instanceof Error ? e.message : "Internal Database error during row insert",
-      });
-    }
-  }
-
-  return { successCount, failCount: errors.length, errors };
-}
-
-async function validateRow(row: ParsedRow, schoolId: string) {
-  if (!row.admissionNo || !row.admissionNo.trim()) {
-    return "Admission No is required";
-  }
-  if (!row.firstName || !row.firstName.trim()) {
-    return "First Name is required";
-  }
-  if (!row.dateOfBirth) {
-    return "Date of Birth is required";
-  }
-  
-  const parsedDate = Date.parse(row.dateOfBirth);
-  if (Number.isNaN(parsedDate)) {
-    return `Invalid Date of Birth: "${row.dateOfBirth}". Use YYYY-MM-DD format.`;
-  }
-
-  if (!row.fatherName && !row.motherName && !row.guardianName) {
-    return "At least one parent/guardian name is required (Father, Mother, or Guardian)";
-  }
-
-  const dup = await prisma.student.findUnique({
-    where: { schoolId_admissionNo: { schoolId, admissionNo: row.admissionNo } },
-  });
-  if (dup) {
-    return `Student with Admission No "${row.admissionNo}" already exists`;
-  }
-
-  if (row.className) {
-    const cls = await prisma.class.findFirst({
-      where: { name: row.className, schoolId },
-    });
-    if (!cls) {
-      return `Class "${row.className}" not found.`;
-    }
-
-    if (row.sectionName) {
-      const section = await prisma.section.findFirst({
-        where: { name: row.sectionName, classId: cls.id },
-      });
-      if (!section) {
-        return `Section "${row.sectionName}" not found in class "${row.className}".`;
-      }
-    } else {
-      return "Section is required if Class is specified";
-    }
-  }
-
-  return null;
 }

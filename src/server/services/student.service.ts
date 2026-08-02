@@ -1,4 +1,4 @@
-import { EnrollmentStatus, ExitReason, Role, StudentStatus } from "@prisma/client";
+import { EnrollmentStatus, ExitReason, Role, StudentStatus, Prisma } from "@prisma/client";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
@@ -30,7 +30,7 @@ import {
 
 export async function createStudentUser(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  student: { id: string; admissionNo: string; fullName: string; dateOfBirth: Date },
+  student: { id: string; admissionNo: string; fullName: string; dateOfBirth: Date | null },
   schoolId: string,
   hashedPassword?: string,
 ) {
@@ -462,7 +462,10 @@ export async function createStudent(input: CreateStudentInput) {
  * Add a student with parent details on the same form.
  * Creates a new family, or links to an existing one when familyId is provided.
  */
-export async function createStudentWithFamily(input: CreateStudentWithFamilyInput) {
+export async function createStudentWithFamily(
+  input: CreateStudentWithFamilyInput,
+  outerTx?: Prisma.TransactionClient
+) {
   const { user } = await requirePermission("student.create");
   const schoolId = schoolIdFromUser(user);
   const data = parseOrThrow(createStudentWithFamilySchema, input);
@@ -471,13 +474,15 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
     throw new Error("Enter at least one parent or guardian name");
   }
 
-  const dup = await prisma.student.findUnique({
+  const client = outerTx || prisma;
+
+  const dup = await client.student.findUnique({
     where: { schoolId_admissionNo: { schoolId, admissionNo: data.admissionNo } },
   });
   if (dup) throw new Error(`Admission number "${data.admissionNo}" already exists`);
 
   if (data.familyId) {
-    const family = await prisma.family.findFirst({
+    const family = await client.family.findFirst({
       where: { id: data.familyId, schoolId },
     });
     if (!family) throw new Error("Family not found");
@@ -485,9 +490,9 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
 
   if (data.enroll && data.sessionId && data.classId && data.sectionId) {
     const [session, cls, section] = await Promise.all([
-      prisma.academicSession.findFirst({ where: { id: data.sessionId, schoolId } }),
-      prisma.class.findFirst({ where: { id: data.classId, schoolId } }),
-      prisma.section.findFirst({ where: { id: data.sectionId, classId: data.classId } }),
+      client.academicSession.findFirst({ where: { id: data.sessionId, schoolId } }),
+      client.class.findFirst({ where: { id: data.classId, schoolId } }),
+      client.section.findFirst({ where: { id: data.sectionId, classId: data.classId } }),
     ]);
     if (!session || !cls || !section) throw new Error("Invalid session, class, or section");
   }
@@ -495,7 +500,7 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
   const fullName = buildFullName(data.firstName, data.middleName, data.lastName);
 
   if (!data.allowDuplicate) {
-    const existingDuplicate = await prisma.student.findFirst({
+    const existingDuplicate = await client.student.findFirst({
       where: {
         schoolId,
         fullName: { equals: fullName },
@@ -512,16 +517,15 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
   let hashedLoginPassword = "";
   if (data.createLogin) {
     const email = studentSyntheticEmail(data.admissionNo);
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await client.user.findUnique({ where: { email } });
     if (existingUser) throw new Error(`Login already exists for admission no ${data.admissionNo}`);
 
     const password = studentDobPassword(data.dateOfBirth);
     hashedLoginPassword = await hashPassword(password);
   }
 
-  return prisma.$transaction(
-    async (tx) => {
-      const familyId = data.familyId ?? null;
+  const execute = async (tx: Prisma.TransactionClient) => {
+    const familyId = data.familyId ?? null;
 
       const student = await tx.student.create({
         data: {
@@ -541,10 +545,16 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
           srNo: data.srNo,
           previousSchoolName: data.previousSchoolName,
           previousClass: data.previousClass,
+          previousBoard: data.previousBoard,
+          previousReason: data.previousReason,
           tcNumber: data.tcNumber,
           tcDate: data.tcDate,
           transportRequired: data.transportRequired ?? false,
           transportPickupPoint: data.transportPickupPoint,
+          transportRoute: data.transportRoute,
+          transportVehicle: data.transportVehicle,
+          transportDriver: data.transportDriver,
+          transportDriverContact: data.transportDriverContact,
           admissionDate: data.admissionDate ?? new Date(),
           photoDocumentId: data.photoDocumentId,
           photoUrl: data.photoUrl,
@@ -561,6 +571,10 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
                     guardianName: data.guardianName,
                     primaryPhone: data.phone,
                     secondaryPhone: data.secondaryPhone,
+                    fatherPhotoUrl: data.fatherPhotoUrl,
+                    motherPhotoUrl: data.motherPhotoUrl,
+                    primaryPhoneBelongsTo: data.primaryPhoneBelongsTo,
+                    secondaryPhoneBelongsTo: data.secondaryPhoneBelongsTo,
                     addressLine1: data.resAddressLine1 || data.address,
                     resAddressLine1: data.resAddressLine1 || data.address,
                     resAddressLine2: data.resAddressLine2,
@@ -596,6 +610,8 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
             fullName: data.fatherName,
             gender: "MALE",
             phone: data.fatherPhone || data.phone,
+            whatsAppNumber: data.fatherWhatsApp || null,
+            photoUrl: data.fatherPhotoUrl || null,
             qualification: data.fatherQualification,
             occupation: data.fatherOccupation,
             designation: data.fatherDesignation,
@@ -626,6 +642,8 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
             fullName: data.motherName,
             gender: "FEMALE",
             phone: data.motherPhone,
+            whatsAppNumber: data.motherWhatsApp || null,
+            photoUrl: data.motherPhotoUrl || null,
             qualification: data.motherQualification,
             isWorking: data.motherIsWorking,
             occupation: data.motherOccupation,
@@ -725,11 +743,12 @@ export async function createStudentWithFamily(input: CreateStudentWithFamilyInpu
       );
 
       return student;
-    },
-    {
-      timeout: 25000,
-    },
-  );
+  };
+
+  if (outerTx) {
+    return execute(outerTx);
+  }
+  return prisma.$transaction(execute, { timeout: 25000 });
 }
 
 /**
@@ -827,7 +846,81 @@ export async function updateStudent(input: UpdateStudentInput) {
       )
       : undefined;
 
-  const { id, primaryPhone, classId, sectionId, familyId, unlinkFamily, exitReason, ...rest } = data;
+  const {
+    id,
+    primaryPhone,
+    classId,
+    sectionId,
+    familyId,
+    unlinkFamily,
+    exitReason,
+
+    fatherName,
+    fatherQualification,
+    fatherOccupation,
+    fatherDesignation,
+    fatherAnnualIncome,
+    fatherOfficeAddress,
+    fatherPhone,
+    fatherAadhaar,
+    fatherEmail,
+    fatherWhatsApp,
+    fatherPhotoUrl,
+
+    motherName,
+    motherQualification,
+    motherIsWorking,
+    motherOccupation,
+    motherDesignation,
+    motherAnnualIncome,
+    motherOfficeAddress,
+    motherPhone,
+    motherAadhaar,
+    motherEmail,
+    motherWhatsApp,
+    motherPhotoUrl,
+
+    primaryPhoneBelongsTo,
+    secondaryPhone,
+    secondaryPhoneBelongsTo,
+
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    pincode,
+    permAddressLine1,
+    permAddressLine2,
+    permCity,
+    permState,
+    permPincode,
+    sameAsResidential,
+
+    allergies,
+    conditions,
+    disability,
+    emergencyRemarks,
+
+    guardian1Id,
+    guardian1Name,
+    guardian1Relation,
+    guardian1Phone,
+    guardian1WhatsApp,
+    guardian1Occupation,
+    guardian1Address,
+    guardian1PhotoUrl,
+
+    guardian2Id,
+    guardian2Name,
+    guardian2Relation,
+    guardian2Phone,
+    guardian2WhatsApp,
+    guardian2Occupation,
+    guardian2Address,
+    guardian2PhotoUrl,
+
+    ...rest
+  } = data;
 
   return prisma.$transaction(async (tx) => {
     let targetFamilyId = familyId;
@@ -917,6 +1010,279 @@ export async function updateStudent(input: UpdateStudentInput) {
       }
     }
 
+    // Family / Contact / Address fields update
+    const familyFieldsToUpdate: any = {};
+    if (fatherPhotoUrl !== undefined) familyFieldsToUpdate.fatherPhotoUrl = fatherPhotoUrl;
+    if (motherPhotoUrl !== undefined) familyFieldsToUpdate.motherPhotoUrl = motherPhotoUrl;
+    if (primaryPhone !== undefined) familyFieldsToUpdate.primaryPhone = primaryPhone;
+    if (secondaryPhone !== undefined) familyFieldsToUpdate.secondaryPhone = secondaryPhone;
+    if (primaryPhoneBelongsTo !== undefined) familyFieldsToUpdate.primaryPhoneBelongsTo = primaryPhoneBelongsTo;
+    if (secondaryPhoneBelongsTo !== undefined) familyFieldsToUpdate.secondaryPhoneBelongsTo = secondaryPhoneBelongsTo;
+
+    if (addressLine1 !== undefined) familyFieldsToUpdate.addressLine1 = addressLine1;
+    if (addressLine2 !== undefined) familyFieldsToUpdate.addressLine2 = addressLine2;
+    if (city !== undefined) familyFieldsToUpdate.city = city;
+    if (state !== undefined) familyFieldsToUpdate.state = state;
+    if (pincode !== undefined) familyFieldsToUpdate.pincode = pincode;
+    if (permAddressLine1 !== undefined) familyFieldsToUpdate.permAddressLine1 = permAddressLine1;
+    if (permAddressLine2 !== undefined) familyFieldsToUpdate.permAddressLine2 = permAddressLine2;
+    if (permCity !== undefined) familyFieldsToUpdate.permCity = permCity;
+    if (permState !== undefined) familyFieldsToUpdate.permState = permState;
+    if (permPincode !== undefined) familyFieldsToUpdate.permPincode = permPincode;
+    if (sameAsResidential !== undefined) familyFieldsToUpdate.sameAsResidential = sameAsResidential;
+
+    if (Object.keys(familyFieldsToUpdate).length > 0) {
+      await tx.family.update({
+        where: { id: existing.familyId },
+        data: familyFieldsToUpdate,
+      });
+    }
+
+    // Update Father Guardian
+    if (fatherName !== undefined || fatherPhone !== undefined || fatherWhatsApp !== undefined || fatherEmail !== undefined || fatherOccupation !== undefined || fatherQualification !== undefined || fatherAnnualIncome !== undefined || fatherOfficeAddress !== undefined || fatherAadhaar !== undefined || fatherPhotoUrl !== undefined) {
+      const fatherLink = await tx.studentGuardian.findFirst({
+        where: { studentId: id, relationshipType: "FATHER" },
+        include: { guardian: true }
+      });
+      const fatherData = {
+        fullName: fatherName ?? undefined,
+        phone: fatherPhone ?? undefined,
+        whatsAppNumber: fatherWhatsApp ?? undefined,
+        email: fatherEmail ?? undefined,
+        occupation: fatherOccupation ?? undefined,
+        qualification: fatherQualification ?? undefined,
+        annualIncome: fatherAnnualIncome !== undefined ? (fatherAnnualIncome ? new Prisma.Decimal(fatherAnnualIncome) : null) : undefined,
+        officeAddress: fatherOfficeAddress ?? undefined,
+        aadhaarNumber: fatherAadhaar ?? undefined,
+        photoUrl: fatherPhotoUrl ?? undefined,
+      };
+      Object.keys(fatherData).forEach(k => (fatherData as any)[k] === undefined && delete (fatherData as any)[k]);
+
+      if (fatherLink) {
+        await tx.guardian.update({
+          where: { id: fatherLink.guardianId },
+          data: fatherData,
+        });
+      } else if (fatherName) {
+        const newFather = await tx.guardian.create({
+          data: {
+            schoolId,
+            familyId: existing.familyId,
+            fullName: fatherName,
+            gender: "MALE",
+            phone: fatherPhone || null,
+            whatsAppNumber: fatherWhatsApp || null,
+            email: fatherEmail || null,
+            occupation: fatherOccupation || null,
+            qualification: fatherQualification || null,
+            annualIncome: fatherAnnualIncome ? new Prisma.Decimal(fatherAnnualIncome) : null,
+            officeAddress: fatherOfficeAddress || null,
+            aadhaarNumber: fatherAadhaar || null,
+            photoUrl: fatherPhotoUrl || null,
+          }
+        });
+        await tx.studentGuardian.create({
+          data: {
+            studentId: id,
+            guardianId: newFather.id,
+            relationshipType: "FATHER",
+            isPrimaryContact: true,
+            isEmergencyContact: true,
+            isFeePayer: true,
+          }
+        });
+      }
+    }
+
+    // Update Mother Guardian
+    if (motherName !== undefined || motherPhone !== undefined || motherWhatsApp !== undefined || motherEmail !== undefined || motherOccupation !== undefined || motherQualification !== undefined || motherAnnualIncome !== undefined || motherOfficeAddress !== undefined || motherAadhaar !== undefined || motherPhotoUrl !== undefined) {
+      const motherLink = await tx.studentGuardian.findFirst({
+        where: { studentId: id, relationshipType: "MOTHER" },
+        include: { guardian: true }
+      });
+      const motherData = {
+        fullName: motherName ?? undefined,
+        phone: motherPhone ?? undefined,
+        whatsAppNumber: motherWhatsApp ?? undefined,
+        email: motherEmail ?? undefined,
+        occupation: motherOccupation ?? undefined,
+        qualification: motherQualification ?? undefined,
+        annualIncome: motherAnnualIncome !== undefined ? (motherAnnualIncome ? new Prisma.Decimal(motherAnnualIncome) : null) : undefined,
+        officeAddress: motherOfficeAddress ?? undefined,
+        aadhaarNumber: motherAadhaar ?? undefined,
+        photoUrl: motherPhotoUrl ?? undefined,
+      };
+      Object.keys(motherData).forEach(k => (motherData as any)[k] === undefined && delete (motherData as any)[k]);
+
+      if (motherLink) {
+        await tx.guardian.update({
+          where: { id: motherLink.guardianId },
+          data: motherData,
+        });
+      } else if (motherName) {
+        const newMother = await tx.guardian.create({
+          data: {
+            schoolId,
+            familyId: existing.familyId,
+            fullName: motherName,
+            gender: "FEMALE",
+            phone: motherPhone || null,
+            whatsAppNumber: motherWhatsApp || null,
+            email: motherEmail || null,
+            occupation: motherOccupation || null,
+            qualification: motherQualification || null,
+            annualIncome: motherAnnualIncome ? new Prisma.Decimal(motherAnnualIncome) : null,
+            officeAddress: motherOfficeAddress || null,
+            aadhaarNumber: motherAadhaar || null,
+            photoUrl: motherPhotoUrl || null,
+          }
+        });
+        await tx.studentGuardian.create({
+          data: {
+            studentId: id,
+            guardianId: newMother.id,
+            relationshipType: "MOTHER",
+            isPrimaryContact: false,
+            isEmergencyContact: true,
+            isFeePayer: false,
+          }
+        });
+      }
+    }
+
+    // Update Medical details
+    if (allergies !== undefined || conditions !== undefined || disability !== undefined || emergencyRemarks !== undefined) {
+      const med = await tx.studentMedical.findUnique({ where: { studentId: id } });
+      if (med) {
+        await tx.studentMedical.update({
+          where: { studentId: id },
+          data: {
+            allergies: allergies !== undefined ? allergies : undefined,
+            conditions: conditions !== undefined ? conditions : undefined,
+            notes: emergencyRemarks !== undefined ? emergencyRemarks : undefined,
+            disability: disability !== undefined ? disability : undefined,
+            emergencyRemarks: emergencyRemarks !== undefined ? emergencyRemarks : undefined,
+          }
+        });
+      } else {
+        await tx.studentMedical.create({
+          data: {
+            studentId: id,
+            allergies: allergies || null,
+            conditions: conditions || null,
+            notes: emergencyRemarks || null,
+            disability: disability || null,
+            emergencyRemarks: emergencyRemarks || null,
+          }
+        });
+      }
+    }
+
+    // Update other guardians
+    const handleGuardianUpdate = async (
+      gId: string | null | undefined,
+      name: string | null | undefined,
+      relation: string | null | undefined,
+      phone: string | null | undefined,
+      whatsapp: string | null | undefined,
+      occupation: string | null | undefined,
+      address: string | null | undefined,
+      photoUrl: string | null | undefined,
+    ) => {
+      if (gId) {
+        const updateData: any = {};
+        if (name !== undefined) updateData.fullName = name;
+        if (phone !== undefined) updateData.phone = phone;
+        if (whatsapp !== undefined) updateData.whatsAppNumber = whatsapp;
+        if (occupation !== undefined) updateData.occupation = occupation;
+        if (address !== undefined) updateData.officeAddress = address;
+        if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
+
+        await tx.guardian.update({
+          where: { id: gId },
+          data: updateData,
+        });
+
+        if (relation !== undefined) {
+          await tx.studentGuardian.update({
+            where: { studentId_guardianId: { studentId: id, guardianId: gId } },
+            data: { relationshipType: relation as any },
+          });
+        }
+      } else if (name) {
+        const newG = await tx.guardian.create({
+          data: {
+            schoolId,
+            familyId: existing.familyId,
+            fullName: name,
+            phone: phone || null,
+            whatsAppNumber: whatsapp || null,
+            occupation: occupation || null,
+            officeAddress: address || null,
+            photoUrl: photoUrl || null,
+          }
+        });
+        await tx.studentGuardian.create({
+          data: {
+            studentId: id,
+            guardianId: newG.id,
+            relationshipType: (relation || "OTHER") as any,
+            isPrimaryContact: false,
+            isEmergencyContact: false,
+            isFeePayer: false,
+          }
+        });
+      }
+    };
+
+    if (guardian1Name !== undefined || guardian1Id !== undefined || guardian1PhotoUrl !== undefined) {
+      let resolvedG1Id = guardian1Id;
+      if (!resolvedG1Id) {
+        const gLink = await tx.studentGuardian.findFirst({
+          where: {
+            studentId: id,
+            relationshipType: { notIn: ["FATHER", "MOTHER"] },
+          },
+          orderBy: { createdAt: "asc" },
+        });
+        resolvedG1Id = gLink?.guardianId;
+      }
+      await handleGuardianUpdate(
+        resolvedG1Id,
+        guardian1Name,
+        guardian1Relation,
+        guardian1Phone,
+        guardian1WhatsApp,
+        guardian1Occupation,
+        guardian1Address,
+        guardian1PhotoUrl,
+      );
+    }
+
+    if (guardian2Name !== undefined || guardian2Id !== undefined || guardian2PhotoUrl !== undefined) {
+      let resolvedG2Id = guardian2Id;
+      if (!resolvedG2Id) {
+        const gLinks = await tx.studentGuardian.findMany({
+          where: {
+            studentId: id,
+            relationshipType: { notIn: ["FATHER", "MOTHER"] },
+          },
+          orderBy: { createdAt: "asc" },
+        });
+        resolvedG2Id = gLinks[1]?.guardianId;
+      }
+      await handleGuardianUpdate(
+        resolvedG2Id,
+        guardian2Name,
+        guardian2Relation,
+        guardian2Phone,
+        guardian2WhatsApp,
+        guardian2Occupation,
+        guardian2Address,
+        guardian2PhotoUrl,
+      );
+    }
+
     const updated = await tx.student.update({
       where: { id },
       data: {
@@ -925,13 +1291,6 @@ export async function updateStudent(input: UpdateStudentInput) {
         ...(targetFamilyId !== undefined ? { familyId: targetFamilyId || null } : {}),
       } as any,
     });
-
-    if (primaryPhone !== undefined) {
-      await tx.family.update({
-        where: { id: existing.familyId },
-        data: { primaryPhone: primaryPhone || null },
-      });
-    }
 
     if (classId !== undefined || sectionId !== undefined) {
       const latest = await tx.studentEnrollment.findFirst({
@@ -1004,7 +1363,7 @@ export async function updateStudent(input: UpdateStudentInput) {
       tx,
     );
     return updated;
-  });
+  }, { timeout: 20000 });
 }
 
 export async function deleteStudent(studentId: string) {

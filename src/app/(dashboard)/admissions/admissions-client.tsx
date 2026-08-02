@@ -162,6 +162,23 @@ export function AdmissionsClient({
       photoUrl: formState.photoUrl || null,
       familyId,
       allowDuplicate,
+      bloodGroup: formState.bloodGroup.trim() || null,
+      fatherPhotoUrl: formState.fatherPhotoUrl || null,
+      motherPhotoUrl: formState.motherPhotoUrl || null,
+      primaryPhoneBelongsTo: formState.primaryPhoneBelongsTo as any,
+      secondaryPhoneBelongsTo: formState.secondaryPhoneBelongsTo as any,
+      fatherWhatsApp: formState.fatherWhatsApp.trim() || null,
+      motherWhatsApp: formState.motherWhatsApp.trim() || null,
+      transportRoute: formState.transportRoute.trim() || null,
+      transportVehicle: formState.transportVehicle.trim() || null,
+      transportDriver: formState.transportDriver.trim() || null,
+      transportDriverContact: formState.transportDriverContact.trim() || null,
+      previousBoard: formState.previousBoard.trim() || null,
+      previousReason: formState.previousReason.trim() || null,
+      allergies: formState.allergies.trim() || null,
+      conditions: formState.conditions.trim() || null,
+      disability: formState.disability.trim() || null,
+      emergencyRemarks: formState.emergencyRemarks.trim() || null,
     });
 
     if (!result.success) {

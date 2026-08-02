@@ -6,14 +6,16 @@ import { useState, useTransition, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import {
   deleteStudentAction,
   exportStudentsAction,
-  importStudentsAction,
+  validateStudentsImportAction,
+  executeStudentsImportAction,
+  downloadImportSampleAction,
 } from "@/server/actions/student.actions";
 
 type StudentRow = {
@@ -149,31 +151,113 @@ export function StudentsClient({
     });
   };
 
-  const handleImportFile = (file: File | null) => {
-    if (!file) return;
-    startTransition(async () => {
-      try {
-        const buffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
-        let binary = "";
-        for (let i = 0; i < bytes.length; i += 1) {
-          binary += String.fromCharCode(bytes[i]!);
-        }
-        const base64 = btoa(binary);
-        const result = await importStudentsAction(base64);
-        
-        setImportResult(result);
-        if (result.failCount === 0) {
-          toast.success(`Successfully imported ${result.successCount} students!`);
-        } else {
-          toast.warning(`Imported ${result.successCount} students. ${result.failCount} rows failed.`);
-        }
-        router.refresh();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to import students");
-      }
-    });
+  // Import Engine State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importStep, setImportStep] = useState<"UPLOAD" | "PREVIEW" | "RESULT">("UPLOAD");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [duplicateStrategy, setDuplicateStrategy] = useState<"SKIP" | "FAIL">("SKIP");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [previewFilter, setPreviewFilter] = useState<"ALL" | "READY" | "WARNING" | "ERROR">("ALL");
+  
+  const [previewData, setPreviewData] = useState<{
+    summary: { ready: number; warnings: number; errors: number; total: number };
+    rows: Array<{
+      rowNumber: number;
+      studentName: string;
+      admissionNo: string;
+      className: string;
+      sectionName: string;
+      status: "READY" | "WARNING" | "ERROR";
+      reason: string;
+      data: any;
+    }>;
+  } | null>(null);
+
+  const [executionResult, setExecutionResult] = useState<{
+    imported: number;
+    skipped: number;
+    failed: number;
+  } | null>(null);
+
+  const handleDownloadSample = async () => {
+    try {
+      const base64 = await downloadImportSampleAction();
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "students_import_template.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Import template downloaded");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download template");
+    }
   };
+
+  const handleUploadAndAnalyze = async (file: File | null) => {
+    if (!file) return;
+    setSelectedFile(file);
+    setIsAnalyzing(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 1) {
+        binary += String.fromCharCode(bytes[i]!);
+      }
+      const base64 = btoa(binary);
+      const result = await validateStudentsImportAction(base64, duplicateStrategy);
+      
+      setPreviewData(result);
+      setImportStep("PREVIEW");
+      toast.success("Excel analysis completed successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Excel analysis failed. Please verify the file structure.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!previewData || previewData.summary.errors > 0) {
+      toast.error("Please fix all errors before importing");
+      return;
+    }
+    setIsCommitting(true);
+    try {
+      const result = await executeStudentsImportAction(previewData.rows, duplicateStrategy);
+      setExecutionResult(result);
+      setImportStep("RESULT");
+      toast.success("Excel batch import completed!");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Batch transaction failed. Database rolled back.");
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
+  const handleDownloadErrorReport = () => {
+    if (!previewData) return;
+    const errorRows = previewData.rows.filter(r => r.status === "ERROR" || r.status === "WARNING");
+    let csvContent = "data:text/csv;charset=utf-8,Excel Row,Student Name,Admission No,Status,Validation Reason\n";
+    errorRows.forEach(r => {
+      csvContent += `${r.rowNumber},"${r.studentName || ""}","${r.admissionNo || ""}",${r.status},"${r.reason || ""}"\n`;
+    });
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `student_import_errors_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const handleDelete = (id: string, fullName: string) => {
     if (confirm(`Are you sure you want to permanently delete the student "${fullName}"? This will remove all their records (fees, attendance, etc.).`)) {
@@ -359,21 +443,16 @@ export function StudentsClient({
 
 
         <div className="flex items-center gap-2">
-          <input
-            type="file"
-            id="student-import-file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={(e) => {
-              handleImportFile(e.target.files?.[0] ?? null);
-              e.target.value = "";
-            }}
-          />
           <Button
             type="button"
             variant="outline"
             disabled={pending}
-            onClick={() => document.getElementById("student-import-file")?.click()}
+            onClick={() => {
+              setIsImportModalOpen(true);
+              setImportStep("UPLOAD");
+              setSelectedFile(null);
+              setPreviewData(null);
+            }}
           >
             Import XLSX
           </Button>
@@ -487,43 +566,290 @@ export function StudentsClient({
         </div>
       )}
 
-      {importResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-lg shadow-lg">
-            <CardHeader className="border-b">
-              <CardTitle>Import Results</CardTitle>
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <Card className="w-full max-w-4xl shadow-xl bg-white max-h-[90vh] flex flex-col">
+            <CardHeader className="border-b px-6 py-4 flex flex-row items-center justify-between shrink-0">
+              <CardTitle className="text-lg font-bold text-stone-800">
+                {importStep === "UPLOAD" && "Import Students - Select File"}
+                {importStep === "PREVIEW" && "Import Students - Validation Preview"}
+                {importStep === "RESULT" && "Import Students - Completed"}
+              </CardTitle>
+              <button 
+                onClick={() => setIsImportModalOpen(false)}
+                className="text-stone-400 hover:text-stone-600 transition-colors"
+                disabled={isAnalyzing || isCommitting}
+              >
+                ✕
+              </button>
             </CardHeader>
-            <CardContent className="space-y-4 p-5 text-sm">
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/20 p-3">
-                  <span className="text-xs uppercase font-medium text-emerald-600 block mb-1">Successfully Imported</span>
-                  <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{importResult.successCount}</span>
-                </div>
-                <div className={`rounded-lg p-3 ${importResult.failCount > 0 ? "bg-rose-50 dark:bg-rose-950/20" : "bg-muted/40"}`}>
-                  <span className="text-xs uppercase font-medium text-rose-600 block mb-1">Failed Rows</span>
-                  <span className={`text-2xl font-bold ${importResult.failCount > 0 ? "text-rose-700 dark:text-rose-400" : "text-muted-foreground"}`}>{importResult.failCount}</span>
-                </div>
-              </div>
+            
+            <CardContent className="p-6 overflow-y-auto flex-1 min-h-0 text-sm space-y-4">
+              
+              {/* STEP 1: UPLOAD & SETTINGS */}
+              {importStep === "UPLOAD" && (
+                <div className="space-y-6">
+                  <div className="border-2 border-dashed border-stone-200 rounded-xl p-8 text-center bg-stone-50/50 hover:bg-stone-50 transition-colors flex flex-col items-center justify-center gap-3">
+                    <span className="text-4xl">📁</span>
+                    <div>
+                      <p className="font-semibold text-stone-700">Choose Student Excel File</p>
+                      <p className="text-xs text-stone-450 mt-1">Supports .xlsx and .xls formats</p>
+                    </div>
+                    
+                    <input 
+                      type="file"
+                      id="excel-upload-file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadAndAnalyze(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    
+                    <Button 
+                      type="button" 
+                      onClick={() => document.getElementById("excel-upload-file")?.click()}
+                      loading={isAnalyzing}
+                      className="mt-2"
+                    >
+                      {isAnalyzing ? "Analyzing File..." : "Browse File"}
+                    </Button>
+                  </div>
 
-              {importResult.errors.length > 0 && (
-                <div className="space-y-2">
-                  <span className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">Error Details</span>
-                  <div className="max-h-48 overflow-y-auto rounded-md border p-3 bg-slate-50 dark:bg-slate-900/30 text-rose-600 space-y-1.5 font-mono text-xs">
-                    {importResult.errors.map((err, idx) => (
-                      <div key={idx} className="border-b last:border-0 pb-1.5 last:pb-0">
-                        <span className="font-bold text-foreground">Row {err.row}:</span> {err.message}
+                  <div className="bg-stone-50 border border-stone-150 rounded-lg p-4 space-y-3">
+                    <h4 className="font-semibold text-stone-800 text-xs uppercase tracking-wider">Configure Import Settings</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-stone-500">Duplicate Handling Strategy</label>
+                        <select 
+                          value={duplicateStrategy}
+                          onChange={(e) => setDuplicateStrategy(e.target.value as "SKIP" | "FAIL")}
+                          className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none"
+                        >
+                          <option value="SKIP">Skip Duplicates (Import Only Unique Students)</option>
+                          <option value="FAIL">Fail Import (Reject File on Any Duplicate)</option>
+                        </select>
                       </div>
-                    ))}
+                      <div className="flex flex-col justify-end">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={handleDownloadSample}
+                          className="h-9 w-full flex items-center justify-center gap-1.5"
+                        >
+                          📥 Download Sample Template
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              <div className="flex justify-end pt-2 border-t">
-                <Button type="button" onClick={() => setImportResult(null)}>
-                  Close
-                </Button>
-              </div>
+              {/* STEP 2: VALIDATION PREVIEW */}
+              {importStep === "PREVIEW" && previewData && (
+                <div className="space-y-4 flex flex-col h-full min-h-0">
+                  {/* Summary Badges */}
+                  <div className="grid grid-cols-4 gap-3 shrink-0">
+                    <div className="bg-stone-50 border p-3 rounded-lg text-center">
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Total Rows</span>
+                      <span className="text-lg font-extrabold text-stone-700">{previewData.summary.total}</span>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-lg text-center">
+                      <span className="text-[10px] uppercase font-bold text-emerald-600 block mb-0.5">✓ Ready</span>
+                      <span className="text-lg font-extrabold text-emerald-700">{previewData.summary.ready}</span>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg text-center">
+                      <span className="text-[10px] uppercase font-bold text-amber-600 block mb-0.5">⚠ Warnings</span>
+                      <span className="text-lg font-extrabold text-amber-700">{previewData.summary.warnings}</span>
+                    </div>
+                    <div className="bg-rose-50 border border-rose-100 p-3 rounded-lg text-center">
+                      <span className="text-[10px] uppercase font-bold text-rose-600 block mb-0.5">✗ Errors</span>
+                      <span className="text-lg font-extrabold text-rose-700">{previewData.summary.errors}</span>
+                    </div>
+                  </div>
+
+                  {/* Filter tabs + Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 shrink-0 border-b pb-3">
+                    <div className="flex gap-1">
+                      {(["ALL", "READY", "WARNING", "ERROR"] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setPreviewFilter(tab)}
+                          className={cn(
+                            "px-3 py-1 rounded-md text-xs font-semibold border transition-all",
+                            previewFilter === tab
+                              ? "bg-stone-800 text-white border-stone-800"
+                              : "bg-white text-stone-600 hover:bg-stone-50 border-stone-200"
+                          )}
+                        >
+                          {tab === "ALL" && `All Rows (${previewData.summary.total})`}
+                          {tab === "READY" && `Ready (${previewData.summary.ready})`}
+                          {tab === "WARNING" && `Warnings (${previewData.summary.warnings})`}
+                          {tab === "ERROR" && `Errors (${previewData.summary.errors})`}
+                        </button>
+                      ))}
+                    </div>
+
+                    {(previewData.summary.errors > 0 || previewData.summary.warnings > 0) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDownloadErrorReport}
+                        className="text-xs h-8 text-rose-600 border-rose-200 hover:bg-rose-50/50"
+                      >
+                        🚨 Download Error Report
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Preview Table */}
+                  <div className="overflow-auto border rounded-lg flex-1 min-h-[250px]">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-stone-50 border-b sticky top-0 bg-stone-50 z-10 font-bold text-stone-600">
+                        <tr>
+                          <th className="px-3 py-2.5 w-16 text-center">Row</th>
+                          <th className="px-3 py-2.5">Name</th>
+                          <th className="px-3 py-2.5">Admission No</th>
+                          <th className="px-3 py-2.5">Class / Section</th>
+                          <th className="px-3 py-2.5 w-24">Status</th>
+                          <th className="px-3 py-2.5">Validation Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {previewData.rows
+                          .filter(r => {
+                            if (previewFilter === "ALL") return true;
+                            return r.status === previewFilter;
+                          })
+                          .map((row, idx) => (
+                            <tr key={idx} className="hover:bg-stone-50/50 transition-colors">
+                              <td className="px-3 py-2.5 text-center font-mono font-bold text-stone-450">{row.rowNumber}</td>
+                              <td className="px-3 py-2.5 font-bold text-stone-800">{row.studentName || "—"}</td>
+                              <td className="px-3 py-2.5 font-mono">{row.admissionNo || "—"}</td>
+                              <td className="px-3 py-2.5">
+                                {row.className ? `${row.className}-${row.sectionName || ""}` : "—"}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <Badge
+                                  variant={
+                                    row.status === "READY"
+                                      ? "success"
+                                      : row.status === "WARNING"
+                                      ? "warning"
+                                      : "destructive"
+                                  }
+                                  className="text-[9px] px-1.5 py-0.5"
+                                >
+                                  {row.status}
+                                </Badge>
+                              </td>
+                              <td className={cn(
+                                "px-3 py-2.5 text-stone-500",
+                                row.status === "ERROR" && "text-rose-600 font-medium",
+                                row.status === "WARNING" && "text-amber-600"
+                              )}>
+                                {row.reason}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {previewData.summary.errors > 0 && (
+                    <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-rose-700 text-xs shrink-0 flex items-start gap-2">
+                      <span className="text-lg leading-none">⚠️</span>
+                      <p>
+                        <strong>Errors detected:</strong> Please fix the missing or invalid required data (like Class matching or missing Date of Birth) in your Excel file before proceeding. The import is blocked until errors are resolved.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* STEP 3: RESULT SUMMARY */}
+              {importStep === "RESULT" && executionResult && (
+                <div className="space-y-6 text-center py-6">
+                  <div className="text-4xl">🚀</div>
+                  <h3 className="text-lg font-bold text-stone-800">Import Job Processed</h3>
+                  
+                  <div className="grid grid-cols-3 gap-4 max-w-md mx-auto text-center">
+                    <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+                      <span className="text-xs font-bold text-emerald-600 block mb-1">Imported</span>
+                      <span className="text-3xl font-extrabold text-emerald-700">{executionResult.imported}</span>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                      <span className="text-xs font-bold text-amber-600 block mb-1">Skipped</span>
+                      <span className="text-3xl font-extrabold text-amber-700">{executionResult.skipped}</span>
+                    </div>
+                    <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl">
+                      <span className="text-xs font-bold text-rose-600 block mb-1">Failed</span>
+                      <span className="text-3xl font-extrabold text-rose-700">{executionResult.failed}</span>
+                    </div>
+                  </div>
+
+                  <p className="text-stone-500 text-xs max-w-sm mx-auto">
+                    All processed records were committed atomically under a single database transaction. Audit logs have been generated.
+                  </p>
+                </div>
+              )}
+
             </CardContent>
+
+            <CardFooter className="border-t px-6 py-4 flex justify-between shrink-0 bg-stone-50/50 rounded-b-xl">
+              {importStep === "UPLOAD" && (
+                <>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    onClick={() => setIsImportModalOpen(false)}
+                    disabled={isAnalyzing}
+                  >
+                    Cancel
+                  </Button>
+                  <span className="text-xs text-stone-400">Step 1 of 3</span>
+                </>
+              )}
+
+              {importStep === "PREVIEW" && previewData && (
+                <>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setImportStep("UPLOAD")}
+                    disabled={isCommitting}
+                  >
+                    Back to Upload
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-stone-400 mr-2">Step 2 of 3</span>
+                    <Button 
+                      type="button" 
+                      onClick={handleConfirmImport}
+                      loading={isCommitting}
+                      disabled={previewData.summary.errors > 0}
+                    >
+                      {isCommitting ? "Importing Batch..." : `Confirm & Import (${previewData.summary.ready} Students)`}
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {importStep === "RESULT" && (
+                <>
+                  <span />
+                  <Button 
+                    type="button" 
+                    onClick={() => setIsImportModalOpen(false)}
+                  >
+                    Done & Close
+                  </Button>
+                </>
+              )}
+            </CardFooter>
           </Card>
         </div>
       )}

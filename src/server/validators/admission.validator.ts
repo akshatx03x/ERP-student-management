@@ -1,4 +1,4 @@
-import { AdmissionStatus, Gender, StudentCategory } from "@prisma/client";
+import { AdmissionStatus, Gender, StudentCategory, ContactOwner } from "@prisma/client";
 import { z } from "zod";
 import { dateSchema, idSchema, paginationSchema } from "./common";
 
@@ -6,7 +6,7 @@ export const createAdmissionSchema = z.object({
   sessionId: idSchema,
   familyId: idSchema.optional().nullable(),
   applicantName: z.string().trim().min(1),
-  dateOfBirth: dateSchema,
+  dateOfBirth: dateSchema.optional().nullable(),
   gender: z.nativeEnum(Gender).optional().nullable(),
   religion: z.string().trim().optional().nullable(),
   category: z.nativeEnum(StudentCategory).optional().nullable(),
@@ -69,6 +69,23 @@ export const createAdmissionSchema = z.object({
   photoDocumentId: z.string().trim().optional().nullable(),
   photoUrl: z.string().optional().nullable(),
   allowDuplicate: z.boolean().optional().default(false),
+  bloodGroup: z.string().trim().optional().nullable(),
+  fatherPhotoUrl: z.string().optional().nullable(),
+  motherPhotoUrl: z.string().optional().nullable(),
+  primaryPhoneBelongsTo: z.nativeEnum(ContactOwner).optional().nullable(),
+  secondaryPhoneBelongsTo: z.nativeEnum(ContactOwner).optional().nullable(),
+  fatherWhatsApp: z.string().trim().optional().nullable(),
+  motherWhatsApp: z.string().trim().optional().nullable(),
+  transportRoute: z.string().trim().optional().nullable(),
+  transportVehicle: z.string().trim().optional().nullable(),
+  transportDriver: z.string().trim().optional().nullable(),
+  transportDriverContact: z.string().trim().optional().nullable(),
+  previousBoard: z.string().trim().optional().nullable(),
+  previousReason: z.string().trim().optional().nullable(),
+  allergies: z.string().trim().optional().nullable(),
+  conditions: z.string().trim().optional().nullable(),
+  disability: z.string().trim().optional().nullable(),
+  emergencyRemarks: z.string().trim().optional().nullable(),
 });
 
 export const updateAdmissionSchema = createAdmissionSchema.partial().extend({

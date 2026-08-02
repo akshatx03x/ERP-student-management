@@ -288,6 +288,7 @@ model Subject {
   code           String
   subjectType    SubjectType     @default(SCHOLASTIC)
   displayOrder   Int             @default(0)
+  isActive       Boolean         @default(true)
   classSubjects  ClassSubject[]
   examSubjects   ExamSubject[]
   homework       Homework[]
@@ -359,6 +360,10 @@ model Family {
   declarationAccepted   Boolean                @default(false)
   declarationDate       DateTime?
   declarationParentName String?
+  fatherPhotoUrl          String?
+  motherPhotoUrl          String?
+  primaryPhoneBelongsTo   ContactOwner?
+  secondaryPhoneBelongsTo ContactOwner?
   admissions            AdmissionApplication[]
   advanceTransactions   AdvanceTransaction[]
   school                School                 @relation(fields: [schoolId], references: [id])
@@ -394,6 +399,8 @@ model Guardian {
   aadhaarNumber  String?
   panNumber      String?
   userId         String?           @unique
+  photoUrl       String?
+  whatsAppNumber String?
   school         School            @relation(fields: [schoolId], references: [id])
   family         Family?           @relation(fields: [familyId], references: [id])
   students       StudentGuardian[]
@@ -433,7 +440,7 @@ model Student {
   middleName           String?
   lastName             String?
   fullName             String
-  dateOfBirth          DateTime
+  dateOfBirth          DateTime?
   gender               Gender?
   bloodGroup           String?
   aadhaar              String?
@@ -452,6 +459,12 @@ model Student {
   photoDocumentId      String?
   photoUrl             String?
   status               StudentStatus          @default(ACTIVE)
+  transportRoute         String?
+  transportVehicle       String?
+  transportDriver        String?
+  transportDriverContact String?
+  previousBoard          String?
+  previousReason         String?
   admissions           AdmissionApplication[]
   advanceTransactions  AdvanceTransaction[]
   attendance           AttendanceRecord[]
@@ -485,6 +498,8 @@ model StudentMedical {
   allergies  String?
   conditions String?
   notes      String?
+  disability String?
+  emergencyRemarks String?
   student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
@@ -578,7 +593,7 @@ model AdmissionApplication {
   familyId              String?
   studentId             String?
   applicantName         String
-  dateOfBirth           DateTime
+  dateOfBirth           DateTime?
   gender                Gender?
   religion              String?
   category              StudentCategory?
@@ -632,6 +647,23 @@ model AdmissionApplication {
   admissionDate         DateTime?
   photoDocumentId       String?
   photoUrl              String?
+  bloodGroup            String?
+  fatherPhotoUrl        String?
+  motherPhotoUrl        String?
+  primaryPhoneBelongsTo ContactOwner?
+  secondaryPhoneBelongsTo ContactOwner?
+  fatherWhatsApp        String?
+  motherWhatsApp        String?
+  transportRoute        String?
+  transportVehicle      String?
+  transportDriver       String?
+  transportDriverContact String?
+  previousBoard         String?
+  previousReason        String?
+  allergies             String?
+  conditions            String?
+  disability            String?
+  emergencyRemarks      String?
   status                AdmissionStatus  @default(PENDING)
   admissionNo           String?
   remarks               String?
@@ -1523,6 +1555,10 @@ model StudentTermResult {
   remarksFinal     String?
   resultOutcome    ResultOutcome?
   principalRemarks String?
+  gkGrade          String?
+  artGrade         String?
+  rank             Int?
+  resultDate       DateTime?
   
   student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   session          AcademicSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -1566,4 +1602,12 @@ enum ResultOutcome {
   FAIL
   PROMOTED_WITH_GRACE
   WITHHELD
+}
+
+enum ContactOwner {
+  FATHER
+  MOTHER
+  GUARDIAN_1
+  GUARDIAN_2
+  OTHER
 }

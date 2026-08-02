@@ -24,7 +24,8 @@ export function formatDate(date: Date | string | null | undefined) {
   }).format(d);
 }
 
-export function studentDobPassword(dob: Date, format = "DDMMYYYY") {
+export function studentDobPassword(dob: Date | null | undefined, format = "DDMMYYYY") {
+  if (!dob) return "Welcome@123";
   const day = String(dob.getUTCDate()).padStart(2, "0");
   const month = String(dob.getUTCMonth() + 1).padStart(2, "0");
   const year = String(dob.getUTCFullYear());

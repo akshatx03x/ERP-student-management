@@ -1,4 +1,4 @@
-import { EnrollmentStatus, Gender, StudentCategory, StudentStatus, ExitReason } from "@prisma/client";
+import { EnrollmentStatus, Gender, StudentCategory, StudentStatus, ExitReason, ContactOwner } from "@prisma/client";
 import { z } from "zod";
 import { dateSchema, idSchema, paginationSchema } from "./common";
 
@@ -8,7 +8,7 @@ export const createStudentSchema = z.object({
   firstName: z.string().trim().min(1),
   middleName: z.string().trim().optional().nullable(),
   lastName: z.string().trim().optional().nullable(),
-  dateOfBirth: dateSchema,
+  dateOfBirth: dateSchema.optional().nullable(),
   gender: z.nativeEnum(Gender).optional().nullable(),
   bloodGroup: z.string().trim().optional().nullable(),
   aadhaar: z.string().trim().optional().nullable(),
@@ -36,7 +36,7 @@ export const createStudentWithFamilySchema = z.object({
   firstName: z.string().trim().min(1),
   middleName: z.string().trim().optional().nullable(),
   lastName: z.string().trim().optional().nullable(),
-  dateOfBirth: dateSchema,
+  dateOfBirth: dateSchema.optional().nullable(),
   gender: z.nativeEnum(Gender).optional().nullable(),
   bloodGroup: z.string().trim().optional().nullable(),
   aadhaar: z.string().trim().optional().nullable(),
@@ -109,6 +109,22 @@ export const createStudentWithFamilySchema = z.object({
   sectionId: idSchema.optional().nullable(),
   rollNo: z.string().trim().optional().nullable(),
   allowDuplicate: z.boolean().optional().default(false),
+  fatherPhotoUrl: z.string().optional().nullable(),
+  motherPhotoUrl: z.string().optional().nullable(),
+  primaryPhoneBelongsTo: z.nativeEnum(ContactOwner).optional().nullable(),
+  secondaryPhoneBelongsTo: z.nativeEnum(ContactOwner).optional().nullable(),
+  fatherWhatsApp: z.string().trim().optional().nullable(),
+  motherWhatsApp: z.string().trim().optional().nullable(),
+  transportRoute: z.string().trim().optional().nullable(),
+  transportVehicle: z.string().trim().optional().nullable(),
+  transportDriver: z.string().trim().optional().nullable(),
+  transportDriverContact: z.string().trim().optional().nullable(),
+  previousBoard: z.string().trim().optional().nullable(),
+  previousReason: z.string().trim().optional().nullable(),
+  allergies: z.string().trim().optional().nullable(),
+  conditions: z.string().trim().optional().nullable(),
+  disability: z.string().trim().optional().nullable(),
+  emergencyRemarks: z.string().trim().optional().nullable(),
 });
 
 /** Move sibling students onto the primary student's family. */
@@ -147,6 +163,80 @@ export const updateStudentSchema = z.object({
   unlinkFamily: z.boolean().optional(),
   exitReason: z.nativeEnum(ExitReason).optional().nullable(),
   status: z.nativeEnum(StudentStatus).optional(),
+  
+  // New edit profile / section fields
+  fatherName: z.string().trim().optional().nullable(),
+  fatherQualification: z.string().trim().optional().nullable(),
+  fatherOccupation: z.string().trim().optional().nullable(),
+  fatherDesignation: z.string().trim().optional().nullable(),
+  fatherAnnualIncome: z.number().optional().nullable(),
+  fatherOfficeAddress: z.string().trim().optional().nullable(),
+  fatherPhone: z.string().trim().optional().nullable(),
+  fatherAadhaar: z.string().trim().optional().nullable(),
+  fatherEmail: z.string().trim().optional().nullable(),
+  fatherWhatsApp: z.string().trim().optional().nullable(),
+  fatherPhotoUrl: z.string().optional().nullable(),
+
+  motherName: z.string().trim().optional().nullable(),
+  motherQualification: z.string().trim().optional().nullable(),
+  motherIsWorking: z.boolean().optional().nullable(),
+  motherOccupation: z.string().trim().optional().nullable(),
+  motherDesignation: z.string().trim().optional().nullable(),
+  motherAnnualIncome: z.number().optional().nullable(),
+  motherOfficeAddress: z.string().trim().optional().nullable(),
+  motherPhone: z.string().trim().optional().nullable(),
+  motherAadhaar: z.string().trim().optional().nullable(),
+  motherEmail: z.string().trim().optional().nullable(),
+  motherWhatsApp: z.string().trim().optional().nullable(),
+  motherPhotoUrl: z.string().optional().nullable(),
+
+  primaryPhoneBelongsTo: z.nativeEnum(ContactOwner).optional().nullable(),
+  secondaryPhone: z.string().trim().optional().nullable(),
+  secondaryPhoneBelongsTo: z.nativeEnum(ContactOwner).optional().nullable(),
+
+  addressLine1: z.string().trim().optional().nullable(),
+  addressLine2: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  state: z.string().trim().optional().nullable(),
+  pincode: z.string().trim().optional().nullable(),
+  permAddressLine1: z.string().trim().optional().nullable(),
+  permAddressLine2: z.string().trim().optional().nullable(),
+  permCity: z.string().trim().optional().nullable(),
+  permState: z.string().trim().optional().nullable(),
+  permPincode: z.string().trim().optional().nullable(),
+  sameAsResidential: z.boolean().optional(),
+
+  transportRoute: z.string().trim().optional().nullable(),
+  transportVehicle: z.string().trim().optional().nullable(),
+  transportDriver: z.string().trim().optional().nullable(),
+  transportDriverContact: z.string().trim().optional().nullable(),
+
+  previousBoard: z.string().trim().optional().nullable(),
+  previousReason: z.string().trim().optional().nullable(),
+
+  allergies: z.string().trim().optional().nullable(),
+  conditions: z.string().trim().optional().nullable(),
+  disability: z.string().trim().optional().nullable(),
+  emergencyRemarks: z.string().trim().optional().nullable(),
+
+  // Guardians
+  guardian1Id: z.string().optional().nullable(),
+  guardian1Name: z.string().trim().optional().nullable(),
+  guardian1Relation: z.string().trim().optional().nullable(),
+  guardian1Phone: z.string().trim().optional().nullable(),
+  guardian1WhatsApp: z.string().trim().optional().nullable(),
+  guardian1Occupation: z.string().trim().optional().nullable(),
+  guardian1Address: z.string().trim().optional().nullable(),
+  guardian1PhotoUrl: z.string().optional().nullable(),
+
+  guardian2Id: z.string().optional().nullable(),
+  guardian2Name: z.string().trim().optional().nullable(),
+  guardian2Relation: z.string().trim().optional().nullable(),
+  guardian2Phone: z.string().trim().optional().nullable(),
+  guardian2WhatsApp: z.string().trim().optional().nullable(),
+  guardian2Occupation: z.string().trim().optional().nullable(),
+  guardian2Address: z.string().trim().optional().nullable(),
+  guardian2PhotoUrl: z.string().optional().nullable(),
 });
 
 export const createEnrollmentSchema = z.object({
@@ -171,6 +261,8 @@ export const upsertMedicalSchema = z.object({
   allergies: z.string().trim().optional().nullable(),
   conditions: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
+  disability: z.string().trim().optional().nullable(),
+  emergencyRemarks: z.string().trim().optional().nullable(),
 });
 
 export const listStudentsSchema = paginationSchema.extend({

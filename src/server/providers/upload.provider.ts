@@ -78,24 +78,6 @@ export class LocalFileSystemUploadProvider implements IUploadProvider {
   async saveUpload(params: SaveUploadParams): Promise<void> {
     const filePath = this.getFilePath(params.documentId);
     await fs.promises.writeFile(filePath, params.buffer);
-    
-    // Also save in DocumentBlob for backup consistency if database is accessible
-    try {
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      const bytes: any = params.buffer;
-      await prisma.documentBlob.upsert({
-        where: { documentId: params.documentId },
-        create: {
-          documentId: params.documentId,
-          data: bytes,
-        },
-        update: {
-          data: bytes,
-        },
-      });
-    } catch (err) {
-      console.warn(`[LocalUploadProvider] Could not sync blob to database:`, err);
-    }
   }
 
   async getUpload(documentId: string): Promise<UploadRetrievalResult> {

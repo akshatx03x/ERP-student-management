@@ -11,7 +11,7 @@ import {
 } from "@/server/validators/document.validator";
 import { getUploadProvider } from "@/server/providers/upload.provider";
 
-export const MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024;
+export const MAX_DOCUMENT_SIZE_BYTES = 50 * 1024 * 1024;
 
 function computeChecksum(data: Buffer): string {
   return createHash("sha256").update(data).digest("hex");
@@ -117,7 +117,7 @@ export async function uploadDocument(input: UploadDocumentInput) {
     );
 
     return document;
-  });
+  }, { timeout: 20000 });
 }
 
 export async function getDocument(documentId: string) {

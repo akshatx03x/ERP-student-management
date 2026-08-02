@@ -3,7 +3,12 @@ import { prisma } from "@/server/lib/prisma";
 import { schoolIdFromUser } from "@/server/lib/helpers";
 import { ResultsClient } from "./results-client";
 
-export default async function ResultsPage() {
+export default async function ResultsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ studentId?: string; classId?: string; sectionId?: string }>;
+}) {
+  const params = await searchParams;
   const { user } = await requirePermission("result.view");
   const schoolId = schoolIdFromUser(user);
 
@@ -53,6 +58,11 @@ export default async function ResultsPage() {
         examTypes={examTypes}
         currentSessionId={currentSessionId}
         userRole={user.role}
+        preselectedFilters={{
+          studentId: params.studentId ?? null,
+          classId: params.classId ?? null,
+          sectionId: params.sectionId ?? null,
+        }}
       />
     </div>
   );

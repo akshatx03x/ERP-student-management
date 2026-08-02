@@ -65,7 +65,6 @@ export async function updateGlobalSubject(id: string, input: {
   code: string;
   subjectType: SubjectType;
   displayOrder: number;
-  isActive?: boolean;
 }) {
   const { user } = await requirePermission("subject.update");
   const schoolId = schoolIdFromUser(user);
@@ -93,7 +92,6 @@ export async function updateGlobalSubject(id: string, input: {
         code: input.code.trim().toUpperCase(),
         subjectType: input.subjectType,
         displayOrder: input.displayOrder,
-        isActive: input.isActive !== undefined ? input.isActive : undefined,
       },
     });
 
@@ -121,45 +119,20 @@ export async function deleteGlobalSubject(id: string) {
   });
   if (!existing) throw new Error("Subject not found");
 
-  // Check if any mark entries exist for this subject
-  const hasMarks = await prisma.markEntry.findFirst({
-    where: {
-      examSubject: {
-        subjectId: id,
-      },
-    },
-  });
-
   return prisma.$transaction(async (tx) => {
-    if (hasMarks) {
-      const subject = await tx.subject.update({
-        where: { id },
-        data: { isActive: false },
-      });
-      await writeAuditLog({
-        schoolId,
-        userId: user.id,
-        action: "update",
-        module: "subject",
-        entityType: "Subject",
-        entityId: id,
-        oldValue: existing,
-        newValue: subject,
-      }, tx);
-      return { success: true, archived: true };
-    } else {
-      await tx.subject.delete({ where: { id } });
-      await writeAuditLog({
-        schoolId,
-        userId: user.id,
-        action: "delete",
-        module: "subject",
-        entityType: "Subject",
-        entityId: id,
-        oldValue: existing,
-      }, tx);
-      return { success: true, archived: false };
-    }
+    await tx.subject.delete({ where: { id } });
+
+    await writeAuditLog({
+      schoolId,
+      userId: user.id,
+      action: "delete",
+      module: "subject",
+      entityType: "Subject",
+      entityId: id,
+      oldValue: existing,
+    }, tx);
+
+    return { success: true };
   });
 }
 
@@ -231,79 +204,9 @@ export async function assignClassSubjects(classId: string, sessionId: string, as
 
 // ── 2. EXAM STRUCTURE ─────────────────────────────────────────────────────────
 
-import { EXAM_CONFIGS } from "@/config/exams.config";
-
-export async function ensureClassExams(classId: string, sessionId: string, txClient?: Prisma.TransactionClient) {
-  const db = txClient ?? prisma;
-
-  // 1. Get or create the scholastic exam type
-  let examType = await db.examType.findFirst({
-    where: { sessionId, name: "Scholastic Assessment" },
-  });
-  if (!examType) {
-    examType = await db.examType.create({
-      data: { sessionId, name: "Scholastic Assessment" },
-    });
-  }
-
-  // 2. Load subjects mapped to this class
-  const classSubjects = await db.classSubject.findMany({
-    where: { classId, sessionId },
-  });
-
-  // 3. Ensure the 6 exams exist
-  for (const cfg of EXAM_CONFIGS) {
-    let exam = await db.exam.findFirst({
-      where: { classId, sessionId, name: cfg.name },
-    });
-
-    if (!exam) {
-      exam = await db.exam.create({
-        data: {
-          classId,
-          sessionId,
-          examTypeId: examType.id,
-          name: cfg.name,
-          term: cfg.term,
-          displayOrder: cfg.displayOrder,
-          maxMarks: toDecimal(cfg.maxMarks),
-          passMarks: toDecimal(cfg.passMarks),
-          publishStatus: "DRAFT",
-          visibilityStatus: true,
-        },
-      });
-    }
-
-    // 4. Ensure ExamSubject mappings exist for each class subject
-    for (const cs of classSubjects) {
-      const exists = await db.examSubject.findUnique({
-        where: {
-          examId_subjectId: {
-            examId: exam.id,
-            subjectId: cs.subjectId,
-          },
-        },
-      });
-
-      if (!exists) {
-        await db.examSubject.create({
-          data: {
-            examId: exam.id,
-            subjectId: cs.subjectId,
-            maxMarks: toDecimal(cfg.maxMarks),
-            passMarks: toDecimal(cfg.passMarks),
-          },
-        });
-      }
-    }
-  }
-}
-
 export async function listClassExams(classId: string, sessionId: string) {
   const { user } = await requirePermission("exam.view");
   const schoolId = schoolIdFromUser(user);
-
-  await ensureClassExams(classId, sessionId);
 
   const exams = await prisma.exam.findMany({
     where: {
@@ -514,8 +417,6 @@ export async function getClassResultsOverview(filters: {
   const { user } = await requirePermission("result.view");
   const schoolId = schoolIdFromUser(user);
 
-  await ensureClassExams(filters.classId, filters.sessionId);
-
   const searchClause = filters.search?.trim()
     ? {
         OR: [
@@ -567,7 +468,6 @@ export async function getClassResultsOverview(filters: {
       outcome: termRes ? (termRes.resultOutcome as string) : null,
       presentDays: termRes ? termRes.presentDays : null,
       workingDays: termRes ? termRes.workingDays : null,
-      hasSavedMarks: termRes !== null,
     };
   });
 }
@@ -592,8 +492,6 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
 
   const classId = student.enrollments[0]?.classId;
   if (!classId) throw new Error("Student enrollment not found for this session");
-
-  await ensureClassExams(classId, sessionId);
 
   // Load all subjects assigned to this class
   const classSubjects = await prisma.classSubject.findMany({
@@ -674,12 +572,7 @@ export async function saveStudentMarks(input: {
     resultOutcome?: ResultOutcome | null;
     principalRemarks?: string | null;
     status?: ResultStatus;
-    gkGrade?: string | null;
-    artGrade?: string | null;
-    rank?: number | null;
-    resultDate?: Date | null;
   } | null;
-  reason?: string;
 }) {
   const { user } = await requirePermission("marks.create");
   const schoolId = schoolIdFromUser(user);
@@ -689,32 +582,7 @@ export async function saveStudentMarks(input: {
   });
   if (!student) throw new Error("Student not found");
 
-  const existingTerm = await prisma.studentTermResult.findUnique({
-    where: {
-      studentId_sessionId: {
-        studentId: input.studentId,
-        sessionId: input.sessionId,
-      },
-    },
-  });
-
-  const isAuditRequired = existingTerm && (existingTerm.status === "PUBLISHED" || existingTerm.status === "LOCKED");
-  if (isAuditRequired && !input.reason?.trim()) {
-    throw new Error("Reason for modification is required for published or locked results.");
-  }
-
   return prisma.$transaction(async (tx) => {
-    // Collect previous values for audit log
-    let prevMarks: any[] = [];
-    if (isAuditRequired) {
-      prevMarks = await tx.markEntry.findMany({
-        where: {
-          studentId: input.studentId,
-          examSubject: { exam: { sessionId: input.sessionId } },
-        },
-      });
-    }
-
     // 1. Save/Update Marks
     for (const m of input.marks) {
       const examSubject = await tx.examSubject.findUnique({
@@ -739,7 +607,7 @@ export async function saveStudentMarks(input: {
       });
 
       // Simple grading: Resolve grade based on percentage using gradeScale if present
-      const percent = maxMarks > 0 ? (m.marksObtained / maxMarks) * 105 : 0; // standard percent
+      const percent = maxMarks > 0 ? (m.marksObtained / maxMarks) * 100 : 0;
       const scales = await tx.gradeScale.findMany({
         where: { schoolId },
         orderBy: { minPercent: "desc" },
@@ -748,8 +616,7 @@ export async function saveStudentMarks(input: {
       for (const scale of scales) {
         const min = decimalToNumber(scale.minPercent);
         const max = decimalToNumber(scale.maxPercent);
-        const normalizedPercent = maxMarks > 0 ? (m.marksObtained / maxMarks) * 100 : 0;
-        if (normalizedPercent >= min && normalizedPercent <= max) {
+        if (percent >= min && percent <= max) {
           grade = scale.grade;
           break;
         }
@@ -778,9 +645,8 @@ export async function saveStudentMarks(input: {
     }
 
     // 2. Save Term details
-    let termResultId = existingTerm?.id;
     if (input.termDetail) {
-      const termRes = await tx.studentTermResult.upsert({
+      await tx.studentTermResult.upsert({
         where: {
           studentId_sessionId: {
             studentId: input.studentId,
@@ -796,10 +662,6 @@ export async function saveStudentMarks(input: {
           remarksFinal: input.termDetail.remarksFinal ?? null,
           resultOutcome: input.termDetail.resultOutcome ?? null,
           principalRemarks: input.termDetail.principalRemarks ?? null,
-          gkGrade: input.termDetail.gkGrade ?? null,
-          artGrade: input.termDetail.artGrade ?? null,
-          rank: input.termDetail.rank ?? null,
-          resultDate: input.termDetail.resultDate ?? null,
           status: input.termDetail.status ?? ResultStatus.DRAFT,
         },
         update: {
@@ -809,35 +671,7 @@ export async function saveStudentMarks(input: {
           remarksFinal: input.termDetail.remarksFinal ?? null,
           resultOutcome: input.termDetail.resultOutcome ?? null,
           principalRemarks: input.termDetail.principalRemarks ?? null,
-          gkGrade: input.termDetail.gkGrade ?? null,
-          artGrade: input.termDetail.artGrade ?? null,
-          rank: input.termDetail.rank ?? null,
-          resultDate: input.termDetail.resultDate ?? null,
           status: input.termDetail.status ?? undefined,
-        },
-      });
-      termResultId = termRes.id;
-    }
-
-    // 3. Write Audit Logs for modifications
-    if (isAuditRequired && termResultId) {
-      const updatedMarks = await tx.markEntry.findMany({
-        where: {
-          studentId: input.studentId,
-          examSubject: { exam: { sessionId: input.sessionId } },
-        },
-      });
-
-      await tx.resultChangeLog.create({
-        data: {
-          resultId: termResultId,
-          editedById: user.id,
-          reason: input.reason || "Modified",
-          changes: {
-            prevMarks: prevMarks.map((pm) => ({ esId: pm.examSubjectId, val: decimalToNumber(pm.marksObtained) })),
-            newMarks: updatedMarks.map((um) => ({ esId: um.examSubjectId, val: decimalToNumber(um.marksObtained) })),
-            prevTerm: existingTerm,
-          },
         },
       });
     }

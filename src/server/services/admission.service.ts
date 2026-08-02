@@ -208,6 +208,23 @@ export async function createAdmission(input: CreateAdmissionInput) {
         admissionNo: data.admissionNo ?? null,
         photoDocumentId: data.photoDocumentId,
         photoUrl: data.photoUrl,
+        bloodGroup: data.bloodGroup,
+        fatherPhotoUrl: data.fatherPhotoUrl,
+        motherPhotoUrl: data.motherPhotoUrl,
+        primaryPhoneBelongsTo: data.primaryPhoneBelongsTo,
+        secondaryPhoneBelongsTo: data.secondaryPhoneBelongsTo,
+        fatherWhatsApp: data.fatherWhatsApp,
+        motherWhatsApp: data.motherWhatsApp,
+        transportRoute: data.transportRoute,
+        transportVehicle: data.transportVehicle,
+        transportDriver: data.transportDriver,
+        transportDriverContact: data.transportDriverContact,
+        previousBoard: data.previousBoard,
+        previousReason: data.previousReason,
+        allergies: data.allergies,
+        conditions: data.conditions,
+        disability: data.disability,
+        emergencyRemarks: data.emergencyRemarks,
 
         status: AdmissionStatus.PENDING,
       },
@@ -324,6 +341,7 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
         fullName,
         dateOfBirth: admission.dateOfBirth,
         gender: admission.gender,
+        bloodGroup: admission.bloodGroup,
         religion: admission.religion,
         category: admission.category,
         aadhaar: admission.aadhaar,
@@ -332,10 +350,16 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
         srNo: admission.srNo,
         previousSchoolName: admission.previousSchoolName,
         previousClass: admission.previousClass,
+        previousBoard: admission.previousBoard,
+        previousReason: admission.previousReason,
         tcNumber: admission.tcNumber,
         tcDate: admission.tcDate,
         transportRequired: admission.transportRequired ?? false,
         transportPickupPoint: admission.transportPickupPoint,
+        transportRoute: admission.transportRoute,
+        transportVehicle: admission.transportVehicle,
+        transportDriver: admission.transportDriver,
+        transportDriverContact: admission.transportDriverContact,
         admissionDate: admission.admissionDate ?? new Date(),
         photoDocumentId: admission.photoDocumentId,
         photoUrl: admission.photoUrl,
@@ -351,6 +375,10 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
                   motherName: admission.motherName,
                   guardianName: admission.guardianName,
                   primaryPhone: admission.phone,
+                  fatherPhotoUrl: admission.fatherPhotoUrl,
+                  motherPhotoUrl: admission.motherPhotoUrl,
+                  primaryPhoneBelongsTo: admission.primaryPhoneBelongsTo,
+                  secondaryPhoneBelongsTo: admission.secondaryPhoneBelongsTo,
                   addressLine1: admission.resAddressLine1 || admission.address,
                   resAddressLine1: admission.resAddressLine1 || admission.address,
                   resAddressLine2: admission.resAddressLine2,
@@ -386,6 +414,8 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
           fullName: admission.fatherName,
           gender: "MALE",
           phone: admission.fatherPhone || admission.phone,
+          whatsAppNumber: admission.fatherWhatsApp || null,
+          photoUrl: admission.fatherPhotoUrl || null,
           qualification: admission.fatherQualification,
           occupation: admission.fatherOccupation,
           designation: admission.fatherDesignation,
@@ -416,6 +446,8 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
           fullName: admission.motherName,
           gender: "FEMALE",
           phone: admission.motherPhone,
+          whatsAppNumber: admission.motherWhatsApp || null,
+          photoUrl: admission.motherPhotoUrl || null,
           qualification: admission.motherQualification,
           isWorking: admission.motherIsWorking,
           occupation: admission.motherOccupation,
@@ -457,6 +489,20 @@ export async function approveAdmission(input: ReviewAdmissionInput) {
           isEmergencyContact: true,
           isFeePayer: true,
         },
+      });
+    }
+
+    // Create StudentMedical if provided
+    if (admission.allergies || admission.conditions || admission.disability || admission.emergencyRemarks) {
+      await tx.studentMedical.create({
+        data: {
+          studentId: student.id,
+          allergies: admission.allergies || null,
+          conditions: admission.conditions || null,
+          notes: admission.emergencyRemarks || null,
+          disability: admission.disability || null,
+          emergencyRemarks: admission.emergencyRemarks || null,
+        }
       });
     }
 

@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
-import { loadAppConfig } from "../../src/config/app-config";
-import { getBackupProvider } from "../../src/server/providers/backup.provider";
+import { loadAppConfig } from "./config";
+import { getBackupProvider } from "./backup";
 import { checkDatabaseReady } from "./sqlite-manager";
 
 export function registerIpcHandlers(): void {

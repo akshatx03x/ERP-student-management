@@ -18,7 +18,7 @@ import {
 } from "@/server/services/student.service";
 import { listClasses } from "@/server/services/class.service";
 import { getCurrentSession, listSessions } from "@/server/services/session.service";
-import { exportStudents, importStudents } from "@/server/services/student-excel.service";
+import { exportStudents, importStudents, validateStudentsImport, executeStudentsImport, downloadImportSample } from "@/server/services/student-excel.service";
 import { schoolIdFromUser } from "@/server/lib/helpers";
 import { requirePermission } from "@/server/permissions/guard";
 import type {
@@ -76,6 +76,7 @@ export async function updateStudentAction(input: UpdateStudentInput) {
   const result = await updateStudent(input);
   revalidatePath("/students");
   revalidatePath(`/students/${input.id}`);
+  revalidatePath(`/students/${input.id}/details`);
   return result;
 }
 
@@ -125,13 +126,25 @@ export async function exportStudentsAction(filters: {
   return buffer.toString("base64");
 }
 
-export async function importStudentsAction(base64: string) {
+export async function validateStudentsImportAction(base64: string, duplicateStrategy: "SKIP" | "FAIL") {
   const { user } = await requirePermission("student.create");
   const schoolId = schoolIdFromUser(user);
-  const result = await importStudents(base64, schoolId, user.id);
+  return validateStudentsImport(base64, schoolId, duplicateStrategy);
+}
+
+export async function executeStudentsImportAction(validatedRows: any[], duplicateStrategy: "SKIP" | "FAIL") {
+  const { user } = await requirePermission("student.create");
+  const schoolId = schoolIdFromUser(user);
+  const result = await executeStudentsImport(validatedRows, schoolId, user.id);
   revalidatePath("/students");
   revalidatePath("/families");
   return result;
+}
+
+export async function downloadImportSampleAction() {
+  await requirePermission("student.create");
+  const buffer = await downloadImportSample();
+  return buffer.toString("base64");
 }
 
 export async function unlinkStudentFamilyAction(studentId: string) {

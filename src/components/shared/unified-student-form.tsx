@@ -50,6 +50,7 @@ export type UnifiedFormState = {
   penId: string;
   srNo: string;
   photoUrl: string;
+  bloodGroup: string;
 
   // 2. Father
   fatherName: string;
@@ -61,6 +62,8 @@ export type UnifiedFormState = {
   fatherPhone: string;
   fatherAadhaar: string;
   fatherEmail: string;
+  fatherWhatsApp: string;
+  fatherPhotoUrl: string;
 
   // 3. Mother
   motherName: string;
@@ -73,6 +76,8 @@ export type UnifiedFormState = {
   motherPhone: string;
   motherAadhaar: string;
   motherEmail: string;
+  motherWhatsApp: string;
+  motherPhotoUrl: string;
 
   // 4. Guardians & Contact
   guardianName: string;
@@ -80,6 +85,8 @@ export type UnifiedFormState = {
   secondaryPhone: string;
   address: string;
   guardians: GuardianItem[];
+  primaryPhoneBelongsTo: string;
+  secondaryPhoneBelongsTo: string;
 
   // 5. Addresses
   resAddressLine1: string;
@@ -97,15 +104,27 @@ export type UnifiedFormState = {
   // 6. Previous School & Declaration
   previousSchoolName: string;
   previousClass: string;
+  previousBoard: string;
+  previousReason: string;
   tcNumber: string;
   tcDate: string;
   additionalSchools: PreviousSchoolItem[];
   transportRequired: boolean;
   transportPickupPoint: string;
+  transportRoute: string;
+  transportVehicle: string;
+  transportDriver: string;
+  transportDriverContact: string;
   additionalTransportStops: TransportStopItem[];
   declarationAccepted: boolean;
   declarationDate: string;
   declarationParentName: string;
+
+  // 7. Medical
+  allergies: string;
+  conditions: string;
+  disability: string;
+  emergencyRemarks: string;
 };
 
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
@@ -142,6 +161,7 @@ export function UnifiedStudentForm({
     penId: "",
     srNo: "",
     photoUrl: "",
+    bloodGroup: "",
 
     sessionId: currentSessionId ?? sessions[0]?.id ?? "",
     appliedClassId: classes[0]?.id ?? "",
@@ -159,6 +179,8 @@ export function UnifiedStudentForm({
     fatherPhone: "",
     fatherAadhaar: "",
     fatherEmail: "",
+    fatherWhatsApp: "",
+    fatherPhotoUrl: "",
 
     motherName: "",
     motherQualification: "",
@@ -170,12 +192,16 @@ export function UnifiedStudentForm({
     motherPhone: "",
     motherAadhaar: "",
     motherEmail: "",
+    motherWhatsApp: "",
+    motherPhotoUrl: "",
 
     guardianName: "",
     phone: "",
     secondaryPhone: "",
     address: "",
     guardians: [],
+    primaryPhoneBelongsTo: "FATHER",
+    secondaryPhoneBelongsTo: "MOTHER",
 
     resAddressLine1: "",
     resAddressLine2: "",
@@ -191,16 +217,27 @@ export function UnifiedStudentForm({
 
     previousSchoolName: "",
     previousClass: "",
+    previousBoard: "",
+    previousReason: "",
     tcNumber: "",
     tcDate: "",
     additionalSchools: [],
     transportRequired: false,
     transportPickupPoint: "",
+    transportRoute: "",
+    transportVehicle: "",
+    transportDriver: "",
+    transportDriverContact: "",
     additionalTransportStops: [],
 
     declarationAccepted: true,
     declarationDate: new Date().toISOString().split("T")[0],
     declarationParentName: "",
+
+    allergies: "",
+    conditions: "",
+    disability: "",
+    emergencyRemarks: "",
   }));
 
   const sections = useMemo(
@@ -388,6 +425,14 @@ export function UnifiedStudentForm({
               <option value="OTHER">Other</option>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>Blood Group</Label>
+            <Input
+              placeholder="e.g. A+, B-, O+"
+              value={form.bloodGroup}
+              onChange={(e) => handleChange("bloodGroup", e.target.value)}
+            />
+          </div>
 
           <div className="space-y-2">
             <Label>Category</Label>
@@ -483,6 +528,14 @@ export function UnifiedStudentForm({
             />
           </div>
           <div className="space-y-2">
+            <Label>Father WhatsApp</Label>
+            <Input
+              placeholder="WhatsApp Number"
+              value={form.fatherWhatsApp}
+              onChange={(e) => handleChange("fatherWhatsApp", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>Father Email</Label>
             <Input
               type="email"
@@ -569,6 +622,14 @@ export function UnifiedStudentForm({
             />
           </div>
           <div className="space-y-2">
+            <Label>Mother WhatsApp</Label>
+            <Input
+              placeholder="WhatsApp Number"
+              value={form.motherWhatsApp}
+              onChange={(e) => handleChange("motherWhatsApp", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>Mother Email</Label>
             <Input
               type="email"
@@ -624,12 +685,38 @@ export function UnifiedStudentForm({
             </div>
           </div>
           <div className="space-y-2">
+            <Label>Primary Contact Belongs To</Label>
+            <Select
+              value={form.primaryPhoneBelongsTo}
+              onChange={(e) => handleChange("primaryPhoneBelongsTo", e.target.value)}
+            >
+              <option value="FATHER">Father</option>
+              <option value="MOTHER">Mother</option>
+              <option value="GUARDIAN_1">Guardian 1</option>
+              <option value="GUARDIAN_2">Guardian 2</option>
+              <option value="OTHER">Other</option>
+            </Select>
+          </div>
+          <div className="space-y-2">
             <Label>Secondary Phone / Landline</Label>
             <Input
               placeholder="Landline or Alternate Mobile"
               value={form.secondaryPhone}
               onChange={(e) => handleChange("secondaryPhone", e.target.value)}
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Secondary Contact Belongs To</Label>
+            <Select
+              value={form.secondaryPhoneBelongsTo}
+              onChange={(e) => handleChange("secondaryPhoneBelongsTo", e.target.value)}
+            >
+              <option value="FATHER">Father</option>
+              <option value="MOTHER">Mother</option>
+              <option value="GUARDIAN_1">Guardian 1</option>
+              <option value="GUARDIAN_2">Guardian 2</option>
+              <option value="OTHER">Other</option>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>Guardian Name (if other than Parents)</Label>
@@ -908,11 +995,27 @@ export function UnifiedStudentForm({
             />
           </div>
           <div className="space-y-2">
+            <Label>Previous Board</Label>
+            <Input
+              placeholder="e.g. CBSE, ICSE, State Board"
+              value={form.previousBoard}
+              onChange={(e) => handleChange("previousBoard", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>TC (Transfer Certificate) No</Label>
             <Input
               placeholder="TC Number"
               value={form.tcNumber}
               onChange={(e) => handleChange("tcNumber", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Reason for Leaving</Label>
+            <Input
+              placeholder="Reason for leaving previous school"
+              value={form.previousReason}
+              onChange={(e) => handleChange("previousReason", e.target.value)}
             />
           </div>
 
@@ -1032,13 +1135,47 @@ export function UnifiedStudentForm({
             </div>
             {form.transportRequired && (
               <div className="mt-3 space-y-4">
-                <div className="max-w-sm">
-                  <Label>Preferred Pickup / Drop Stop</Label>
-                  <Input
-                    placeholder="e.g. Main Market Stop, Sector 14"
-                    value={form.transportPickupPoint}
-                    onChange={(e) => handleChange("transportPickupPoint", e.target.value)}
-                  />
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <Label>Preferred Pickup / Drop Stop</Label>
+                    <Input
+                      placeholder="e.g. Sector 14 stop"
+                      value={form.transportPickupPoint}
+                      onChange={(e) => handleChange("transportPickupPoint", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Route</Label>
+                    <Input
+                      placeholder="e.g. Route A"
+                      value={form.transportRoute}
+                      onChange={(e) => handleChange("transportRoute", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Vehicle No / Name</Label>
+                    <Input
+                      placeholder="e.g. Bus 12"
+                      value={form.transportVehicle}
+                      onChange={(e) => handleChange("transportVehicle", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Driver Name</Label>
+                    <Input
+                      placeholder="Driver Name"
+                      value={form.transportDriver}
+                      onChange={(e) => handleChange("transportDriver", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Driver Contact No</Label>
+                    <Input
+                      placeholder="Driver Phone"
+                      value={form.transportDriverContact}
+                      onChange={(e) => handleChange("transportDriverContact", e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1097,6 +1234,47 @@ export function UnifiedStudentForm({
                 </div>
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 5b. Medical Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle>5b. Medical Information</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Allergies</Label>
+            <Input
+              placeholder="e.g. Peanuts, Dust, Penicillin"
+              value={form.allergies}
+              onChange={(e) => handleChange("allergies", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Medical Conditions</Label>
+            <Input
+              placeholder="e.g. Asthma, Diabetes"
+              value={form.conditions}
+              onChange={(e) => handleChange("conditions", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Disability (if any)</Label>
+            <Input
+              placeholder="e.g. Visual Impairment, None"
+              value={form.disability}
+              onChange={(e) => handleChange("disability", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Emergency Remarks / Notes</Label>
+            <Input
+              placeholder="Emergency Contact, Doctor Notes, etc."
+              value={form.emergencyRemarks}
+              onChange={(e) => handleChange("emergencyRemarks", e.target.value)}
+            />
           </div>
         </CardContent>
       </Card>
