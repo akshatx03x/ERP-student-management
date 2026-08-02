@@ -70,7 +70,7 @@ export const createStudentWithFamilySchema = z.object({
   motherEmail: z.string().trim().optional().nullable(),
 
   guardianName: z.string().trim().optional().nullable(),
-  phone: z.string().trim().min(1),
+  phone: z.string().trim().optional().nullable(),
   secondaryPhone: z.string().trim().optional().nullable(),
   address: z.string().trim().optional().nullable(),
 

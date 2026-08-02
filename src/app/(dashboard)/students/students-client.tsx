@@ -773,7 +773,7 @@ export function StudentsClient({
               {/* STEP 3: RESULT SUMMARY */}
               {importStep === "RESULT" && executionResult && (
                 <div className="space-y-6 text-center py-6">
-                  <div className="text-4xl">🚀</div>
+                  <div className="text-4xl"></div>
                   <h3 className="text-lg font-bold text-stone-800">Import Job Processed</h3>
                   
                   <div className="grid grid-cols-3 gap-4 max-w-md mx-auto text-center">

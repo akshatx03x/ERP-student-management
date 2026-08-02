@@ -38,6 +38,10 @@
     {
       "from": "../prisma",
       "to": "prisma"
+    },
+    {
+      "from": "../node_modules/better-auth",
+      "to": "app/node_modules/better-auth"
     }
   ],
   "win": {

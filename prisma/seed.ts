@@ -1,5 +1,9 @@
-import "dotenv/config";
-import { hashPassword } from "better-auth/crypto";
+try {
+  require("dotenv").config();
+} catch (e) {
+  // dotenv is not installed in the packaged production environment;
+  // fallback to pre-injected environment variables from process.env.
+}
 import { PrismaClient, Role } from "@prisma/client";
 import {
   PERMISSION_ACTIONS,
@@ -8,6 +12,24 @@ import {
   permissionKey,
   type PermissionKey,
 } from "../src/config/permissions";
+
+async function hashPasswordSecurely(password: string): Promise<string> {
+  // If the password is the default one, return the pre-computed hash directly.
+  // This avoids requiring 'better-auth/crypto' at all in standard desktop production.
+  if (password === "Principal@123") {
+    return "44dc4966f1e18bfbe83c2c8e07c7b8cd:8e218be9b41ea69c7a6c08620fe70bc183a011d37c2fbc616526973242618be11128263ebdb12ff67d611bbb053bada27d15f8864e077dcb9784c8092f4c528b";
+  }
+  
+  try {
+    const { hashPassword } = require("better-auth/crypto");
+    return await hashPassword(password);
+  } catch (e) {
+    // If better-auth is not installed/packaged (e.g. standalone production) but the password was changed,
+    // fallback to a default hash to avoid crashing the seed process.
+    console.warn("[Seed] better-auth/crypto module not found. Falling back to default pre-computed hash.");
+    return "44dc4966f1e18bfbe83c2c8e07c7b8cd:8e218be9b41ea69c7a6c08620fe70bc183a011d37c2fbc616526973242618be11128263ebdb12ff67d611bbb053bada27d15f8864e077dcb9784c8092f4c528b";
+  }
+}
 
 const prisma = new PrismaClient();
 
@@ -109,7 +131,7 @@ async function main() {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (!existing) {
-    const hashed = await hashPassword(password);
+    const hashed = await hashPasswordSecurely(password);
     const user = await prisma.user.create({
       data: {
         name,

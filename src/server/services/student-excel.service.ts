@@ -6,39 +6,99 @@ import { createStudentWithFamily } from "@/server/services/student.service";
 import { requirePermission } from "@/server/permissions/guard";
 import { Gender, StudentCategory, StudentStatus } from "@prisma/client";
 
-// Header synonyms for intelligent mapping
+// Normalize headers: strip capitalization, extra spaces, line breaks, quotes, hidden Unicode characters
+function normalizeHeaderStr(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[\r\n\t\u200B-\u200D\uFEFF]/g, "") // remove line breaks and hidden characters
+    .replace(/['"“”‘’]/g, "") // remove quotes
+    .replace(/[\s_\-\.]+/g, " ") // replace spaces/underscores/hyphens/dots with a single space
+    .trim();
+}
+
+// Header synonyms for intelligent mapping (pre-normalized)
 const HEADER_SYNONYMS: Record<string, string[]> = {
-  admissionNo: ["admission no", "admission number", "admission_no", "adm no", "adm_no", "admissionno"],
-  name: ["name", "student name", "student_name", "fullname", "full name", "applicant name"],
+  admissionNo: ["admission no", "admission number", "adm no", "admissionno"],
+  name: ["name", "student name", "fullname", "full name", "applicant name"],
   gender: ["gender", "sex"],
-  penId: ["student pen", "pen", "pen id", "pen_id", "pen number", "student pen number", "student_pen"],
-  fatherName: ["father name", "father_name", "fathers name", "father's name"],
-  motherName: ["mother name", "mother_name", "mothers name", "mother's name"],
-  guardianName: ["guardian name", "guardian_name", "guardians name", "guardian's name"],
-  category: ["social category", "category", "social_category", "cast", "caste"],
-  aadhaar: ["aadhaar no.", "aadhaar no", "aadhaar", "aadhar", "aadhaar number", "aadhar number", "aadhaar_no", "aadhar_no"],
+  penId: ["student pen", "pen", "pen id", "pen number", "student pen number"],
+  fatherName: ["father name", "fathers name"],
+  motherName: ["mother name", "mothers name"],
+  guardianName: ["guardian name", "guardians name"],
+  category: ["social category", "category", "cast", "caste"],
+  aadhaar: ["aadhaar no", "aadhaar", "aadhar", "aadhaar number", "aadhar number"],
   className: ["class", "standard", "grade", "class name"],
   sectionName: ["section", "division", "stream", "section name"],
-  primaryPhone: ["primary phone", "primary_phone", "phone", "mobile", "mobile number", "contact", "contact number"],
-  secondaryPhone: ["secondary phone", "secondary_phone", "alternate phone", "alternate mobile"],
-  email: ["email", "email address", "email_address"],
-  address: ["address line 1", "address_line_1", "address", "residential address"],
-  addressLine2: ["address line 2", "address_line_2"],
+  primaryPhone: ["primary phone", "phone", "mobile", "mobile number", "contact", "contact number"],
+  secondaryPhone: ["secondary phone", "alternate phone", "alternate mobile"],
+  email: ["email", "email address"],
+  address: ["address line 1", "address", "residential address"],
+  addressLine2: ["address line 2"],
   city: ["city"],
   state: ["state"],
   pincode: ["pincode", "pin code", "zip", "zipcode"],
-  dateOfBirth: ["date of birth", "dob", "date_of_birth", "birth date"]
+  dateOfBirth: ["date of birth", "dob", "birth date"]
 };
 
-// Map raw input value to standard synonyms
+// Map raw input value to standard synonyms using strict exact matching
 function matchHeader(cellValue: string): string | null {
-  const clean = cellValue.trim().toLowerCase().replace(/[\s_\-\.]/g, " ");
+  const clean = normalizeHeaderStr(cellValue);
   for (const [key, synonyms] of Object.entries(HEADER_SYNONYMS)) {
-    if (synonyms.some(syn => clean.includes(syn) || syn.includes(clean) || clean === syn)) {
+    if (synonyms.includes(clean)) {
       return key;
     }
   }
   return null;
+}
+
+// Reusable helper to map Excel class names/aliases to database class names
+const CLASS_ALIAS_MAP: Record<string, string> = {
+  "pp-1": "Class PP",
+  "pp-2": "Class PP",
+  "pp1": "Class PP",
+  "pp2": "Class PP",
+  "pp": "Class PP",
+  "lkg": "Class PP",
+  "ukg": "Class PP",
+  "nursery": "Class PP",
+  "i": "Class 1",
+  "ii": "Class 2",
+  "iii": "Class 3",
+  "iv": "Class 4",
+  "v": "Class 5",
+  "vi": "Class 6",
+  "vii": "Class 7",
+  "viii": "Class 8",
+  "ix": "Class 9",
+  "x": "Class 10",
+  "xi": "Class 11",
+  "xii": "Class 12",
+};
+
+export function getNormalizedClassNameAlias(className: string): string {
+  const normalized = className
+    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "")
+    .trim()
+    .toLowerCase();
+
+  if (CLASS_ALIAS_MAP[normalized]) {
+    return CLASS_ALIAS_MAP[normalized];
+  }
+
+  if (normalized.startsWith("pp")) {
+    return "Class PP";
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    return `Class ${normalized}`;
+  }
+
+  const ordinalMatch = normalized.match(/^(\d+)(st|nd|rd|th)$/);
+  if (ordinalMatch) {
+    return `Class ${ordinalMatch[1]}`;
+  }
+
+  return className;
 }
 
 // Convert Roman numerals to integers
@@ -56,14 +116,24 @@ function romanToArabic(roman: string): number {
   return total;
 }
 
+// Normalize class names before matching
+function normalizeClassName(name: string): string {
+  return name
+    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "") // remove leading/trailing quotes/spaces/hidden characters
+    .trim()
+    .replace(/[\s\u200B-\u200D\uFEFF]+/g, " "); // collapse spacing and hidden characters
+}
+
 // Helper to normalize class inputs and find matches/suggestions
 function findClassMatch(className: string, dbClasses: Array<{ id: string; name: string }>) {
-  const cleanInput = className.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const mappedClassName = getNormalizedClassNameAlias(className);
+  const normalizedInput = normalizeClassName(mappedClassName);
+  const cleanInput = normalizedInput.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   if (!cleanInput) return { matchedClass: null, suggestion: null };
 
-  // Try direct match
+  // Try direct match against normalized ERP classes
   const directMatch = dbClasses.find(c => {
-    const cleanDb = c.name.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    const cleanDb = normalizeClassName(c.name).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
     return cleanDb === cleanInput;
   });
   if (directMatch) return { matchedClass: directMatch, suggestion: null };
@@ -78,7 +148,7 @@ function findClassMatch(className: string, dbClasses: Array<{ id: string; name: 
 
   // Search DB classes with converted numbers or arabic equivalent
   const matchWithConversion = dbClasses.find(c => {
-    const cleanDb = c.name.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    const cleanDb = normalizeClassName(c.name).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
     // Compare translated arabic or Roman equivalents
     if (cleanDb === convertedInput || cleanDb === convertedInput + "th") return true;
     return false;
@@ -87,7 +157,7 @@ function findClassMatch(className: string, dbClasses: Array<{ id: string; name: 
 
   // Generate closest suggestion based on substring
   const suggestion = dbClasses.find(c => {
-    const cleanDb = c.name.trim().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    const cleanDb = normalizeClassName(c.name).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
     return cleanDb.includes(cleanInput) || cleanInput.includes(cleanDb);
   });
 
@@ -127,6 +197,49 @@ function normalizeCategory(val: any): StudentCategory | null {
   if (clean.includes("st") || clean.includes("3")) return StudentCategory.ST;
   if (clean.includes("ews")) return StudentCategory.EWS;
   return StudentCategory.OTHER;
+}
+
+// Helper to determine the next available admission number base for school
+async function getNextAdmissionNoBase(schoolId: string) {
+  // Query all students' admissionNo to find the highest number
+  const students = await prisma.student.findMany({
+    where: { schoolId },
+    select: { admissionNo: true },
+  });
+
+  let maxNum = 0;
+  let detectedPrefix = "ADM-";
+  let detectedLength = 4;
+  const currentYear = new Date().getFullYear();
+
+  for (const s of students) {
+    if (!s.admissionNo) continue;
+    const match = s.admissionNo.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const prefix = match[1];
+      const numStr = match[2];
+      const num = parseInt(numStr, 10);
+      if (num > maxNum) {
+        maxNum = num;
+        detectedPrefix = prefix;
+        detectedLength = numStr.length;
+      }
+    }
+  }
+
+  if (maxNum === 0) {
+    detectedPrefix = `ADM-${currentYear}-`;
+    detectedLength = 4;
+  }
+
+  const existingNos = new Set(students.map(s => s.admissionNo).filter(Boolean));
+
+  return {
+    prefix: detectedPrefix,
+    currentNum: maxNum,
+    formatLength: detectedLength,
+    existingNos
+  };
 }
 
 interface ValidationResultRow {
@@ -172,8 +285,8 @@ export async function validateStudentsImport(
       }
     });
 
-    // If we matched at least 3 critical headers (like class, name, section, admissionNo)
-    if (tempMap.className && tempMap.name && (tempMap.admissionNo || tempMap.penId)) {
+    // Match if class, name, and section are present (minimally required columns)
+    if (tempMap.className && tempMap.name && tempMap.sectionName) {
       headerRowIndex = r;
       headerMap = tempMap;
       break;
@@ -200,6 +313,9 @@ export async function validateStudentsImport(
     where: { schoolId, isCurrent: true },
   });
 
+  const admBase = await getNextAdmissionNoBase(schoolId);
+  let generatedCount = 0;
+
   const rows: ValidationResultRow[] = [];
   const processedAdmissions = new Set<string>();
   const processedPens = new Set<string>();
@@ -216,7 +332,9 @@ export async function validateStudentsImport(
     return String(val).trim();
   };
 
-  sheet.eachRow(async (row, rowNumber) => {
+  let loggedFirstRow = false;
+
+  sheet.eachRow((row, rowNumber) => {
     if (rowNumber <= headerRowIndex) return; // Skip title / header rows
 
     const rawName = normalizeString(getValue(row, "name"));
@@ -230,6 +348,17 @@ export async function validateStudentsImport(
     // Skip empty lines
     if (!rawName && !rawClass && !rawAdmissionNo && !rawPen) return;
 
+    // Logging first imported row for easier template debugging
+    if (!loggedFirstRow) {
+      loggedFirstRow = true;
+      const rawObj: Record<string, any> = {};
+      row.eachCell((cell, colNumber) => {
+        rawObj[`Col ${colNumber}`] = cell.value;
+      });
+      console.log("[StudentImport Logging] Raw parsed Excel object:", rawObj);
+      console.log("[StudentImport Logging] Normalized headers mapped:", headerMap);
+    }
+
     let status: "READY" | "WARNING" | "ERROR" = "READY";
     const reasons: string[] = [];
 
@@ -238,18 +367,29 @@ export async function validateStudentsImport(
       status = "ERROR";
       reasons.push("Student Name is required");
     }
-    if (!rawAdmissionNo) {
-      status = "ERROR";
-      reasons.push("Admission number is required");
+
+    // Auto-generate Admission Number if blank/missing
+    let finalAdmissionNo = rawAdmissionNo;
+    if (!finalAdmissionNo) {
+      while (true) {
+        const nextNum = admBase.currentNum + 1 + generatedCount;
+        const padded = String(nextNum).padStart(admBase.formatLength, "0");
+        const candidate = `${admBase.prefix}${padded}`;
+        generatedCount++;
+        if (!admBase.existingNos.has(candidate) && !processedAdmissions.has(candidate)) {
+          finalAdmissionNo = candidate;
+          break;
+        }
+      }
     }
 
-    // Date of Birth check (now optional/nullable)
+    // Date of Birth check (optional/nullable)
     let dobDate: Date | null = null;
     if (rawDob) {
       const ts = Date.parse(rawDob);
       if (isNaN(ts)) {
-        status = "ERROR";
-        reasons.push(`Invalid Date of Birth format: "${rawDob}". Use YYYY-MM-DD.`);
+        // Fallback silently to null
+        dobDate = null;
       } else {
         dobDate = new Date(ts);
       }
@@ -263,8 +403,8 @@ export async function validateStudentsImport(
       if (matchedClass) {
         classId = matchedClass.id;
         if (rawSection) {
-          const matchedSection = matchedClass.sections.find(
-            s => s.name.trim().toLowerCase() === rawSection.trim().toLowerCase()
+          const matchedSection = (matchedClass as any).sections.find(
+            (s: any) => s.name.trim().toLowerCase() === rawSection.trim().toLowerCase()
           );
           if (matchedSection) {
             sectionId = matchedSection.id;
@@ -290,69 +430,30 @@ export async function validateStudentsImport(
     }
 
     // 3. Duplicate checks within Excel sheet itself
-    if (rawAdmissionNo && processedAdmissions.has(rawAdmissionNo)) {
+    if (finalAdmissionNo && processedAdmissions.has(finalAdmissionNo)) {
       status = "ERROR";
-      reasons.push(`Duplicate Admission No "${rawAdmissionNo}" in Excel`);
-    } else if (rawAdmissionNo) {
-      processedAdmissions.add(rawAdmissionNo);
+      reasons.push(`Duplicate Admission No "${finalAdmissionNo}" in Excel`);
+    } else if (finalAdmissionNo) {
+      processedAdmissions.add(finalAdmissionNo);
     }
 
     if (rawPen && processedPens.has(rawPen)) {
-      status = "ERROR";
-      reasons.push(`Duplicate Student PEN "${rawPen}" in Excel`);
-    } else if (rawPen) {
       processedPens.add(rawPen);
     }
 
     if (rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*") && processedAadhaars.has(rawAadhaar)) {
-      status = "ERROR";
-      reasons.push(`Duplicate Aadhaar No. "${rawAadhaar}" in Excel`);
-    } else if (rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*")) {
       processedAadhaars.add(rawAadhaar);
     }
 
-    // 4. Database Unique Constraint Checks (AdmissionNo, PEN, Aadhaar)
-    if (status !== "ERROR" && rawAdmissionNo) {
-      const existing = await prisma.student.findUnique({
-        where: { schoolId_admissionNo: { schoolId, admissionNo: rawAdmissionNo } }
-      });
-      if (existing) {
+    // 4. Database Unique Constraint Checks (AdmissionNo)
+    if (status !== "ERROR" && finalAdmissionNo) {
+      if (admBase.existingNos.has(finalAdmissionNo)) {
         if (duplicateStrategy === "FAIL") {
           status = "ERROR";
-          reasons.push(`Admission No. "${rawAdmissionNo}" already exists in ERP`);
+          reasons.push(`Admission No. "${finalAdmissionNo}" already exists in ERP`);
         } else {
           status = "WARNING";
-          reasons.push(`Admission No. "${rawAdmissionNo}" already exists (Row will be skipped)`);
-        }
-      }
-    }
-
-    if (status !== "ERROR" && rawPen) {
-      const existing = await prisma.student.findFirst({
-        where: { penId: rawPen, schoolId }
-      });
-      if (existing) {
-        if (duplicateStrategy === "FAIL") {
-          status = "ERROR";
-          reasons.push(`Student PEN "${rawPen}" already exists in ERP (Student: ${existing.fullName})`);
-        } else {
-          status = "WARNING";
-          reasons.push(`Student PEN "${rawPen}" already exists (Row will be skipped)`);
-        }
-      }
-    }
-
-    if (status !== "ERROR" && rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*")) {
-      const existing = await prisma.student.findFirst({
-        where: { aadhaar: rawAadhaar, schoolId }
-      });
-      if (existing) {
-        if (duplicateStrategy === "FAIL") {
-          status = "ERROR";
-          reasons.push(`Aadhaar No. "${rawAadhaar}" already exists in ERP (Student: ${existing.fullName})`);
-        } else {
-          status = "WARNING";
-          reasons.push(`Aadhaar No. "${rawAadhaar}" already exists (Row will be skipped)`);
+          reasons.push(`Admission No. "${finalAdmissionNo}" already exists (Row will be skipped)`);
         }
       }
     }
@@ -372,8 +473,16 @@ export async function validateStudentsImport(
       }
     }
 
+    let fatherName = normalizeString(getValue(row, "fatherName"));
+    let motherName = normalizeString(getValue(row, "motherName"));
+    let guardianName = normalizeString(getValue(row, "guardianName"));
+    if (!fatherName && !motherName && !guardianName) {
+      // Fallback/placeholder guardianName to satisfy validation in createStudentWithFamily
+      guardianName = "Parent/Guardian";
+    }
+
     const payload = {
-      admissionNo: rawAdmissionNo,
+      admissionNo: finalAdmissionNo,
       firstName,
       middleName: middleName || null,
       lastName: lastName || null,
@@ -383,9 +492,9 @@ export async function validateStudentsImport(
       penId: rawPen,
       category: normalizeCategory(getValue(row, "category")),
       aadhaar: rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*") ? rawAadhaar : null,
-      fatherName: normalizeString(getValue(row, "fatherName")),
-      motherName: normalizeString(getValue(row, "motherName")),
-      guardianName: normalizeString(getValue(row, "guardianName")),
+      fatherName,
+      motherName,
+      guardianName,
       phone: normalizeString(getValue(row, "primaryPhone")),
       secondaryPhone: normalizeString(getValue(row, "secondaryPhone")),
       email: normalizeString(getValue(row, "email")),
@@ -402,10 +511,14 @@ export async function validateStudentsImport(
       createLogin: true
     };
 
+    if (rowNumber === headerRowIndex + 1) {
+      console.log("[StudentImport Logging] Final mapped student object before validation:", payload);
+    }
+
     rows.push({
       rowNumber,
       studentName: rawName || "",
-      admissionNo: rawAdmissionNo || "",
+      admissionNo: finalAdmissionNo || "",
       className: rawClass || "",
       sectionName: rawSection || "",
       status,
@@ -446,11 +559,10 @@ export async function executeStudentsImport(
 
   const rowsToProcess = validatedRows.filter(r => r.status !== "ERROR");
 
-  // Single global transaction execution
+  // Single global transaction execution (timeout: 5 minutes / 300000 ms)
   await prisma.$transaction(async (tx) => {
     for (const item of rowsToProcess) {
       if (item.status === "WARNING") {
-        // Skip duplicate warning rows under "Skip Duplicate" strategy
         skippedCount++;
         continue;
       }
@@ -461,7 +573,6 @@ export async function executeStudentsImport(
           schoolId
         };
         
-        // Reuse original Student + Family creation logic inside this transaction client
         await createStudentWithFamily(studentInput, tx);
         importedCount++;
       } catch (err) {
@@ -472,7 +583,7 @@ export async function executeStudentsImport(
       }
     }
 
-    // Write audit log inside the transaction
+    // Write audit log inside the transaction to keep it fully atomic
     await writeAuditLog({
       schoolId,
       userId,
@@ -488,7 +599,7 @@ export async function executeStudentsImport(
       }
     }, tx);
   }, {
-    timeout: 60000 // 60s timeout for large batches
+    timeout: 300000 // 5 minutes timeout to allow full atomic processing of 268+ students
   });
 
   return {

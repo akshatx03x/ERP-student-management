@@ -18,7 +18,7 @@ import {
 } from "@/server/services/student.service";
 import { listClasses } from "@/server/services/class.service";
 import { getCurrentSession, listSessions } from "@/server/services/session.service";
-import { exportStudents, importStudents, validateStudentsImport, executeStudentsImport, downloadImportSample } from "@/server/services/student-excel.service";
+import { exportStudents, validateStudentsImport, executeStudentsImport, downloadImportSample } from "@/server/services/student-excel.service";
 import { schoolIdFromUser } from "@/server/lib/helpers";
 import { requirePermission } from "@/server/permissions/guard";
 import type {
