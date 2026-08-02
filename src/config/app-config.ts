@@ -28,13 +28,19 @@ function getBaseDataDirectory(): string {
     return process.env.OFFLINE_DATA_DIR.trim();
   }
 
-  // Only attempt Electron detection at runtime.
+  // Detect if running inside a packaged Electron application (even if process.versions.electron require fails in Node child processes)
+  if (typeof process !== "undefined" && process.execPath) {
+    const execLower = process.execPath.toLowerCase();
+    if (execLower.endsWith("schoolerp desktop.exe") || execLower.includes("schoolerp_setup")) {
+      return path.dirname(process.execPath);
+    }
+  }
+
+  // Fallback to electron module check
   if (typeof process !== "undefined" && process.versions?.electron) {
     try {
-      // Prevent Next/Webpack from statically resolving "electron"
       const electronRequire = eval("require");
       const { app } = electronRequire("electron");
-
       if (app?.isPackaged) {
         return path.dirname(process.execPath);
       }
@@ -47,8 +53,27 @@ function getBaseDataDirectory(): string {
 }
 
 function resolveDatabaseUrl(): string {
-  if (process.env.DATABASE_URL?.trim()) {
-    return process.env.DATABASE_URL.trim();
+  const url = process.env.DATABASE_URL?.trim();
+  if (url) {
+    // If it's an absolute path or non-file URL, return it directly
+    if (url.startsWith("file:") && !url.startsWith("file:.") && !url.startsWith("file:./")) {
+      return url;
+    }
+    if (path.isAbsolute(url.replace(/^file:/, ""))) {
+      return url;
+    }
+    // If it is a relative file URL, resolve it relative to the correct base directory.
+    // In local development mode (where we don't have Electron running and are not packaged),
+    // relative paths must be resolved relative to the 'prisma' directory so that
+    // Next.js and Prisma CLI align on the exact same database file location.
+    const relativePath = url.replace(/^file:/, "").replace(/^\.\//, "").replace(/^\./, "");
+    const baseDir = getBaseDataDirectory();
+    const isDevelopment = baseDir === process.cwd() && !process.env.OFFLINE_DATA_DIR;
+    const resolvedPath = path.resolve(
+      isDevelopment ? path.join(baseDir, "prisma") : baseDir,
+      relativePath
+    );
+    return `file:${resolvedPath}`;
   }
 
   const dbPath = path.join(getBaseDataDirectory(), "data", "school.db");

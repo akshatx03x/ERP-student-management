@@ -4,13 +4,11 @@
   "copyright": "Copyright © 2026 Vidyanjali Public School",
   "compression": "normal",
   "publish": null,
-
   "directories": {
     "output": "C:/Users/Akshat/AppData/Local/SchoolERPBuild",
     "buildResources": "assets",
     "app": "."
   },
-
   "files": [
     "dist/**/*",
     "package.json",
@@ -23,14 +21,11 @@
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
     "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
   ],
-
   "asar": true,
-
   "asarUnpack": [
     "**/*.node",
     "**/schema-engine-windows.exe"
   ],
-
   "extraResources": [
     {
       "from": "../.next/standalone",
@@ -45,7 +40,6 @@
       "to": "prisma"
     }
   ],
-
   "win": {
     "target": [
       {
@@ -56,7 +50,6 @@
       }
     ]
   },
-
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
@@ -67,7 +60,6 @@
     "artifactName": "SchoolERP_Setup.exe",
     "include": "installer/nsis-installer.nsh"
   },
-
   "portable": {
     "artifactName": "SchoolERP_Portable.exe"
   }

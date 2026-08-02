@@ -110,7 +110,7 @@ async function createPreMigrationBackup(databaseUrl: string, backupsDir: string)
       await prisma.$disconnect();
     } catch (err: any) {
       console.warn(`[MigrationRunner] VACUUM INTO statement warning: ${err.message}. Performing direct copy fallback...`);
-      try { await prisma.$disconnect(); } catch {}
+      try { await prisma.$disconnect(); } catch { }
 
       const cleanDbPath = databaseUrl.replace(/^file:/, "");
       if (fs.existsSync(cleanDbPath)) {
@@ -148,13 +148,33 @@ export async function runPendingPrismaMigrations(
     return { success: false, message: `schema.prisma not found at: ${schemaPath}` };
   }
 
+  const unpackedSchemaEnginePath = path.join(
+    process.resourcesPath,
+    "app.asar.unpacked",
+    "node_modules",
+    "@prisma",
+    "engines",
+    "schema-engine-windows.exe"
+  );
+
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: databaseUrl,
     APP_MODE: "offline",
+    PRISMA_SCHEMA_ENGINE_BINARY: unpackedSchemaEnginePath,
+    PRISMA_MIGRATION_ENGINE_BINARY: unpackedSchemaEnginePath,
   };
 
-  const packagedPrismaJs = path.join(process.resourcesPath, "app", "node_modules", "prisma", "build", "index.js");
+  const candAsar = path.join(process.resourcesPath, "app.asar", "node_modules", "prisma", "build", "index.js");
+  const candApp = path.join(process.resourcesPath, "app", "node_modules", "prisma", "build", "index.js");
+  console.log(`[MigrationRunner Path Diagnostic]
+    process.resourcesPath: ${process.resourcesPath}
+    candAsar path: ${candAsar}
+    candAsar exists: ${fs.existsSync(candAsar)}
+    candApp path: ${candApp}
+    candApp exists: ${fs.existsSync(candApp)}`);
+
+  const packagedPrismaJs = fs.existsSync(candAsar) ? candAsar : candApp;
   const devPrismaJs = path.join(cwd, "node_modules", "prisma", "build", "index.js");
 
   let prismaCliJs: string | null = null;
@@ -214,9 +234,27 @@ export async function runPendingPrismaMigrations(
     };
   }
 
-  // First-run seed execution: Brand new database only
-  if (isFirstRun) {
-    console.log(`[MigrationRunner] Brand new database detected. Running initial database seeding...`);
+  // First-run seed execution: Brand new database only, or if database has no schools seeded
+  let needsSeeding = isFirstRun;
+  if (!needsSeeding) {
+    try {
+      const tempPrisma = new PrismaClient({
+        datasources: { db: { url: databaseUrl } },
+        log: [],
+      });
+      const schoolCount = await tempPrisma.school.count();
+      if (schoolCount === 0) {
+        needsSeeding = true;
+        console.log("[MigrationRunner] Database has 0 schools. Triggering seed...");
+      }
+      await tempPrisma.$disconnect();
+    } catch (e) {
+      needsSeeding = true;
+    }
+  }
+
+  if (needsSeeding) {
+    console.log(`[MigrationRunner] Seeding database...`);
     const packagedSeedJs = path.join(process.resourcesPath, "app", "dist", "seed", "prisma", "seed.js");
     const devSeedJs = path.join(cwd, "dist", "seed", "prisma", "seed.js");
     const seedTsPath = path.resolve(cwd, "prisma", "seed.ts");

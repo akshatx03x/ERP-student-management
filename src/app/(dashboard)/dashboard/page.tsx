@@ -1,5 +1,5 @@
 import { requirePermission } from "@/server/permissions/guard";
-import { schoolIdFromUser } from "@/server/lib/helpers";
+
 import { prisma } from "@/server/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/states";
@@ -40,7 +40,37 @@ function Metric({
 
 export default async function DashboardPage() {
   const { user } = await requirePermission("dashboard.view");
-  const schoolId = schoolIdFromUser(user);
+
+  // Gracefully handle users not linked to a school (e.g. manually registered accounts).
+  // In desktop/offline mode the seed creates the principal account; other self-registered
+  // accounts have no schoolId and should see a setup prompt rather than a 500 error.
+  if (!user.schoolId || user.schoolId.trim() === "") {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="max-w-md w-full rounded-xl border border-amber-200 bg-amber-50 p-8 shadow-sm text-center space-y-4">
+          <div className="flex justify-center">
+            <AlertCircle className="h-12 w-12 text-amber-500" />
+          </div>
+          <h1 className="text-xl font-bold text-amber-900">Account Not Linked to a School</h1>
+          <p className="text-sm text-amber-800">
+            Your account <span className="font-semibold">{user.email}</span> is not linked to any school.
+          </p>
+          <p className="text-sm text-amber-700">
+            Please sign out and log in with the <strong>Principal account</strong> created during setup:
+          </p>
+          <div className="rounded-lg bg-white border border-amber-200 p-4 text-left text-sm font-mono space-y-1">
+            <p><span className="text-slate-500">Email:</span> <span className="font-semibold text-slate-800">principal@vidyanjali.edu</span></p>
+            <p><span className="text-slate-500">Password:</span> <span className="font-semibold text-slate-800">Principal@123</span></p>
+          </div>
+          <p className="text-xs text-amber-600">
+            If you changed these credentials, check your setup configuration.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const schoolId = user.schoolId;
 
   if (user.role === "STUDENT" && user.studentId) {
     const student = await prisma.student.findUnique({

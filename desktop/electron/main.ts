@@ -177,7 +177,18 @@ async function bootstrapDesktopApp(): Promise<void> {
   updateSplashProgress("Registering application IPC services...", 25);
   registerIpcHandlers();
 
-  const isFirstRun = !fs.existsSync(writablePaths.dbFilePath) || fs.statSync(writablePaths.dbFilePath).size === 0;
+  // If the database exists but has 0 bytes, it is corrupted or incomplete from a crashed startup.
+  // We delete it to allow a fresh migration and seeding to occur.
+  if (fs.existsSync(writablePaths.dbFilePath) && fs.statSync(writablePaths.dbFilePath).size === 0) {
+    console.log("[Main] Detected 0-byte database file. Deleting to trigger fresh migration and seeding.");
+    try {
+      fs.unlinkSync(writablePaths.dbFilePath);
+    } catch (err: any) {
+      console.warn("[Main] Failed to clean up 0-byte database file:", err.message);
+    }
+  }
+
+  const isFirstRun = !fs.existsSync(writablePaths.dbFilePath);
 
   updateSplashProgress("Running SQLite database integrity check...", 40);
   const integrityResult = await checkSqliteDatabaseIntegrity(writablePaths.dbFilePath);
@@ -209,7 +220,16 @@ async function bootstrapDesktopApp(): Promise<void> {
     backupsDir: writablePaths.backupsDir,
   });
   if (!migrationResult.success) {
-    console.warn("[Main] Database migration notice:", migrationResult.message);
+    updateSplashProgress("Database Migration Error!", 60);
+    dialog.showErrorBox(
+      "Database Migration Failed",
+      `SQLite database migration failed.\n\nDetail: ${migrationResult.message}\n\nThe application will now close.`
+    );
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+    }
+    app.quit();
+    return;
   }
 
   updateSplashProgress("Starting local ERP application server...", 80);

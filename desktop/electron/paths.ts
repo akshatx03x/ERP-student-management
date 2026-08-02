@@ -120,7 +120,11 @@ export function getAppPaths(projectRootDir: string): AppPaths {
     : path.resolve(projectRootDir, "prisma", "schema.prisma");
 
   // Read-only Prisma CLI resolution
-  const packagedPrismaJs = path.join(resourcesDir, "app", "node_modules", "prisma", "build", "index.js");
+  // electron-builder asarUnpack extracts *.exe and *.node, causing the prisma package itself
+  // to be placed into app.asar.unpacked. Check there first before falling back to app/.
+  const packagedPrismaJs = fs.existsSync(path.join(resourcesDir, "app.asar.unpacked", "node_modules", "prisma", "build", "index.js"))
+    ? path.join(resourcesDir, "app.asar.unpacked", "node_modules", "prisma", "build", "index.js")
+    : path.join(resourcesDir, "app", "node_modules", "prisma", "build", "index.js");
   const devPrismaJs = path.join(projectRootDir, "node_modules", "prisma", "build", "index.js");
   let prismaCliJs: string | null = null;
   if (fs.existsSync(packagedPrismaJs)) {
