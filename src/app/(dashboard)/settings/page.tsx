@@ -3,9 +3,41 @@ import { listPermissionCatalog, getUserPermissionOverrides } from "@/server/serv
 import { listStaff } from "@/server/services/staff.service";
 import { PageHeader } from "@/components/shared/states";
 import { ImportPanel } from "@/components/shared/import-panel";
+import { BackupPanel } from "@/components/shared/backup-panel";
 import { SettingsClient } from "./settings-client";
+import { getCurrentUser } from "@/server/auth/session";
+import { isPrincipal } from "@/server/auth/session";
+import { getBackupProvider } from "@/server/providers/backup.provider";
 
 export default async function SettingsPage() {
+  const user = await getCurrentUser();
+  const principalView = isPrincipal(user.role);
+
+  // Load last backup info (non-blocking)
+  let lastBackup = null;
+  if (principalView) {
+    try {
+      const provider = getBackupProvider();
+      const backups = await provider.listBackups();
+      if (backups.length > 0) {
+        const b = backups[0]!;
+        lastBackup = {
+          id: b.id,
+          filename: b.filename,
+          sizeBytes: b.sizeBytes,
+          createdAt: b.createdAt.toISOString(),
+          schoolName: b.schoolName,
+          erpVersion: b.erpVersion,
+          backupFormatVersion: b.backupFormatVersion,
+          sha256: b.sha256,
+          ...(b.label ? { label: b.label } : {}),
+        };
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
   const [branding, staff, permissions] = await Promise.all([
     getSchoolBranding(),
     listStaff({ pageSize: 100 }),
@@ -26,6 +58,9 @@ export default async function SettingsPage() {
         title="Settings"
         description="School branding, user accounts, permissions, and Excel import"
       />
+      {principalView && (
+        <BackupPanel isPrincipal={true} lastBackup={lastBackup} />
+      )}
       <ImportPanel />
       <SettingsClient
         branding={branding}
