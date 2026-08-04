@@ -14,6 +14,9 @@ import {
   getClassResultsOverview,
   getStudentMarksData,
   saveStudentMarks,
+  generateMarksTemplate,
+  validateMarksImport,
+  importClassMarks,
 } from "@/server/services/result.service";
 import { SubjectType, ExamPublishStatus, ResultOutcome, ResultStatus } from "@prisma/client";
 
@@ -109,7 +112,7 @@ export async function deleteClassExamAction(id: string) {
 
 export async function getClassResultsOverviewAction(filters: {
   classId: string;
-  sectionId: string;
+  sectionId?: string | null;
   sessionId: string;
   search?: string;
 }) {
@@ -140,4 +143,40 @@ export async function saveStudentMarksAction(input: {
   reason?: string;
 }) {
   return saveStudentMarks(input);
+}
+
+export async function generateMarksTemplateAction(input: {
+  classId: string;
+  sectionId?: string | null;
+  subjectIds: string[];
+  examIds: string[];
+  sessionId: string;
+}) {
+  return generateMarksTemplate(input);
+}
+
+export async function validateMarksImportAction(input: {
+  base64File: string;
+  classId: string;
+  sectionId?: string | null;
+  subjectIds: string[];
+  examIds: string[];
+  sessionId: string;
+}) {
+  return validateMarksImport(input);
+}
+
+export async function importClassMarksAction(input: {
+  sessionId: string;
+  sheets: {
+    sheetName: string;
+    validRecords: {
+      studentId: string;
+      marks: { examSubjectId: string; marksObtained: number; isAbsent: boolean }[];
+      isExisting: boolean;
+    }[];
+  }[];
+  conflictResolution: "UPDATE" | "SKIP";
+}) {
+  return importClassMarks(input);
 }

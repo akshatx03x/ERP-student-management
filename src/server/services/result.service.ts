@@ -3,6 +3,7 @@ import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { decimalToNumber, schoolIdFromUser, toDecimal } from "@/server/lib/helpers";
 import { writeAuditLog } from "@/server/services/audit.service";
+import ExcelJS from "exceljs";
 
 // ── 1. SUBJECT MANAGEMENT ─────────────────────────────────────────────────────
 
@@ -507,7 +508,7 @@ export async function deleteClassExam(id: string) {
 
 export async function getClassResultsOverview(filters: {
   classId: string;
-  sectionId: string;
+  sectionId?: string | null;
   sessionId: string;
   search?: string;
 }) {
@@ -532,7 +533,7 @@ export async function getClassResultsOverview(filters: {
   const enrollments = await prisma.studentEnrollment.findMany({
     where: {
       classId: filters.classId,
-      sectionId: filters.sectionId,
+      ...(filters.sectionId && filters.sectionId !== "ALL" ? { sectionId: filters.sectionId } : {}),
       sessionId: filters.sessionId,
       student: {
         schoolId,
@@ -541,6 +542,7 @@ export async function getClassResultsOverview(filters: {
       },
     },
     include: {
+      section: { select: { name: true } },
       student: {
         include: {
           family: { select: { fatherName: true } },
@@ -568,6 +570,8 @@ export async function getClassResultsOverview(filters: {
       presentDays: termRes ? termRes.presentDays : null,
       workingDays: termRes ? termRes.workingDays : null,
       hasSavedMarks: termRes !== null,
+      photoUrl: en.student.photoUrl ?? null,
+      sectionName: en.section.name,
     };
   });
 }
@@ -624,6 +628,10 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
     },
   });
 
+  const branding = await prisma.schoolBranding.findFirst({
+    where: { schoolId },
+  });
+
   return {
     student: {
       id: student.id,
@@ -631,7 +639,14 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
       admissionNo: student.admissionNo,
       rollNo: student.enrollments[0]?.rollNo ?? "—",
       classSection: `${student.enrollments[0]?.class.name}-${student.enrollments[0]?.section.name}`,
+      photoUrl: student.photoUrl ?? null,
     },
+    schoolBranding: branding ? {
+      schoolName: branding.schoolName,
+      address: branding.address,
+      phone: branding.phone,
+      logoDocumentId: branding.logoDocumentId,
+    } : null,
     subjects: classSubjects.map((cs) => ({
       id: cs.subject.id,
       name: cs.subject.name,
@@ -854,4 +869,579 @@ export async function saveStudentMarks(input: {
 
     return { success: true };
   });
+}
+
+// ── 4. EXCEL MARKS IMPORT & EXPORT ───────────────────────────────────────────
+
+export async function generateMarksTemplate(input: {
+  classId: string;
+  sectionId?: string | null;
+  subjectIds: string[];
+  examIds: string[];
+  sessionId: string;
+}) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  // 1. Fetch class details, selected exams, and selected subjects
+  const classItem = await prisma.class.findFirst({
+    where: { id: input.classId, schoolId },
+    include: { sections: true },
+  });
+  if (!classItem) throw new Error("Class not found");
+
+  const exams = await prisma.exam.findMany({
+    where: { id: { in: input.examIds }, classId: input.classId, sessionId: input.sessionId },
+  });
+  if (exams.length === 0) throw new Error("No valid exams found");
+
+  const classSubjects = await prisma.classSubject.findMany({
+    where: {
+      classId: input.classId,
+      sessionId: input.sessionId,
+      subjectId: { in: input.subjectIds },
+    },
+    include: { subject: true },
+  });
+  if (classSubjects.length === 0) throw new Error("No valid subjects found for this class");
+
+  // Fetch enrolled students
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: {
+      classId: input.classId,
+      ...(input.sectionId && input.sectionId !== "ALL" ? { sectionId: input.sectionId } : {}),
+      sessionId: input.sessionId,
+      student: { schoolId, status: "ACTIVE" },
+    },
+    include: { student: true },
+    orderBy: [
+      { rollNo: "asc" },
+      { student: { fullName: "asc" } }
+    ],
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  const metadataRows: any[] = [];
+
+  // 2. Generate a worksheet for each Exam
+  for (const exam of exams) {
+    // Worksheet name limit is 31 characters
+    const sheetName = exam.name.substring(0, 31);
+    const sheet = workbook.addWorksheet(sheetName);
+    sheet.views = [{ showGridLines: true }];
+
+    // Columns structure
+    const columns = [
+      { header: "Roll No", key: "rollNo", width: 12 },
+      { header: "Admission No", key: "admissionNo", width: 18 },
+      { header: "Student Name", key: "studentName", width: 30 },
+    ];
+
+    // Add selected subjects as columns
+    const activeExamSubjects: any[] = [];
+    for (const cs of classSubjects) {
+      const examSub = await prisma.examSubject.findFirst({
+        where: { examId: exam.id, subjectId: cs.subjectId },
+      });
+      if (examSub) {
+        activeExamSubjects.push({
+          subject: cs.subject,
+          examSubject: examSub,
+          maxMarks: decimalToNumber(examSub.maxMarks),
+        });
+      }
+    }
+
+    // Sort by display order
+    activeExamSubjects.sort((a, b) => a.subject.displayOrder - b.subject.displayOrder);
+
+    activeExamSubjects.forEach((es, idx) => {
+      // Header: Subject Name, Key: subjectId, Width: 18
+      columns.push({
+        header: es.subject.name,
+        key: `subject_${es.subject.id}`,
+        width: 18,
+      });
+
+      // Track metadata: Sheet Name, Session ID, Exam ID, Class ID, Section ID, Subject ID, ExamSubject ID, Column Number (1-indexed)
+      metadataRows.push([
+        sheetName,
+        input.sessionId,
+        exam.id,
+        input.classId,
+        input.sectionId ?? "ALL",
+        es.subject.id,
+        es.examSubject.id,
+        4 + idx, // column index (Roll No: 1, Admission No: 2, Student Name: 3, Subject 1: 4, Subject 2: 5...)
+      ]);
+    });
+
+    // Hidden student ID column
+    columns.push({
+      header: "Student ID (Do Not Modify)",
+      key: "studentId",
+      width: 35,
+    });
+
+    sheet.columns = columns;
+
+    // Apply header style (Row 1)
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE0E0E0" },
+    };
+
+    // Insert Max Marks Row (Row 2)
+    const maxMarksRowValues: any[] = ["Max Marks", "", ""];
+    activeExamSubjects.forEach((es) => {
+      maxMarksRowValues.push(`Max:${es.maxMarks}`);
+    });
+    maxMarksRowValues.push(""); // for studentId column
+
+    sheet.addRow(maxMarksRowValues);
+    const row2 = sheet.getRow(2);
+    row2.font = { italic: true, bold: true, color: { argb: "FF666666" } };
+    row2.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF5F5F5" },
+    };
+
+    // Populate data rows (starting from Row 3)
+    enrollments.forEach((e) => {
+      const rowData: any = {
+        rollNo: e.rollNo ?? "—",
+        admissionNo: e.student.admissionNo,
+        studentName: e.student.fullName,
+        studentId: e.studentId,
+      };
+      // Marks columns default to empty
+      activeExamSubjects.forEach((es) => {
+        rowData[`subject_${es.subject.id}`] = "";
+      });
+      sheet.addRow(rowData);
+    });
+
+    // Hide Student ID column (Column index = 4 + activeExamSubjects.length)
+    const idColIdx = 4 + activeExamSubjects.length;
+    sheet.getColumn(idColIdx).hidden = true;
+
+    // Apply cell locks (Row 1 headers, Row 2 max marks, Col 1-3 info, and hidden Col ID are locked. Marks columns are unlocked).
+    sheet.eachRow((row, rowNumber) => {
+      row.getCell(1).protection = { locked: true };
+      row.getCell(2).protection = { locked: true };
+      row.getCell(3).protection = { locked: true };
+
+      if (rowNumber === 1 || rowNumber === 2) {
+        // lock headers and max marks row completely
+        for (let c = 1; c <= idColIdx; c++) {
+          row.getCell(c).protection = { locked: true };
+        }
+      } else {
+        // student row: unlock marks columns, lock studentId
+        for (let c = 4; c < idColIdx; c++) {
+          row.getCell(c).protection = { locked: false };
+        }
+        row.getCell(idColIdx).protection = { locked: true };
+      }
+    });
+
+    // Protect sheet
+    await sheet.protect("vps-marks-protect", {
+      selectLockedCells: true,
+      selectUnlockedCells: true,
+    });
+  }
+
+  // 3. Write metadata sheet
+  const metaSheet = workbook.addWorksheet("_metadata");
+  metaSheet.views = [{ showGridLines: false }];
+  metadataRows.forEach((row) => {
+    metaSheet.addRow(row);
+  });
+  metaSheet.state = "hidden"; // Hide metadata sheet
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer as any).toString("base64");
+}
+
+export async function validateMarksImport(input: {
+  base64File: string;
+  classId: string;
+  sectionId?: string | null;
+  subjectIds: string[];
+  examIds: string[];
+  sessionId: string;
+}) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  const buffer = Buffer.from(input.base64File, "base64");
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as any);
+
+  // 1. Read metadata sheet and validate integrity
+  const metaSheet = workbook.getWorksheet("_metadata");
+  if (!metaSheet) {
+    throw new Error("Invalid template: Hidden metadata sheet is missing. Please use a template generated by the system.");
+  }
+
+  // Map metadata rows: key is SheetName, value is array of column descriptors
+  const metadataMap = new Map<string, any[]>();
+  metaSheet.eachRow((row) => {
+    const sheetName = row.getCell(1).value?.toString();
+    const sessId = row.getCell(2).value?.toString();
+    const exId = row.getCell(3).value?.toString();
+    const clId = row.getCell(4).value?.toString();
+    const secId = row.getCell(5).value?.toString();
+    const subId = row.getCell(6).value?.toString();
+    const exSubId = row.getCell(7).value?.toString();
+    const colIdx = Number(row.getCell(8).value);
+
+    if (sheetName && sessId && exId && clId && secId && subId && exSubId && colIdx) {
+      if (!metadataMap.has(sheetName)) {
+        metadataMap.set(sheetName, []);
+      }
+      metadataMap.get(sheetName)!.push({
+        sessionId: sessId,
+        examId: exId,
+        classId: clId,
+        sectionId: secId,
+        subjectId: subId,
+        examSubjectId: exSubId,
+        columnNumber: colIdx,
+      });
+    }
+  });
+
+  // Verify that the metadata matches the currently selected filters
+  for (const [sheetName, cols] of metadataMap.entries()) {
+    for (const col of cols) {
+      if (
+        col.sessionId !== input.sessionId ||
+        col.classId !== input.classId ||
+        col.sectionId !== (input.sectionId ?? "ALL") ||
+        !input.subjectIds.includes(col.subjectId) ||
+        !input.examIds.includes(col.examId)
+      ) {
+        throw new Error(
+          `Template mismatch: The uploaded template does not match the currently selected academic session, class, section, subjects, or exams.`
+        );
+      }
+    }
+  }
+
+  // Get active system enrollments for comparison
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: {
+      classId: input.classId,
+      ...(input.sectionId && input.sectionId !== "ALL" ? { sectionId: input.sectionId } : {}),
+      sessionId: input.sessionId,
+      student: { schoolId, status: "ACTIVE" },
+    },
+    include: { student: true },
+  });
+  const enrollmentsMap = new Map(enrollments.map((e) => [e.studentId, e]));
+
+  const sheetsResult: any[] = [];
+  let totalValid = 0;
+  let totalInvalid = 0;
+  let totalExisting = 0;
+
+  // 2. Validate sheet by sheet
+  for (const [sheetName, cols] of metadataMap.entries()) {
+    const sheet = workbook.getWorksheet(sheetName);
+    if (!sheet) {
+      throw new Error(`Invalid template: Sheet named '${sheetName}' was not found in the workbook.`);
+    }
+
+    const errors: { row: number; studentName: string; subjectName: string; error: string }[] = [];
+    const duplicateCheck = new Set<string>();
+
+    let totalRecords = 0;
+    let validRecordsCount = 0;
+    let invalidRecordsCount = 0;
+    let existingRecordsCount = 0;
+    let duplicateRecordsCount = 0;
+
+    const validRecords: any[] = [];
+
+    // Columns mapping: key is column index, value is subject metadata
+    const colMapping = new Map<number, any>();
+    cols.forEach((col) => {
+      colMapping.set(col.columnNumber, col);
+    });
+
+    // Read subject names and max marks from sheet to show in errors
+    const maxCols = 3 + cols.length;
+    const subjectsMeta: Record<number, { name: string; maxMarks: number; examSubjectId: string }> = {};
+
+    for (let c = 4; c <= maxCols; c++) {
+      const subjectName = sheet.getRow(1).getCell(c).value?.toString() || `Subject Col ${c}`;
+      const maxMarksVal = sheet.getRow(2).getCell(c).value?.toString()?.replace("Max:", "") || "100";
+      const maxMarks = Number(maxMarksVal) || 100;
+      const metaCol = colMapping.get(c);
+
+      if (metaCol) {
+        subjectsMeta[c] = {
+          name: subjectName,
+          maxMarks,
+          examSubjectId: metaCol.examSubjectId,
+        };
+      }
+    }
+
+    // Check existing marks in db for this exam
+    const examSubjectIds = cols.map(c => c.examSubjectId);
+    const existingMarks = await prisma.markEntry.findMany({
+      where: {
+        examSubjectId: { in: examSubjectIds },
+        studentId: { in: enrollments.map((e) => e.studentId) },
+      },
+    });
+    const existingMarksMap = new Set(existingMarks.map((m) => m.studentId));
+
+    // hidden Student ID col idx
+    const idColIdx = 4 + cols.length;
+
+    sheet.eachRow((row, rowIdx) => {
+      if (rowIdx === 1 || rowIdx === 2) return; // skip header and max marks rows
+
+      const rollNo = row.getCell(1).value?.toString()?.trim() || "—";
+      const admissionNo = row.getCell(2).value?.toString()?.trim() || "";
+      const studentName = row.getCell(3).value?.toString()?.trim() || "";
+      const studentId = row.getCell(idColIdx).value?.toString()?.trim();
+
+      if (!studentId && !admissionNo && !studentName) return; // skip empty rows
+
+      totalRecords++;
+      let rowHasError = false;
+      const rowErrors: { subjectName: string; error: string }[] = [];
+
+      // Student validation
+      if (!studentId) {
+        rowHasError = true;
+        rowErrors.push({ subjectName: "System", error: "Student ID column (hidden column H) is missing or has been cleared." });
+      } else {
+        const enrollment = enrollmentsMap.get(studentId);
+        if (!enrollment) {
+          rowHasError = true;
+          rowErrors.push({ subjectName: "System", error: "Student not found or is not active in this class/section." });
+        } else {
+          // Cross-validate Admission No and Roll No
+          if (enrollment.student.admissionNo !== admissionNo) {
+            rowHasError = true;
+            rowErrors.push({ subjectName: "System", error: `Admission number mismatch (Excel: ${admissionNo}, ERP: ${enrollment.student.admissionNo}).` });
+          }
+          const erpRoll = enrollment.rollNo ?? "—";
+          if (erpRoll !== "—" && rollNo !== "—" && erpRoll !== rollNo) {
+            rowHasError = true;
+            rowErrors.push({ subjectName: "System", error: `Roll number mismatch (Excel: ${rollNo}, ERP: ${erpRoll}).` });
+          }
+        }
+
+        // Duplicate checks
+        if (duplicateCheck.has(studentId)) {
+          rowHasError = true;
+          rowErrors.push({ subjectName: "System", error: "Duplicate row in Excel sheet for same student." });
+          duplicateRecordsCount++;
+        } else {
+          duplicateCheck.add(studentId);
+        }
+      }
+
+      // Validate marks columns
+      const marksList: { examSubjectId: string; marksObtained: number; isAbsent: boolean }[] = [];
+
+      for (let c = 4; c <= maxCols; c++) {
+        const cellValue = row.getCell(c).value;
+        const subMeta = subjectsMeta[c];
+        if (!subMeta) continue;
+
+        if (cellValue === undefined || cellValue === null || cellValue === "") {
+          rowHasError = true;
+          rowErrors.push({ subjectName: subMeta.name, error: "Marks obtained is required (or enter 'AB' if absent)." });
+        } else {
+          const rawStr = cellValue.toString().trim().toUpperCase();
+          if (rawStr === "AB") {
+            marksList.push({
+              examSubjectId: subMeta.examSubjectId,
+              marksObtained: 0,
+              isAbsent: true,
+            });
+          } else {
+            const num = Number(cellValue);
+            if (isNaN(num)) {
+              rowHasError = true;
+              rowErrors.push({ subjectName: subMeta.name, error: `Marks obtained must be numeric or 'AB'.` });
+            } else if (num < 0) {
+              rowHasError = true;
+              rowErrors.push({ subjectName: subMeta.name, error: `Marks obtained cannot be negative.` });
+            } else if (num > subMeta.maxMarks) {
+              rowHasError = true;
+              rowErrors.push({ subjectName: subMeta.name, error: `Marks obtained (${num}) exceeds maximum marks (${subMeta.maxMarks}).` });
+            } else {
+              marksList.push({
+                examSubjectId: subMeta.examSubjectId,
+                marksObtained: num,
+                isAbsent: false,
+              });
+            }
+          }
+        }
+      }
+
+      if (rowHasError) {
+        invalidRecordsCount++;
+        rowErrors.forEach((err) => {
+          errors.push({
+            row: rowIdx,
+            studentName: studentName || "Unknown Student",
+            subjectName: err.subjectName,
+            error: err.error,
+          });
+        });
+      } else {
+        validRecordsCount++;
+        const isExisting = existingMarksMap.has(studentId!);
+        if (isExisting) {
+          existingRecordsCount++;
+        }
+
+        validRecords.push({
+          studentId: studentId!,
+          admissionNo: admissionNo!,
+          studentName: studentName!,
+          rollNo: rollNo ?? "—",
+          marks: marksList,
+          isExisting,
+        });
+      }
+    });
+
+    totalValid += validRecordsCount;
+    totalInvalid += invalidRecordsCount;
+    totalExisting += existingRecordsCount;
+
+    sheetsResult.push({
+      sheetName,
+      totalRecords,
+      validRecordsCount,
+      invalidRecordsCount,
+      existingRecordsCount,
+      duplicateRecordsCount,
+      errors,
+      validRecords,
+    });
+  }
+
+  return {
+    sheets: sheetsResult,
+    totalValid,
+    totalInvalid,
+    totalExisting,
+  };
+}
+
+export async function importClassMarks(input: {
+  sessionId: string;
+  sheets: {
+    sheetName: string;
+    validRecords: {
+      studentId: string;
+      marks: { examSubjectId: string; marksObtained: number; isAbsent: boolean }[];
+      isExisting: boolean;
+    }[];
+  }[];
+  conflictResolution: "UPDATE" | "SKIP";
+}) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  const scales = await prisma.gradeScale.findMany({
+    where: { schoolId },
+    orderBy: { minPercent: "desc" },
+  });
+
+  let importedCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const sheet of input.sheets) {
+      for (const rec of sheet.validRecords) {
+        for (const m of rec.marks) {
+          const examSubject = await tx.examSubject.findUnique({
+            where: { id: m.examSubjectId },
+          });
+          if (!examSubject) continue;
+
+          // Find existing
+          const existing = await tx.markEntry.findUnique({
+            where: {
+              examSubjectId_studentId: {
+                examSubjectId: m.examSubjectId,
+                studentId: rec.studentId,
+              },
+            },
+          });
+
+          // Resolve grade based on percentage using gradeScale
+          const maxMarks = decimalToNumber(examSubject.maxMarks);
+          const percent = maxMarks > 0 ? (m.marksObtained / maxMarks) * 100 : 0;
+          let grade = "E";
+          for (const scale of scales) {
+            const min = decimalToNumber(scale.minPercent);
+            const max = decimalToNumber(scale.maxPercent);
+            if (percent >= min && percent <= max) {
+              grade = scale.grade;
+              break;
+            }
+          }
+
+          let remarksStr = m.isAbsent ? "ABSENT" : null;
+
+          if (existing) {
+            if (input.conflictResolution === "SKIP") {
+              skippedCount++;
+              continue;
+            }
+
+            await tx.markEntry.update({
+              where: { id: existing.id },
+              data: {
+                marksObtained: toDecimal(m.marksObtained),
+                grade,
+                enteredById: user.id,
+                remarks: remarksStr,
+              },
+            });
+            updatedCount++;
+          } else {
+            await tx.markEntry.create({
+              data: {
+                examSubjectId: m.examSubjectId,
+                studentId: rec.studentId,
+                marksObtained: toDecimal(m.marksObtained),
+                grade,
+                enteredById: user.id,
+                remarks: remarksStr,
+              },
+            });
+            importedCount++;
+          }
+        }
+      }
+    }
+  });
+
+  return {
+    success: true,
+    imported: importedCount,
+    updated: updatedCount,
+    skipped: skippedCount,
+    failed: 0,
+  };
 }

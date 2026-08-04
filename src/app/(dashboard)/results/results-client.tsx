@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Search, Plus, BookOpen, Settings, Layout, Edit, Ban, Loader2, Save,
-  CheckCircle, ShieldAlert, FileText, ChevronRight, X
+  CheckCircle, ShieldAlert, FileText, ChevronRight, X, Upload, Download, AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -24,6 +24,9 @@ import {
   updateGlobalSubjectAction,
   deleteGlobalSubjectAction,
   listGlobalSubjectsAction,
+  generateMarksTemplateAction,
+  validateMarksImportAction,
+  importClassMarksAction,
 } from "@/server/actions/result.actions";
 import { SubjectType, ExamPublishStatus, ResultOutcome, ResultStatus } from "@prisma/client";
 import { toast } from "sonner";
@@ -71,6 +74,354 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
   const [previewData, setPreviewData] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
+
+  // New Print Class Results popup state
+  const [showPrintClassModal, setShowPrintClassModal] = useState(false);
+  const [printClassId, setPrintClassId] = useState("");
+  const [printSectionId, setPrintSectionId] = useState("ALL");
+  const [printSearch, setPrintSearch] = useState("");
+  const [printStudents, setPrintStudents] = useState<any[]>([]);
+  const [selectedPrintStudentIds, setSelectedPrintStudentIds] = useState<Record<string, boolean>>({});
+  const [isGeneratingClassReport, setIsGeneratingClassReport] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationTotal, setGenerationTotal] = useState(0);
+  const [multiReportData, setMultiReportData] = useState<any[]>([]);
+  const [showMultiReportPreview, setShowMultiReportPreview] = useState(false);
+  const [imagesLoadedCount, setImagesLoadedCount] = useState(0);
+  const [totalImagesToLoad, setTotalImagesToLoad] = useState(0);
+  const [isPrintingLoading, setIsPrintingLoading] = useState(false);
+  
+  // Excel Marks Import state
+  const [showAddMarksModal, setShowAddMarksModal] = useState(false);
+  const [importStep, setImportStep] = useState(1);
+  const [importSessionId, setImportSessionId] = useState("");
+  const [importClassId, setImportClassId] = useState("");
+  const [importSectionId, setImportSectionId] = useState("ALL");
+  const [importExamIds, setImportExamIds] = useState<string[]>([]);
+  const [importSubjectIds, setImportSubjectIds] = useState<string[]>([]);
+  
+  const [isTemplateLoading, setIsTemplateLoading] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImportValidating, setIsImportValidating] = useState(false);
+  const [validationSummary, setValidationSummary] = useState<any>(null);
+  const [conflictResolution, setConflictResolution] = useState<"UPDATE" | "SKIP">("UPDATE");
+  const [isSavingImport, setIsSavingImport] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [showConfirmPartial, setShowConfirmPartial] = useState(false);
+
+  const [importClassExams, setImportClassExams] = useState<any[]>([]);
+  const [importClassSubjects, setImportClassSubjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadImportConfig() {
+      if (importClassId && importSessionId) {
+        try {
+          const exams = await listClassExamsAction(importClassId, importSessionId);
+          setImportClassExams(exams);
+          
+          const assigned = await listClassSubjectsAction(importClassId, importSessionId);
+          setImportClassSubjects(assigned.map((a: any) => a.subject));
+          
+          setImportExamIds([]);
+          setImportSubjectIds([]);
+        } catch (err: any) {
+          toast.error("Failed to load exams or subjects for the selected class.");
+        }
+      } else {
+        setImportClassExams([]);
+        setImportClassSubjects([]);
+        setImportExamIds([]);
+        setImportSubjectIds([]);
+      }
+    }
+    loadImportConfig();
+  }, [importClassId, importSessionId]);
+
+  const loadPrintStudents = async (cId: string, sId: string) => {
+    if (!cId || !sessionId) {
+      setPrintStudents([]);
+      return;
+    }
+    try {
+      const data = await getClassResultsOverviewAction({
+        classId: cId,
+        sectionId: sId === "ALL" ? null : sId,
+        sessionId,
+      });
+      setPrintStudents(data);
+      const initialSelection: Record<string, boolean> = {};
+      data.forEach((st: any) => {
+        initialSelection[st.studentId] = true;
+      });
+      setSelectedPrintStudentIds(initialSelection);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load class students");
+    }
+  };
+
+  useEffect(() => {
+    if (showPrintClassModal && printClassId) {
+      loadPrintStudents(printClassId, printSectionId);
+    }
+  }, [printClassId, printSectionId, showPrintClassModal]);
+
+  const filteredPrintStudents = printStudents.filter((st) => {
+    const term = printSearch.toLowerCase().trim();
+    if (!term) return true;
+    return (
+      st.fullName.toLowerCase().includes(term) ||
+      st.admissionNo.toLowerCase().includes(term)
+    );
+  });
+
+  const generateMultiReportCards = async (studentsToPrint: any[]) => {
+    if (studentsToPrint.length === 0) {
+      toast.error("No students selected for printing");
+      return;
+    }
+    setIsGeneratingClassReport(true);
+    setGenerationProgress(0);
+    setGenerationTotal(studentsToPrint.length);
+    setMultiReportData([]);
+    
+    const results: any[] = [];
+    try {
+      for (let i = 0; i < studentsToPrint.length; i++) {
+        const student = studentsToPrint[i];
+        const data = await getStudentMarksDataAction(student.studentId, sessionId);
+        results.push(data);
+        setGenerationProgress(i + 1);
+      }
+      setMultiReportData(results);
+      setShowMultiReportPreview(true);
+      setShowPrintClassModal(false);
+
+      const photoUrls = results
+        .map((r) => r.student.photoUrl)
+        .filter((url) => !!url);
+      
+      const logoUrls = results
+        .map((r) => r.schoolBranding?.logoDocumentId ? `/api/documents/${r.schoolBranding.logoDocumentId}` : null)
+        .filter((url) => !!url);
+      
+      const allUrlsToLoad = [...new Set([...photoUrls, ...logoUrls])];
+      
+      if (allUrlsToLoad.length > 0) {
+        setIsPrintingLoading(true);
+        setTotalImagesToLoad(allUrlsToLoad.length);
+        setImagesLoadedCount(0);
+
+        let loadedCount = 0;
+        const promises = allUrlsToLoad.map((url) => {
+          return new Promise<void>((resolve) => {
+            const img = new Image();
+            img.src = url;
+            img.onload = () => {
+              loadedCount++;
+              setImagesLoadedCount(loadedCount);
+              resolve();
+            };
+            img.onerror = () => {
+              loadedCount++;
+              setImagesLoadedCount(loadedCount);
+              resolve();
+            };
+          });
+        });
+
+        await Promise.all(promises);
+        setIsPrintingLoading(false);
+      }
+      
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    } catch (err: any) {
+      toast.error("Failed to generate report cards: " + err.message);
+    } finally {
+      setIsGeneratingClassReport(false);
+    }
+  };
+
+  const openAddMarksImport = () => {
+    setImportStep(1);
+    setImportSessionId(sessionId);
+    setImportClassId(classId);
+    setImportSectionId(sectionId || "ALL");
+    setImportExamIds([]);
+    setImportSubjectIds([]);
+    setImportFile(null);
+    setValidationSummary(null);
+    setImportResult(null);
+    setShowAddMarksModal(true);
+  };
+
+  const handleDownloadTemplate = async () => {
+    if (!importSessionId || !importClassId || importExamIds.length === 0 || importSubjectIds.length === 0) {
+      toast.error("Please select all required academic details first.");
+      return;
+    }
+    setIsTemplateLoading(true);
+    try {
+      const base64 = await generateMarksTemplateAction({
+        classId: importClassId,
+        sectionId: importSectionId === "ALL" ? null : importSectionId,
+        subjectIds: importSubjectIds,
+        examIds: importExamIds,
+        sessionId: importSessionId,
+      });
+
+      const binaryStr = window.atob(base64);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      
+      const sessionName = sessions.find((s) => s.id === importSessionId)?.name || "Session";
+      const className = classes.find((c) => c.id === importClassId)?.name || "Class";
+      const sectionName = importSectionId === "ALL" ? "AllSections" : classes.find((c) => c.id === importClassId)?.sections.find((sec) => sec.id === importSectionId)?.name || "Sec";
+      
+      a.download = `${sessionName}_${className}_${sectionName}_marks_template.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success("Template downloaded successfully!");
+      setImportStep(3); // go to upload step
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate template");
+    } finally {
+      setIsTemplateLoading(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+    await processUploadedFile(file);
+  };
+
+  const processUploadedFile = async (file: File) => {
+    setIsImportValidating(true);
+    setValidationSummary(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const uint8 = new Uint8Array(arrayBuffer);
+          let binary = "";
+          for (let i = 0; i < uint8.length; i++) {
+            binary += String.fromCharCode(uint8[i]);
+          }
+          const base64 = btoa(binary);
+          
+          const summary = await validateMarksImportAction({
+            base64File: base64,
+            classId: importClassId,
+            sectionId: importSectionId === "ALL" ? null : importSectionId,
+            subjectIds: importSubjectIds,
+            examIds: importExamIds,
+            sessionId: importSessionId,
+          });
+          
+          setValidationSummary(summary);
+          setImportStep(4); // go to validation summary
+        } catch (err: any) {
+          toast.error(err.message || "File validation failed.");
+        } finally {
+          setIsImportValidating(false);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      toast.error("Failed to read file.");
+      setIsImportValidating(false);
+    }
+  };
+
+  const handleExecuteImport = async (skipConfirmation = false) => {
+    if (!validationSummary) return;
+
+    const hasInvalid = validationSummary.totalInvalid > 0;
+    const hasValid = validationSummary.totalValid > 0;
+
+    if (hasInvalid && hasValid && !skipConfirmation) {
+      setShowConfirmPartial(true);
+      return;
+    }
+
+    setShowConfirmPartial(false);
+    setIsSavingImport(true);
+    try {
+      const sheetsInput = validationSummary.sheets.map((sheet: any) => ({
+        sheetName: sheet.sheetName,
+        validRecords: sheet.validRecords.map((rec: any) => ({
+          studentId: rec.studentId,
+          marks: rec.marks.map((m: any) => ({
+            examSubjectId: m.examSubjectId,
+            marksObtained: m.marksObtained,
+            isAbsent: m.isAbsent,
+          })),
+          isExisting: rec.isExisting,
+        })),
+      }));
+
+      const result = await importClassMarksAction({
+        sessionId: importSessionId,
+        sheets: sheetsInput,
+        conflictResolution,
+      });
+
+      setImportResult(result);
+      setImportStep(6); // Success
+      toast.success("Marks imported successfully!");
+      loadStudents(); // Refresh results list
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save marks");
+    } finally {
+      setIsSavingImport(false);
+    }
+  };
+
+  const handleDownloadErrorReport = () => {
+    if (!validationSummary) return;
+    
+    const headers = ["Sheet/Exam", "Row Number", "Student Name", "Subject", "Validation Error"];
+    const rows: any[] = [];
+    
+    validationSummary.sheets.forEach((sheet: any) => {
+      sheet.errors.forEach((e: any) => {
+        rows.push([
+          sheet.sheetName,
+          e.row,
+          `"${e.studentName}"`,
+          `"${e.subjectName}"`,
+          `"${e.error}"`
+        ]);
+      });
+    });
+
+    if (rows.length === 0) return;
+    
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map((r: any) => r.join(","))].join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "marks_import_errors.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Marks Entry state
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
@@ -132,6 +483,30 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     try {
       const data = await getStudentMarksDataAction(studentId, sessionId);
       setPreviewData(data);
+      
+      const photoUrl = data.student.photoUrl;
+      const logoId = data.schoolBranding?.logoDocumentId;
+      const promises: Promise<void>[] = [];
+      
+      if (photoUrl) {
+        promises.push(new Promise<void>((resolve) => {
+          const img = new Image();
+          img.src = photoUrl;
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        }));
+      }
+      if (logoId) {
+        promises.push(new Promise<void>((resolve) => {
+          const img = new Image();
+          img.src = `/api/documents/${logoId}`;
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        }));
+      }
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
     } catch (err: any) {
       toast.error("Failed to load report card preview data");
       setShowReportPreview(false);
@@ -478,6 +853,12 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             )}
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={openAddMarksImport} className="h-8 text-xs font-bold border-stone-300">
+              <Upload className="w-3.5 h-3.5 mr-1" /> Add Marks
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setPrintClassId(classId || classes[0]?.id || ""); setShowPrintClassModal(true); }} className="h-8 text-xs font-bold border-stone-300">
+              <FileText className="w-3.5 h-3.5 mr-1" /> Print Class Results
+            </Button>
             <Button variant="outline" size="sm" onClick={openManageSubjects} className="h-8 text-xs font-bold border-stone-300">
               <BookOpen className="w-3.5 h-3.5 mr-1" /> Manage Subjects
             </Button>
@@ -1206,10 +1587,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
           </div>
         </div>
       )}
-      {/* ══ REPORT CARD PREVIEW MODAL (A4 PRINTABLE) ══════════════════════ */}
+      {/* ══ REPORT CARD PREVIEW MODAL (A4 LANDSCAPE PRINTABLE) ══════════════════════ */}
       {mounted && showReportPreview && createPortal(
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-6 overflow-hidden print-modal-backdrop">
-          <div className="bg-white w-full h-full md:rounded-2xl max-w-4xl md:h-[95vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden print-modal-panel">
+          <div className="bg-white w-full h-full md:rounded-2xl max-w-6xl md:h-[95vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden print-modal-panel">
             
             {/* Header toolbar */}
             <div className="bg-stone-50 px-6 py-4 border-b border-stone-200 flex justify-between items-center shrink-0 no-print">
@@ -1247,7 +1628,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                       }
                     }}
                     disabled={publishLoading} 
-                    className="bg-indigo-650 hover:bg-indigo-600 text-grey-600 font-bold h-8 text-xs"
+                    className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold h-8 text-xs"
                   >
                     Publish Result
                   </Button>
@@ -1258,7 +1639,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   onClick={() => {
                     window.print();
                   }} 
-                  className="bg-black-650 hover:bg-emerald-600 text-grey-600 font-bold h-8 text-xs"
+                  className="bg-emerald-650 hover:bg-emerald-600 text-white font-bold h-8 text-xs"
                 >
                   Print / Save PDF
                 </Button>
@@ -1268,6 +1649,11 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             {/* Print styling block */}
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {
+                html, body {
+                  height: auto !important;
+                  overflow: visible !important;
+                  position: static !important;
+                }
                 /* Hide everything else */
                 body > *:not(.print-modal-backdrop) {
                   display: none !important;
@@ -1287,6 +1673,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   margin: 0 !important;
                   display: block !important;
                   z-index: auto !important;
+                  overflow: visible !important;
                 }
                 .print-modal-panel {
                   width: 100% !important;
@@ -1297,6 +1684,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   background: white !important;
                   display: block !important;
                   border-radius: 0 !important;
+                  overflow: visible !important;
                 }
                 .print-modal-scroll {
                   overflow: visible !important;
@@ -1309,13 +1697,19 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   border: none !important;
                   box-shadow: none !important;
                   margin: 0 auto !important;
-                  padding: 0 !important;
-                  width: 100% !important;
-                  max-width: 210mm !important;
-                  min-height: 297mm !important;
+                  padding: 10mm !important;
+                  width: 297mm !important;
+                  height: 210mm !important;
+                  box-sizing: border-box !important;
                   background: white !important;
                   color: black !important;
+                  page-break-after: always !important;
+                  break-after: page !important;
                 }
+              }
+              @page {
+                size: A4 landscape;
+                margin: 0;
               }
             ` }} />
 
@@ -1324,276 +1718,1264 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               {previewLoading ? (
                 <div className="flex items-center justify-center h-48 text-stone-400 gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Generating card...</div>
               ) : previewData ? (
-                <div id="report-card-print" className="bg-white p-8 w-full max-w-[210mm] min-h-[297mm] shadow-md flex flex-col justify-between font-serif text-black text-xs select-none">
-                  
-                  {/* Master Table Container representing the exact printed layout */}
-                  <table className="w-full border-collapse border-2 border-black text-center text-[10px] font-bold text-black">
-                    <tbody>
-                      {/* 1. School Header Row */}
-                      <tr>
-                        <td colSpan={16} className="p-4 border-b-2 border-black">
-                          <div className="flex items-center justify-between">
-                            {/* Logo */}
-                            <div className="w-16 h-16 border border-black flex items-center justify-center text-[8px] uppercase tracking-tighter shrink-0 select-none text-center font-sans">
-                              VPS LOGO
-                            </div>
-                            {/* School details */}
-                            <div className="flex-1 text-center pr-12">
-                              <h2 className="text-xl font-extrabold tracking-wide font-serif leading-none">VIDYANJALI PUBLIC SCHOOL</h2>
-                              <p className="text-[10px] font-bold mt-1.5">Karhera Mohan Nagar,Ghaziabad</p>
-                              <h3 className="text-[11px] font-extrabold uppercase mt-1">
-                                Annual Assessment Report 2025-26
-                              </h3>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {/* 2. Student Info Row */}
-                      <tr className="border-b-2 border-black text-left text-[10px]">
-                        <td colSpan={5} className="py-2 px-2 border-r border-black">
-                          <span>Name: </span><span className="font-extrabold font-sans uppercase">{previewData.student.fullName}</span>
-                        </td>
-                        <td colSpan={4} className="py-2 px-2 border-r border-black">
-                          <span>CLASS: </span><span className="font-extrabold font-sans uppercase">{previewData.student.classSection.split("-")[0] || "—"}</span>
-                        </td>
-                        <td colSpan={2} className="py-2 px-2 border-r border-black">
-                          <span>SEC: </span><span className="font-extrabold font-sans uppercase">{previewData.student.classSection.split("-")[1] || "—"}</span>
-                        </td>
-                        <td colSpan={5} className="py-2 px-2">
-                          <span>DATE OF RESULT - </span><span className="font-extrabold font-sans">{previewData.termResult?.resultDate ? new Date(previewData.termResult.resultDate).toLocaleDateString("en-GB") : "14 / 03 / 2026"}</span>
-                        </td>
-                      </tr>
-
-                      {/* 3. Main Assessment Column Headers */}
-                      <tr className="border-b border-black text-[9px] uppercase">
-                        <th rowSpan={2} className="py-2.5 border-r border-black w-8">S.No.</th>
-                        <th rowSpan={2} className="py-2.5 px-2 text-left border-r border-black w-36">SUBJECTS</th>
-                        <th colSpan={5} className="py-1 border-r border-black">FIRST TERM EVALUATION</th>
-                        <th colSpan={5} className="py-1 border-r border-black">SECOND TERM EVALUATION</th>
-                        <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br/>(1st<br/>Term)</th>
-                        <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br/>(2nd<br/>Term)</th>
-                        <th rowSpan={2} className="py-2.5 border-r border-black w-14 text-[8px] leading-tight">FINAL TOTAL<br/>(1st Term +<br/>2nd Term)</th>
-                        <th rowSpan={2} className="py-2.5 w-12 text-[8px] leading-tight">FINAL<br/>GRADES</th>
-                      </tr>
-
-                      {/* Sub-headers row */}
-                      <tr className="border-b border-black text-[8px] text-stone-700">
-                        {/* T1 */}
-                        <th className="py-1 border-r border-black w-8">UT-I</th>
-                        <th className="py-1 border-r border-black w-8">UT-II</th>
-                        <th className="py-1 border-r border-black w-10">HLY</th>
-                        <th className="py-1 border-r border-black w-10">TOTAL</th>
-                        <th className="py-1 border-r border-black w-8">GRADE</th>
-                        {/* T2 */}
-                        <th className="py-1 border-r border-black w-8">UT-III</th>
-                        <th className="py-1 border-r border-black w-8">UT-IV</th>
-                        <th className="py-1 border-r border-black w-10">Aunnal</th>
-                        <th className="py-1 border-r border-black w-10">TOTAL</th>
-                        <th className="py-1 border-r border-black w-8">GRADE</th>
-                      </tr>
-
-                      {/* 4. Subject Marks Rows */}
-                      {previewData.subjects.map((sub: any, idx: number) => {
-                        const t1Exams = previewData.exams.filter((e: any) => e.term === 1);
-                        const t2Exams = previewData.exams.filter((e: any) => e.term === 2);
-
-                        let t1Total = 0;
-                        let t1Max = 0;
-                        let t2Total = 0;
-                        let t2Max = 0;
-
-                        t1Exams.forEach((ex: any) => {
-                          const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
-                          if (es) {
-                            const entry = previewData.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
-                            t1Total += entry?.marksObtained ?? 0;
-                            t1Max += es.maxMarks;
-                          }
-                        });
-
-                        t2Exams.forEach((ex: any) => {
-                          const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
-                          if (es) {
-                            const entry = previewData.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
-                            t2Total += entry?.marksObtained ?? 0;
-                            t2Max += es.maxMarks;
-                          }
-                        });
-
-                        const grandTotal = t1Total + t2Total;
-                        const grandMax = t1Max + t2Max;
-
-                        const getGrade = (val: number, max: number) => {
-                          if (max === 0) return "—";
-                          const pct = (val / max) * 100;
-                          if (pct >= 90) return "A1";
-                          if (pct >= 80) return "A2";
-                          if (pct >= 70) return "B1";
-                          if (pct >= 60) return "B2";
-                          if (pct >= 50) return "C1";
-                          if (pct >= 40) return "C2";
-                          if (pct >= 33) return "D";
-                          return "E";
-                        };
-
-                        const getExamMark = (name: string) => {
-                          const ex = previewData.exams.find((e: any) => e.name === name);
-                          const es = ex?.subjects.find((s: any) => s.subjectId === sub.id);
-                          const me = previewData.markEntries.find((m: any) => m.examSubjectId === es?.examSubjectId);
-                          return me ? String(me.marksObtained) : "—";
-                        };
-
-                        return (
-                          <tr key={sub.id} className="border-b border-black text-black">
-                            <td className="py-2 border-r border-black">{idx + 1}</td>
-                            <td className="py-2 px-2 text-left font-bold border-r border-black">{sub.name}</td>
-                            {/* T1 */}
-                            <td className="py-2 border-r border-black">{getExamMark("UT-I")}</td>
-                            <td className="py-2 border-r border-black">{getExamMark("UT-II")}</td>
-                            <td className="py-2 border-r border-black">{getExamMark("Half Yearly")}</td>
-                            <td className="py-2 border-r border-black font-bold">{t1Max > 0 ? t1Total : "—"}</td>
-                            <td className="py-2 border-r border-black font-bold">{getGrade(t1Total, t1Max)}</td>
-                            {/* T2 */}
-                            <td className="py-2 border-r border-black">{getExamMark("UT-III")}</td>
-                            <td className="py-2 border-r border-black">{getExamMark("UT-IV")}</td>
-                            <td className="py-2 border-r border-black">{getExamMark("Annual")}</td>
-                            <td className="py-2 border-r border-black font-bold">{t2Max > 0 ? t2Total : "—"}</td>
-                            <td className="py-2 border-r border-black font-bold">{getGrade(t2Total, t2Max)}</td>
-                            {/* Final columns */}
-                            <td className="py-2 border-r border-black font-bold">{t1Max > 0 ? t1Total : "—"}</td>
-                            <td className="py-2 border-r border-black font-bold">{t2Max > 0 ? t2Total : "—"}</td>
-                            <td className="py-2 border-r border-black font-black">{grandMax > 0 ? grandTotal : "—"}</td>
-                            <td className="py-2 font-black">{getGrade(grandTotal, grandMax)}</td>
-                          </tr>
-                        );
-                      })}
-
-                      {/* 5. Grand Total Row */}
-                      <tr className="border-b border-black text-black">
-                        <td colSpan={2} className="py-1 px-2 text-left border-r border-black">Grand Total</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{calc?.grandTotal}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{calc?.grandTotal}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{calc?.grandTotal}</td>
-                        <td className="border-r border-black font-bold">{calc?.grandTotal}</td>
-                        <td className="border-r border-black font-black">{calc?.grandTotal}</td>
-                        <td>&nbsp;</td>
-                      </tr>
-
-                      {/* 6. Percentage Row */}
-                      <tr className="border-b border-black text-black">
-                        <td colSpan={2} className="py-1 px-2 text-left border-r border-black">Percentage</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{calc?.percentage}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{calc?.percentage}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{calc?.percentage}</td>
-                        <td className="border-r border-black font-bold">{calc?.percentage}</td>
-                        <td className="border-r border-black font-black">{calc?.percentage}</td>
-                        <td className="font-bold">{calc?.finalGrade}</td>
-                      </tr>
-
-                      {/* 7. Attendance Row */}
-                      <tr className="border-b border-black text-black">
-                        <td colSpan={2} className="py-1 px-2 text-left border-r border-black">ATTENDANCE</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{previewData.termResult?.presentDays ?? "—"}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold">{previewData.termResult?.workingDays ?? "—"}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-black">
-                          {previewData.termResult?.presentDays && previewData.termResult?.workingDays 
-                            ? Number(previewData.termResult.presentDays) + Number(previewData.termResult.workingDays) 
-                            : "—"}
-                        </td>
-                        <td>&nbsp;</td>
-                      </tr>
-
-                      {/* 8. Art & Activity Row */}
-                      <tr className="border-b border-black text-black">
-                        <td colSpan={2} className="py-1 px-2 text-left border-r border-black">ART &ACTIVITY</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold uppercase">{previewData.termResult?.artGrade || "—"}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold uppercase">{previewData.termResult?.artGrade || "—"}</td>
-                        <td colSpan={6}>&nbsp;</td>
-                      </tr>
-
-                      {/* 9. GK Row */}
-                      <tr className="border-b border-black text-black">
-                        <td colSpan={2} className="py-1 px-2 text-left border-r border-black">GK</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold uppercase">{previewData.termResult?.gkGrade || "—"}</td>
-                        <td className="border-r border-black">&nbsp;</td>
-                        <td colSpan={3} className="border-r border-black">&nbsp;</td>
-                        <td className="border-r border-black font-bold uppercase">{previewData.termResult?.gkGrade || "—"}</td>
-                        <td colSpan={2} className="border-r border-black">&nbsp;</td>
-                        <td colSpan={2} className="border-r border-black font-bold text-center">RESULT</td>
-                        <td className="font-extrabold uppercase text-center">{previewData.termResult?.resultOutcome || "PASS"}</td>
-                      </tr>
-
-                      {/* 10. Remarks row header */}
-                      <tr className="border-b border-black text-[9px] uppercase">
-                        <td colSpan={2} className="py-1.5 border-r border-black">REMARKS</td>
-                        <td colSpan={5} className="py-1.5 border-r border-black">MID TERM EVALUATION</td>
-                        <td colSpan={5} className="py-1.5 border-r border-black">FINAL TERM EVALUATION</td>
-                        <td colSpan={4} className="py-1.5 font-bold uppercase text-center">RANK</td>
-                      </tr>
-
-                      {/* Promoted row */}
-                      <tr className="border-b border-black">
-                        <td colSpan={12} className="py-1 px-2 border-r border-black text-center font-extrabold uppercase tracking-wide">
-                          {previewData.termResult?.remarksFinal ? "PROMOTED WITH GRACE" : "PROMOTED WITH GRACE"}
-                        </td>
-                        <td colSpan={4} className="py-1 font-bold text-center">
-                          {previewData.termResult?.rank ? `${previewData.termResult.rank}` : "NA"}
-                        </td>
-                      </tr>
-
-                      {/* 11. Comments layout box */}
-                      <tr className="border-b-2 border-black text-left font-normal text-[9.5px]">
-                        <td colSpan={7} className="py-6 px-3 border-r border-black align-top leading-relaxed w-1/2">
-                          <span className="font-sans text-stone-800">{previewData.termResult?.remarksMid || "Dear put some extra efforts to do studies .You can achieve your goal"}</span>
-                        </td>
-                        <td colSpan={9} className="py-6 px-3 align-top leading-relaxed w-1/2">
-                          <span className="font-sans text-stone-800">{previewData.termResult?.remarksFinal || "Dear put some extra efforts to do studies .You can achieve your goal"}</span>
-                        </td>
-                      </tr>
-
-                      {/* 12. Signatures Row */}
-                      <tr className="text-center font-bold text-[9px] uppercase">
-                        <td colSpan={5} className="py-6 px-2 border-r border-black valign-bottom">
-                          <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">CLASS TEACHER SIGNATURE</div>
-                        </td>
-                        <td colSpan={6} className="py-6 px-2 border-r border-black valign-bottom">
-                          <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">PARENTS SIGNATURE</div>
-                        </td>
-                        <td colSpan={5} className="py-6 px-2 valign-bottom">
-                          <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">PRINCIPAL SIGNATURE</div>
-                        </td>
-                      </tr>
-
-                    </tbody>
-                  </table>
-
-                </div>
+                renderReportCard(previewData)
               ) : null}
             </div>
 
           </div>
         </div>
       , document.body)}
-      {/* ══ END OF REPORT CARD PREVIEW ══════════════════════════════════════ */}
+
+      {/* ══ MULTI-REPORT CARD PREVIEW MODAL ════════════════════════════════ */}
+      {mounted && showMultiReportPreview && createPortal(
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-6 overflow-hidden print-modal-backdrop">
+          <div className="bg-white w-full h-full md:rounded-2xl max-w-6xl md:h-[95vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden print-modal-panel">
+            
+            {/* Header toolbar */}
+            <div className="bg-stone-50 px-6 py-4 border-b border-stone-200 flex justify-between items-center shrink-0 no-print">
+              <div>
+                <h3 className="font-extrabold text-stone-900 text-sm">Class Results Print Preview ({multiReportData.length} students)</h3>
+                <p className="text-stone-500 text-xs mt-0.5 font-medium">
+                  {isPrintingLoading 
+                    ? `Preloading student photographs: ${imagesLoadedCount}/${totalImagesToLoad} loaded...`
+                    : "Verify report cards before printing."}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowMultiReportPreview(false)}>Close</Button>
+                <Button 
+                  size="sm" 
+                  disabled={isPrintingLoading}
+                  onClick={() => {
+                    window.print();
+                  }} 
+                  className="bg-emerald-650 hover:bg-emerald-600 text-grey-500 font-bold h-8 text-xs flex items-center gap-1.5"
+                >
+                  {isPrintingLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Print Class ({multiReportData.length})
+                </Button>
+              </div>
+            </div>
+
+            {/* Print styling block */}
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                html, body {
+                  height: auto !important;
+                  overflow: visible !important;
+                  position: static !important;
+                }
+                /* Hide everything else */
+                body > *:not(.print-modal-backdrop) {
+                  display: none !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+                .print-modal-backdrop {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  height: auto !important;
+                  background: none !important;
+                  backdrop-filter: none !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  display: block !important;
+                  z-index: auto !important;
+                  overflow: visible !important;
+                }
+                .print-modal-panel {
+                  width: 100% !important;
+                  max-width: none !important;
+                  height: auto !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  background: white !important;
+                  display: block !important;
+                  border-radius: 0 !important;
+                  overflow: visible !important;
+                }
+                .print-modal-scroll {
+                  overflow: visible !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  display: block !important;
+                  background: white !important;
+                }
+                #report-card-print {
+                  border: none !important;
+                  box-shadow: none !important;
+                  margin: 0 auto !important;
+                  padding: 10mm !important;
+                  width: 297mm !important;
+                  height: 210mm !important;
+                  box-sizing: border-box !important;
+                  background: white !important;
+                  color: black !important;
+                  page-break-after: always !important;
+                  break-after: page !important;
+                }
+              }
+              @page {
+                size: A4 landscape;
+                margin: 0;
+              }
+            ` }} />
+
+            {/* Card Content (Print target area) */}
+            <div className="flex-1 overflow-y-auto p-8 bg-stone-100 flex flex-col items-center gap-8 print-modal-scroll">
+              {multiReportData.map((data, index) => (
+                <Fragment key={data.student.id}>
+                  {renderReportCard(data)}
+                  {index < multiReportData.length - 1 && <div className="page-break w-full h-1 bg-stone-200 border-t border-dashed border-stone-300 no-print" />}
+                </Fragment>
+              ))}
+            </div>
+
+          </div>
+        </div>
+      , document.body)}
+
+            {/* ══ EXCEL MARKS IMPORT MODAL (WIZARD FLOW) ═════════════════════════ */}
+      {mounted && showAddMarksModal && createPortal(
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] text-xs text-stone-700">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4 shrink-0">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-indigo-650" />
+                <div>
+                  <h3 className="font-extrabold text-stone-900 text-sm">Excel-Based Marks Import</h3>
+                  <p className="text-[10px] text-stone-400 font-medium">Step {importStep} of 6: {
+                    importStep === 1 ? "Select Academic Details" :
+                    importStep === 2 ? "Download Template" :
+                    importStep === 3 ? "Upload Excel Spreadsheet" :
+                    importStep === 4 ? "Review Validation Summary" :
+                    importStep === 5 ? "Conflict Resolution & Confirmation" :
+                    "Import Complete"
+                  }</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAddMarksModal(false)}
+                disabled={isImportValidating || isSavingImport || isTemplateLoading}
+                className="text-stone-400 hover:text-stone-700 text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto min-h-0 py-2">
+              
+              {/* STEP 1: Academic Selections */}
+              {importStep === 1 && (
+                <div className="space-y-5 max-w-2xl mx-auto py-2">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Session *</Label>
+                      <select
+                        value={importSessionId}
+                        onChange={(e) => setImportSessionId(e.target.value)}
+                        className="w-full h-9 px-2 border border-stone-300 bg-white rounded-lg font-semibold text-stone-750 focus:outline-none"
+                      >
+                        <option value="">Select Session</option>
+                        {sessions.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Class *</Label>
+                      <select
+                        value={importClassId}
+                        onChange={(e) => setImportClassId(e.target.value)}
+                        className="w-full h-9 px-2 border border-stone-300 bg-white rounded-lg font-semibold text-stone-750 focus:outline-none"
+                      >
+                        <option value="">Select Class</option>
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Section (Optional)</Label>
+                      <select
+                        value={importSectionId}
+                        onChange={(e) => setImportSectionId(e.target.value)}
+                        className="w-full h-9 px-2 border border-stone-300 bg-white rounded-lg font-semibold text-stone-750 focus:outline-none"
+                      >
+                        <option value="ALL">All Sections</option>
+                        {(classes.find((c) => c.id === importClassId)?.sections ?? []).map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Multi-subject Grid */}
+                  <div className="space-y-2 border border-stone-200 rounded-xl p-4 bg-stone-50/50">
+                    <div className="flex justify-between items-center pb-2 border-b border-stone-200">
+                      <Label className="text-[11px] font-extrabold text-stone-750 uppercase tracking-wider">Select Subjects *</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setImportSubjectIds(importClassSubjects.map((s) => s.id))}
+                          disabled={importClassSubjects.length === 0}
+                          className="h-6 text-[10px] font-bold text-indigo-650 hover:bg-stone-100"
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setImportSubjectIds([])}
+                          disabled={importClassSubjects.length === 0}
+                          className="h-6 text-[10px] font-bold text-stone-500 hover:bg-stone-100"
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                    </div>
+                    {importClassSubjects.length === 0 ? (
+                      <p className="text-[11px] text-stone-400 italic py-4 text-center">Select Class to load subjects</p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2.5 max-h-[140px] overflow-y-auto pr-1 py-1">
+                        {importClassSubjects.map((sub) => {
+                          const isChecked = importSubjectIds.includes(sub.id);
+                          return (
+                            <label key={sub.id} className={cn("p-2 border rounded-lg bg-white flex items-center gap-2 cursor-pointer hover:bg-stone-50/30 transition select-none font-semibold text-stone-750", isChecked ? "border-indigo-650 bg-indigo-50/5" : "border-stone-200")}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setImportSubjectIds((prev) => [...prev, sub.id]);
+                                  } else {
+                                    setImportSubjectIds((prev) => prev.filter((id) => id !== sub.id));
+                                  }
+                                }}
+                                className="rounded text-indigo-650 focus:ring-indigo-500"
+                              />
+                              <span className="truncate">{sub.name} <span className="text-[10px] text-stone-400 font-mono">({sub.code})</span></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Multi-exam Grid */}
+                  <div className="space-y-2 border border-stone-200 rounded-xl p-4 bg-stone-50/50">
+                    <div className="flex justify-between items-center pb-2 border-b border-stone-200">
+                      <Label className="text-[11px] font-extrabold text-stone-750 uppercase tracking-wider">Select Exams *</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setImportExamIds(importClassExams.map((e) => e.id))}
+                          disabled={importClassExams.length === 0}
+                          className="h-6 text-[10px] font-bold text-indigo-650 hover:bg-stone-100"
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setImportExamIds([])}
+                          disabled={importClassExams.length === 0}
+                          className="h-6 text-[10px] font-bold text-stone-500 hover:bg-stone-100"
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                    </div>
+                    {importClassExams.length === 0 ? (
+                      <p className="text-[11px] text-stone-400 italic py-4 text-center">Select Class to load exams</p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2.5 max-h-[140px] overflow-y-auto pr-1 py-1">
+                        {importClassExams.map((ex) => {
+                          const isChecked = importExamIds.includes(ex.id);
+                          return (
+                            <label key={ex.id} className={cn("p-2 border rounded-lg bg-white flex items-center gap-2 cursor-pointer hover:bg-stone-50/30 transition select-none font-semibold text-stone-750", isChecked ? "border-indigo-650 bg-indigo-50/5" : "border-stone-200")}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setImportExamIds((prev) => [...prev, ex.id]);
+                                  } else {
+                                    setImportExamIds((prev) => prev.filter((id) => id !== ex.id));
+                                  }
+                                }}
+                                className="rounded text-indigo-650 focus:ring-indigo-500"
+                              />
+                              <span className="truncate">{ex.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Optional Template Download (Large Card UI) */}
+              {importStep === 2 && (
+                <div className="max-w-2xl mx-auto py-8 space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Card 1: Download Template */}
+                    <div className="p-5 bg-stone-50 rounded-2xl border border-stone-200 flex flex-col justify-between items-center text-center space-y-4 hover:border-indigo-200 transition">
+                      <div className="space-y-1.5">
+                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-lg">
+                          ⬇️
+                        </div>
+                        <h4 className="font-extrabold text-stone-850 text-xs">Download Blank Template</h4>
+                        <p className="text-[10px] text-stone-400 leading-normal">
+                          Generate a clean spreadsheet containing active students and columns for every selected subject.
+                        </p>
+                      </div>
+                      <Button 
+                        onClick={handleDownloadTemplate}
+                        disabled={isTemplateLoading}
+                        className="bg-indigo-650 hover:bg-indigo-600 text-grey-500 font-bold h-9 px-6 text-xs w-full"
+                      >
+                        {isTemplateLoading && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+                        Download Template
+                      </Button>
+                    </div>
+
+                    {/* Card 2: Skip to Upload */}
+                    <div className="p-5 bg-stone-50 rounded-2xl border border-stone-200 flex flex-col justify-between items-center text-center space-y-4 hover:border-stone-300 transition">
+                      <div className="space-y-1.5">
+                        <div className="w-12 h-12 bg-stone-100 text-stone-600 rounded-full flex items-center justify-center mx-auto text-lg">
+                          ➡️
+                        </div>
+                        <h4 className="font-extrabold text-stone-850 text-xs">Skip Template Download</h4>
+                        <p className="text-[10px] text-stone-400 leading-normal">
+                          I already have the populated template filled with marks. Proceed directly to the upload step.
+                        </p>
+                      </div>
+                      <Button 
+                        onClick={() => setImportStep(3)}
+                        variant="outline"
+                        className="border-stone-300 font-bold h-9 px-6 text-xs w-full"
+                      >
+                        Skip & Upload
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Upload Excel */}
+              {importStep === 3 && (
+                <div className="max-w-md mx-auto py-12 text-center space-y-4">
+                  <div className="border-2 border-dashed border-stone-300 rounded-2xl p-8 bg-stone-50 hover:bg-stone-100/50 transition flex flex-col items-center justify-center min-h-[200px]">
+                    {isImportValidating ? (
+                      <div className="space-y-3">
+                        <Loader2 className="w-10 h-10 animate-spin text-indigo-650 mx-auto" />
+                        <div>
+                          <p className="font-bold text-stone-700">Validating worksheets...</p>
+                          <p className="text-[10px] text-stone-450">Cross-checking student IDs, absent statuses (AB), and marks limit checks</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mx-auto">
+                          <Upload className="w-6 h-6 text-indigo-650" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-stone-700">Select filled Excel document</p>
+                          <p className="text-[10px] text-stone-450 mt-1">Upload the .xlsx template containing your student marks</p>
+                        </div>
+                        <input
+                          type="file"
+                          accept=".xlsx"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          id="excel-marks-upload-input"
+                        />
+                        <label
+                          htmlFor="excel-marks-upload-input"
+                          className="inline-flex h-9 px-4 rounded-lg bg-indigo-650 hover:bg-indigo-600 text-grey-600 font-bold text-xs items-center cursor-pointer select-none"
+                        >
+                          Choose File
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: Validation Summary */}
+              {importStep === 4 && validationSummary && (
+                <div className="space-y-6">
+                  {/* Dashboard stats cards */}
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl text-center">
+                      <p className="text-[10px] uppercase font-bold text-stone-400">Total Sheets</p>
+                      <p className="text-xl font-black text-stone-850">{validationSummary.sheets.length}</p>
+                    </div>
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-center">
+                      <p className="text-[10px] uppercase font-bold text-emerald-600">Total Valid Rows</p>
+                      <p className="text-xl font-black text-emerald-755">{validationSummary.totalValid}</p>
+                    </div>
+                    <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-center">
+                      <p className="text-[10px] uppercase font-bold text-rose-500">Invalid Errors</p>
+                      <p className="text-xl font-black text-rose-700">{validationSummary.totalInvalid}</p>
+                    </div>
+                    <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-center">
+                      <p className="text-[10px] uppercase font-bold text-indigo-600">Existing Records</p>
+                      <p className="text-xl font-black text-indigo-755">{validationSummary.totalExisting}</p>
+                    </div>
+                  </div>
+
+                  {/* Sheet-wise validation report lists */}
+                  <div className="space-y-3.5">
+                    {validationSummary.sheets.map((sheet: any, sIdx: number) => {
+                      const hasErrors = sheet.errors.length > 0;
+                      return (
+                        <div key={sIdx} className="border border-stone-200 rounded-xl bg-white overflow-hidden shadow-xs">
+                          <div className={cn("px-4 py-2.5 flex justify-between items-center border-b font-extrabold text-[12px] shrink-0 bg-stone-50", hasErrors ? "border-rose-100" : "border-stone-200")}>
+                            <span className="flex items-center gap-1.5">
+                              {hasErrors ? <AlertTriangle className="w-4 h-4 text-rose-500" /> : <CheckCircle className="w-4 h-4 text-emerald-600" />}
+                              Exam Sheet: <strong className="text-stone-900">{sheet.sheetName}</strong>
+                            </span>
+                            <span className="text-[11px] text-stone-400 font-semibold">
+                              {sheet.validRecordsCount} Valid &middot; {sheet.invalidRecordsCount} Errors &middot; {sheet.existingRecordsCount} Existing
+                            </span>
+                          </div>
+
+                          {hasErrors && (
+                            <div className="divide-y divide-stone-100 text-[11px] max-h-[160px] overflow-y-auto">
+                              {sheet.errors.map((e: any, idx: number) => (
+                                <div key={idx} className="p-2 px-4 flex items-start gap-4 hover:bg-stone-50/50">
+                                  <span className="font-mono text-stone-400 font-semibold shrink-0">Row {e.row}</span>
+                                  <span className="font-bold text-stone-750 w-28 shrink-0 truncate">{e.studentName}</span>
+                                  <span className="font-bold text-indigo-600 w-28 shrink-0 truncate">{e.subjectName}</span>
+                                  <span className="text-rose-600 font-semibold flex-1 leading-normal">{e.error}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 5: Conflict Resolution & Confirmation */}
+              {importStep === 5 && validationSummary && (
+                <div className="max-w-xl mx-auto py-4 space-y-6">
+                  {validationSummary.totalExisting > 0 && (
+                    <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
+                      <div>
+                        <h4 className="font-extrabold text-stone-850 text-[12px] flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-600" /> Existing marks detected</h4>
+                        <p className="text-[10px] text-stone-400 mt-0.5">Database already contains marks for {validationSummary.totalExisting} student exam entries.</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <label className={cn("p-3 rounded-lg border-2 flex items-start gap-2.5 cursor-pointer transition select-none bg-white", conflictResolution === "UPDATE" ? "border-indigo-650 bg-indigo-50/10" : "border-stone-200")}>
+                          <input
+                            type="radio"
+                            name="conflict"
+                            checked={conflictResolution === "UPDATE"}
+                            onChange={() => setConflictResolution("UPDATE")}
+                            className="mt-0.5"
+                          />
+                          <div>
+                            <span className="font-bold text-stone-850">Update Existing Marks</span>
+                            <p className="text-[9px] text-stone-400 mt-0.5 leading-tight">Overwrite saved marks in database with the new values from Excel sheet.</p>
+                          </div>
+                        </label>
+
+                        <label className={cn("p-3 rounded-lg border-2 flex items-start gap-2.5 cursor-pointer transition select-none bg-white", conflictResolution === "SKIP" ? "border-indigo-650 bg-indigo-50/10" : "border-stone-200")}>
+                          <input
+                            type="radio"
+                            name="conflict"
+                            checked={conflictResolution === "SKIP"}
+                            onChange={() => setConflictResolution("SKIP")}
+                            className="mt-0.5"
+                          />
+                          <div>
+                            <span className="font-bold text-stone-850">Skip Existing Records</span>
+                            <p className="text-[9px] text-stone-400 mt-0.5 leading-tight">Keep current database values and only import marks for students missing records.</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Partial import details summary card */}
+                  <div className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-xl text-center space-y-2">
+                    <span className="font-extrabold text-indigo-755 text-sm uppercase">Import Summary</span>
+                    <p className="text-[11px] text-stone-600 leading-normal max-w-md mx-auto">
+                      Only the <strong className="text-stone-800">{validationSummary.totalValid} valid student marks</strong> will be imported. 
+                      {validationSummary.totalInvalid > 0 && ` The remaining ${validationSummary.totalInvalid} invalid student rows containing errors will be skipped.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 6: Confirmation Summary */}
+              {importStep === 6 && importResult && (
+                <div className="max-w-md mx-auto py-8 text-center space-y-6">
+                  <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-stone-900 text-sm">Marks Imported Successfully!</h3>
+                    <p className="text-[10px] text-stone-400 mt-0.5">Database has been updated with valid records.</p>
+                  </div>
+
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl divide-y divide-stone-150 text-left font-semibold text-stone-700">
+                    <div className="p-3 px-4 flex justify-between">
+                      <span>Successfully Imported</span>
+                      <span className="text-emerald-600 font-bold">{importResult.imported}</span>
+                    </div>
+                    <div className="p-3 px-4 flex justify-between">
+                      <span>Successfully Updated</span>
+                      <span className="text-indigo-650 font-bold">{importResult.updated}</span>
+                    </div>
+                    <div className="p-3 px-4 flex justify-between">
+                      <span>Skipped Records</span>
+                      <span className="text-stone-450 font-bold">{importResult.skipped}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Bottom Actions footer */}
+            <div className="border-t border-stone-200 pt-3 mt-4 flex justify-between shrink-0">
+              <div>
+                {importStep > 1 && importStep < 6 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setImportStep(prev => prev - 1)}
+                    disabled={isImportValidating || isSavingImport || isTemplateLoading}
+                  >
+                    Back
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  disabled={isImportValidating || isSavingImport || isTemplateLoading}
+                  onClick={() => setShowAddMarksModal(false)}
+                >
+                  {importStep === 6 ? "Close" : "Cancel"}
+                </Button>
+
+                {importStep === 1 && (
+                  <Button 
+                    size="sm"
+                    disabled={!importSessionId || !importClassId || importExamIds.length === 0 || importSubjectIds.length === 0}
+                    onClick={() => setImportStep(2)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-9 text-xs"
+                  >
+                    Next
+                  </Button>
+                )}
+
+                {importStep === 4 && validationSummary && (
+                  <div className="flex gap-2">
+                    {validationSummary.totalInvalid > 0 && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleDownloadErrorReport}
+                        className="h-9 border-stone-300 font-bold text-xs"
+                      >
+                        <Download className="w-3.5 h-3.5 mr-1" /> Download Error Report
+                      </Button>
+                    )}
+                    <Button 
+                      size="sm"
+                      disabled={validationSummary.totalValid === 0 || isSavingImport}
+                      onClick={() => {
+                        if (validationSummary.totalExisting > 0) {
+                          setImportStep(5);
+                        } else {
+                          handleExecuteImport(false);
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-9 text-xs"
+                    >
+                      {validationSummary.totalExisting > 0 ? "Next" : "Import Marks"}
+                    </Button>
+                  </div>
+                )}
+
+                {importStep === 5 && (
+                  <Button 
+                    size="sm"
+                    disabled={isSavingImport}
+                    onClick={() => handleExecuteImport(false)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-9 text-xs animate-pulse-once"
+                  >
+                    {isSavingImport && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+                    Confirm Import
+                  </Button>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      , document.body)}
+
+      {/* ══ CONFIRM PARTIAL IMPORT DIALOG ══════════════════════════════════ */}
+      {showConfirmPartial && validationSummary && (
+        <div className="fixed inset-0 z-60 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-stone-200 shadow-2xl p-5 max-w-md w-full text-xs text-stone-700 space-y-4">
+            <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-1.5"><AlertTriangle className="w-5 h-5 text-amber-600" /> Confirm Partial Import</h4>
+            <p className="leading-relaxed">
+              <strong>{validationSummary.totalInvalid} student records</strong> contain errors and will be skipped. Only the <strong>{validationSummary.totalValid} valid records</strong> will be imported.
+            </p>
+            <p className="text-[10px] text-stone-400">Do you want to continue with importing the valid records?</p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-150">
+              <Button variant="outline" size="sm" onClick={() => setShowConfirmPartial(false)}>Cancel</Button>
+              <Button 
+                onClick={() => handleExecuteImport(true)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-8 text-[11px]"
+              >
+                Continue Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ══ CONFIRM PARTIAL IMPORT DIALOG ══════════════════════════════════ */}
+      {showConfirmPartial && validationSummary && (
+        <div className="fixed inset-0 z-60 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-stone-200 shadow-2xl p-5 max-w-md w-full text-xs text-stone-700 space-y-4">
+            <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-1.5"><AlertTriangle className="w-5 h-5 text-amber-600" /> Confirm Partial Import</h4>
+            <p className="leading-relaxed">
+              <strong>{validationSummary.invalidRecordsCount} student records</strong> contain errors and will be skipped. Only the <strong>{validationSummary.validRecordsCount} valid records</strong> will be imported.
+            </p>
+            <p className="text-[10px] text-stone-400">Do you want to continue with importing the valid records?</p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-150">
+              <Button variant="outline" size="sm" onClick={() => setShowConfirmPartial(false)}>Cancel</Button>
+              <Button 
+                onClick={() => handleExecuteImport(true)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-8 text-[11px]"
+              >
+                Continue Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ PRINT CLASS RESULTS MODAL ══════════════════════════════════════ */}
+      {showPrintClassModal && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4 shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-extrabold text-stone-900 text-sm">Print Class Results</h3>
+              </div>
+              <button 
+                onClick={() => setShowPrintClassModal(false)} 
+                disabled={isGeneratingClassReport}
+                className="text-stone-400 hover:text-stone-700 text-lg"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Class & Section selections */}
+            <div className="grid grid-cols-2 gap-4 mb-4 shrink-0 text-xs">
+              <div>
+                <Label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Class *</Label>
+                <select
+                  value={printClassId}
+                  onChange={(e) => {
+                    setPrintClassId(e.target.value);
+                  }}
+                  disabled={isGeneratingClassReport}
+                  className="w-full h-9 px-2 text-xs border border-stone-300 bg-white rounded-lg text-stone-700 font-semibold focus:outline-none"
+                >
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Section (Optional)</Label>
+                <select
+                  value={printSectionId}
+                  onChange={(e) => {
+                    setPrintSectionId(e.target.value);
+                  }}
+                  disabled={isGeneratingClassReport}
+                  className="w-full h-9 px-2 text-xs border border-stone-300 bg-white rounded-lg text-stone-700 font-semibold focus:outline-none"
+                >
+                  <option value="ALL">All Sections</option>
+                  {(classes.find((c) => c.id === printClassId)?.sections ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Search box & select controls */}
+            <div className="flex gap-2 mb-3 shrink-0 items-center justify-between">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-stone-400" />
+                <Input
+                  value={printSearch}
+                  onChange={(e) => setPrintSearch(e.target.value)}
+                  placeholder="Search by name or adm number..."
+                  disabled={isGeneratingClassReport}
+                  className="pl-8 h-9 text-xs bg-white rounded-lg border-stone-300"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isGeneratingClassReport}
+                  onClick={() => {
+                    const newSelection: Record<string, boolean> = {};
+                    filteredPrintStudents.forEach((st) => {
+                      newSelection[st.studentId] = true;
+                    });
+                    setSelectedPrintStudentIds(newSelection);
+                  }}
+                  className="h-8 text-xs font-bold border-stone-300"
+                >
+                  Select All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isGeneratingClassReport}
+                  onClick={() => {
+                    setSelectedPrintStudentIds({});
+                  }}
+                  className="h-8 text-xs font-bold border-stone-300"
+                >
+                  Deselect All
+                </Button>
+              </div>
+            </div>
+
+            {/* Student List */}
+            <div className="flex-1 overflow-y-auto border border-stone-200 rounded-xl relative min-h-[250px] mb-4">
+              <table className="w-full text-left text-xs border-collapse relative">
+                <thead>
+                  <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase text-[10px] sticky top-0 z-10">
+                    <th className="py-2.5 px-4 w-12 text-center">Select</th>
+                    <th className="py-2.5 px-3 w-16">Photo</th>
+                    <th className="py-2.5 px-3 w-28">Adm. No</th>
+                    <th className="py-2.5 px-3">Student Name</th>
+                    <th className="py-2.5 px-3 w-20">Roll No</th>
+                    <th className="py-2.5 px-3 w-20">Section</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredPrintStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-stone-400">
+                        No students found matching filters
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPrintStudents.map((st) => (
+                      <tr key={st.studentId} className="hover:bg-stone-50/40">
+                        <td className="py-2.5 px-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={!!selectedPrintStudentIds[st.studentId]}
+                            disabled={isGeneratingClassReport}
+                            onChange={(e) => {
+                              setSelectedPrintStudentIds((prev) => ({
+                                ...prev,
+                                [st.studentId]: e.target.checked,
+                              }));
+                            }}
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="py-1 px-3">
+                          <div className="w-8 h-8 rounded-full border border-stone-200 overflow-hidden bg-stone-50 flex items-center justify-center">
+                            {st.photoUrl ? (
+                              <img
+                                src={st.photoUrl}
+                                alt={st.fullName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-[8px] text-stone-400 font-sans">No Image</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-stone-600">{st.admissionNo}</td>
+                        <td className="py-2.5 px-3 font-semibold text-stone-900">{st.fullName}</td>
+                        <td className="py-2.5 px-3 font-mono text-stone-500">{st.rollNo}</td>
+                        <td className="py-2.5 px-3 font-semibold text-stone-705">{st.sectionName}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="border-t border-stone-200 pt-4 flex justify-between items-center shrink-0">
+              <div>
+                {isGeneratingClassReport ? (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Generating report cards: {generationProgress} / {generationTotal}</span>
+                  </div>
+                ) : (
+                  <span className="text-xs text-stone-500">
+                    {Object.values(selectedPrintStudentIds).filter(Boolean).length} students selected
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  disabled={isGeneratingClassReport}
+                  onClick={() => setShowPrintClassModal(false)}
+                >
+                  Cancel
+                </Button>
+                
+                <Button
+                  onClick={() => {
+                    const selectedList = filteredPrintStudents.filter((st) => selectedPrintStudentIds[st.studentId]);
+                    generateMultiReportCards(selectedList);
+                  }}
+                  disabled={isGeneratingClassReport || Object.values(selectedPrintStudentIds).filter(Boolean).length === 0}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-9 text-xs"
+                >
+                  Print Selected
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    generateMultiReportCards(filteredPrintStudents);
+                  }}
+                  disabled={isGeneratingClassReport || filteredPrintStudents.length === 0}
+                  className="bg-black hover:bg-stone-800 text-white font-bold h-9 text-xs"
+                >
+                  Print Entire Class
+                </Button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+// ── Reusable helper to calculate totals for report cards dynamically ──
+function getCalculatedTotalsForData(data: any) {
+  if (!data) return null;
+
+  const term1Exams = data.exams.filter((e: any) => e.term === 1);
+  const term2Exams = data.exams.filter((e: any) => e.term === 2);
+
+  let finalGrandTotal = 0;
+  let finalMaxPossible = 0;
+
+  const subjectsSummary = data.subjects.map((sub: any) => {
+    let t1Sum = 0;
+    let t1Max = 0;
+    let t2Sum = 0;
+    let t2Max = 0;
+
+    // Term 1 sum
+    term1Exams.forEach((ex: any) => {
+      const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+      if (es) {
+        const entry = data.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
+        const mark = entry?.marksObtained ?? 0;
+        t1Sum += mark;
+        t1Max += es.maxMarks;
+      }
+    });
+
+    // Term 2 sum
+    term2Exams.forEach((ex: any) => {
+      const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+      if (es) {
+        const entry = data.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
+        const mark = entry?.marksObtained ?? 0;
+        t2Sum += mark;
+        t2Max += es.maxMarks;
+      }
+    });
+
+    const subTotal = t1Sum + t2Sum;
+    const subMax = t1Max + t2Max;
+
+    if (sub.type === "SCHOLASTIC") {
+      finalGrandTotal += subTotal;
+      finalMaxPossible += subMax;
+    }
+
+    const percent = subMax > 0 ? (subTotal / subMax) * 100 : 0;
+    let grade = "E";
+    if (percent >= 90) grade = "A1";
+    else if (percent >= 80) grade = "A2";
+    else if (percent >= 70) grade = "B1";
+    else if (percent >= 60) grade = "B2";
+    else if (percent >= 50) grade = "C1";
+    else if (percent >= 40) grade = "C2";
+    else if (percent >= 33) grade = "D";
+
+    return {
+      id: sub.id,
+      name: sub.name,
+      code: sub.code,
+      type: sub.type,
+      t1Total: t1Sum,
+      t1Max,
+      t2Total: t2Sum,
+      t2Max,
+      total: subTotal,
+      max: subMax,
+      grade,
+    };
+  });
+
+  const overallPercentage = finalMaxPossible > 0 ? (finalGrandTotal / finalMaxPossible) * 100 : 0;
+  let finalGrade = "E";
+  if (overallPercentage >= 90) finalGrade = "A1";
+  else if (overallPercentage >= 80) finalGrade = "A2";
+  else if (overallPercentage >= 70) finalGrade = "B1";
+  else if (overallPercentage >= 60) finalGrade = "B2";
+  else if (overallPercentage >= 50) finalGrade = "C1";
+  else if (overallPercentage >= 40) finalGrade = "C2";
+  else if (overallPercentage >= 33) finalGrade = "D";
+
+  return {
+    subjectsSummary,
+    grandTotal: finalGrandTotal,
+    maxPossible: finalMaxPossible,
+    percentage: Math.round(overallPercentage * 100) / 100,
+    finalGrade,
+  };
+}
+
+// ── Reusable helper to render report cards in landscape WYSIWYG mode ──
+function renderReportCard(data: any) {
+  if (!data) return null;
+  const cardCalc = getCalculatedTotalsForData(data);
+  return (
+    <div id="report-card-print" className="bg-white p-8 w-full max-w-[297mm] min-h-[210mm] shadow-md flex flex-col justify-between font-serif text-black text-xs select-none">
+      
+      {/* Master Table Container representing the exact printed layout */}
+      <table className="w-full border-collapse border-2 border-black text-center text-[10px] font-bold text-black">
+        <tbody>
+          {/* 1. School Header Row */}
+          <tr>
+            <td colSpan={16} className="p-4 border-b-2 border-black">
+              <div className="flex items-center justify-between">
+                {/* Logo */}
+                {data.schoolBranding?.logoDocumentId ? (
+                  <div className="w-16 h-16 border border-black flex items-center justify-center bg-white shrink-0 overflow-hidden relative">
+                    <img
+                      src={`/api/documents/${data.schoolBranding.logoDocumentId}`}
+                      alt="School Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 border border-black flex items-center justify-center text-[8px] uppercase tracking-tighter shrink-0 select-none text-center font-sans">
+                    VPS LOGO
+                  </div>
+                )}
+                {/* School details */}
+                <div className="flex-1 text-center pl-12 pr-12">
+                  <h2 className="text-xl font-extrabold tracking-wide font-serif leading-none uppercase">
+                    {data.schoolBranding?.schoolName || "VIDYANJALI PUBLIC SCHOOL"}
+                  </h2>
+                  <p className="text-[10px] font-bold mt-1.5">
+                    {data.schoolBranding?.address || "Karhera Mohan Nagar,Ghaziabad"}
+                  </p>
+                  <h3 className="text-[11px] font-extrabold uppercase mt-1">
+                    Annual Assessment Report 2025-26
+                  </h3>
+                </div>
+                {/* Student Photo */}
+                {data.student.photoUrl ? (
+                  <div className="w-16 h-20 border border-black flex items-center justify-center bg-stone-50 shrink-0 overflow-hidden relative">
+                    <img
+                      src={data.student.photoUrl}
+                      alt="Student Photo"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-16 h-20 shrink-0"></div>
+                )}
+              </div>
+            </td>
+          </tr>
+
+          {/* 2. Student Info Row */}
+          <tr className="border-b-2 border-black text-left text-[10px]">
+            <td colSpan={5} className="py-2 px-2 border-r border-black">
+              <span>Name: </span><span className="font-extrabold font-sans uppercase">{data.student.fullName}</span>
+            </td>
+            <td colSpan={4} className="py-2 px-2 border-r border-black">
+              <span>CLASS: </span><span className="font-extrabold font-sans uppercase">{data.student.classSection.split("-")[0] || "—"}</span>
+            </td>
+            <td colSpan={2} className="py-2 px-2 border-r border-black">
+              <span>SEC: </span><span className="font-extrabold font-sans uppercase">{data.student.classSection.split("-")[1] || "—"}</span>
+            </td>
+            <td colSpan={5} className="py-2 px-2">
+              <span>DATE OF RESULT - </span><span className="font-extrabold font-sans">{data.termResult?.resultDate ? new Date(data.termResult.resultDate).toLocaleDateString("en-GB") : "14 / 03 / 2026"}</span>
+            </td>
+          </tr>
+
+          {/* 3. Main Assessment Column Headers */}
+          <tr className="border-b border-black text-[9px] uppercase">
+            <th rowSpan={2} className="py-2.5 border-r border-black w-8">S.No.</th>
+            <th rowSpan={2} className="py-2.5 px-2 text-left border-r border-black w-36">SUBJECTS</th>
+            <th colSpan={5} className="py-1 border-r border-black">FIRST TERM EVALUATION</th>
+            <th colSpan={5} className="py-1 border-r border-black">SECOND TERM EVALUATION</th>
+            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br/>(1st<br/>Term)</th>
+            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br/>(2nd<br/>Term)</th>
+            <th rowSpan={2} className="py-2.5 border-r border-black w-14 text-[8px] leading-tight">FINAL TOTAL<br/>(1st Term +<br/>2nd Term)</th>
+            <th rowSpan={2} className="py-2.5 w-12 text-[8px] leading-tight">FINAL<br/>GRADES</th>
+          </tr>
+
+          {/* Sub-headers row */}
+          <tr className="border-b border-black text-[8px] text-stone-700">
+            {/* T1 */}
+            <th className="py-1 border-r border-black w-8">UT-I</th>
+            <th className="py-1 border-r border-black w-8">UT-II</th>
+            <th className="py-1 border-r border-black w-10">HLY</th>
+            <th className="py-1 border-r border-black w-10">TOTAL</th>
+            <th className="py-1 border-r border-black w-8">GRADE</th>
+            {/* T2 */}
+            <th className="py-1 border-r border-black w-8">UT-III</th>
+            <th className="py-1 border-r border-black w-8">UT-IV</th>
+            <th className="py-1 border-r border-black w-10">Annual</th>
+            <th className="py-1 border-r border-black w-10">TOTAL</th>
+            <th className="py-1 border-r border-black w-8">GRADE</th>
+          </tr>
+
+          {/* 4. Subject Marks Rows */}
+          {data.subjects.map((sub: any, idx: number) => {
+            const t1Exams = data.exams.filter((e: any) => e.term === 1);
+            const t2Exams = data.exams.filter((e: any) => e.term === 2);
+
+            let t1Total = 0;
+            let t1Max = 0;
+            let t2Total = 0;
+            let t2Max = 0;
+
+            t1Exams.forEach((ex: any) => {
+              const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+              if (es) {
+                const entry = data.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
+                t1Total += entry?.marksObtained ?? 0;
+                t1Max += es.maxMarks;
+              }
+            });
+
+            t2Exams.forEach((ex: any) => {
+              const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+              if (es) {
+                const entry = data.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
+                t2Total += entry?.marksObtained ?? 0;
+                t2Max += es.maxMarks;
+              }
+            });
+
+            const grandTotal = t1Total + t2Total;
+            const grandMax = t1Max + t2Max;
+
+            const getGrade = (val: number, max: number) => {
+              if (max === 0) return "—";
+              const pct = (val / max) * 100;
+              if (pct >= 90) return "A1";
+              if (pct >= 80) return "A2";
+              if (pct >= 70) return "B1";
+              if (pct >= 60) return "B2";
+              if (pct >= 50) return "C1";
+              if (pct >= 40) return "C2";
+              if (pct >= 33) return "D";
+              return "E";
+            };
+
+            const getExamMark = (name: string) => {
+              const ex = data.exams.find((e: any) => e.name === name);
+              const es = ex?.subjects.find((s: any) => s.subjectId === sub.id);
+              const me = data.markEntries.find((m: any) => m.examSubjectId === es?.examSubjectId);
+              return me ? String(me.marksObtained) : "—";
+            };
+
+            return (
+              <tr key={sub.id} className="border-b border-black text-black">
+                <td className="py-2 border-r border-black">{idx + 1}</td>
+                <td className="py-2 px-2 text-left font-bold border-r border-black">{sub.name}</td>
+                {/* T1 */}
+                <td className="py-2 border-r border-black">{getExamMark("UT-I")}</td>
+                <td className="py-2 border-r border-black">{getExamMark("UT-II")}</td>
+                <td className="py-2 border-r border-black">{getExamMark("Half Yearly")}</td>
+                <td className="py-2 border-r border-black font-bold">{t1Max > 0 ? t1Total : "—"}</td>
+                <td className="py-2 border-r border-black font-bold">{getGrade(t1Total, t1Max)}</td>
+                {/* T2 */}
+                <td className="py-2 border-r border-black">{getExamMark("UT-III")}</td>
+                <td className="py-2 border-r border-black">{getExamMark("UT-IV")}</td>
+                <td className="py-2 border-r border-black">{getExamMark("Annual")}</td>
+                <td className="py-2 border-r border-black font-bold">{t2Max > 0 ? t2Total : "—"}</td>
+                <td className="py-2 border-r border-black font-bold">{getGrade(t2Total, t2Max)}</td>
+                {/* Final columns */}
+                <td className="py-2 border-r border-black font-bold">{t1Max > 0 ? t1Total : "—"}</td>
+                <td className="py-2 border-r border-black font-bold">{t2Max > 0 ? t2Total : "—"}</td>
+                <td className="py-2 border-r border-black font-black">{grandMax > 0 ? grandTotal : "—"}</td>
+                <td className="py-2 font-black">{getGrade(grandTotal, grandMax)}</td>
+              </tr>
+            );
+          })}
+
+          {/* 5. Grand Total Row */}
+          <tr className="border-b border-black text-black">
+            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">Grand Total</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
+            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
+            <td className="border-r border-black font-black">{cardCalc?.grandTotal}</td>
+            <td>&nbsp;</td>
+          </tr>
+
+          {/* 6. Percentage Row */}
+          <tr className="border-b border-black text-black">
+            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">Percentage</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
+            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
+            <td className="border-r border-black font-black">{cardCalc?.percentage}</td>
+            <td className="font-bold">{cardCalc?.finalGrade}</td>
+          </tr>
+
+          {/* 7. Attendance Row */}
+          <tr className="border-b border-black text-black">
+            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">ATTENDANCE</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{data.termResult?.presentDays ?? "—"}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold">{data.termResult?.workingDays ?? "—"}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-black">
+              {data.termResult?.presentDays && data.termResult?.workingDays 
+                ? Number(data.termResult.presentDays) + Number(data.termResult.workingDays) 
+                : "—"}
+            </td>
+            <td>&nbsp;</td>
+          </tr>
+
+          {/* 8. Art & Activity Row */}
+          <tr className="border-b border-black text-black">
+            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">ART & ACTIVITY</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold uppercase">{data.termResult?.artGrade || "—"}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold uppercase">{data.termResult?.artGrade || "—"}</td>
+            <td colSpan={6}>&nbsp;</td>
+          </tr>
+
+          {/* 9. GK Row */}
+          <tr className="border-b border-black text-black">
+            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">GK</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold uppercase">{data.termResult?.gkGrade || "—"}</td>
+            <td className="border-r border-black">&nbsp;</td>
+            <td colSpan={3} className="border-r border-black">&nbsp;</td>
+            <td className="border-r border-black font-bold uppercase">{data.termResult?.gkGrade || "—"}</td>
+            <td colSpan={2} className="border-r border-black">&nbsp;</td>
+            <td colSpan={2} className="border-r border-black font-bold text-center">RESULT</td>
+            <td className="font-extrabold uppercase text-center">{data.termResult?.resultOutcome || "PASS"}</td>
+          </tr>
+
+          {/* 10. Remarks row header */}
+          <tr className="border-b border-black text-[9px] uppercase">
+            <td colSpan={2} className="py-1.5 border-r border-black">REMARKS</td>
+            <td colSpan={5} className="py-1.5 border-r border-black">MID TERM EVALUATION</td>
+            <td colSpan={5} className="py-1.5 border-r border-black">FINAL TERM EVALUATION</td>
+            <td colSpan={4} className="py-1.5 font-bold uppercase text-center">RANK</td>
+          </tr>
+
+          {/* Promoted row */}
+          <tr className="border-b border-black">
+            <td colSpan={12} className="py-1 px-2 border-r border-black text-center font-extrabold uppercase tracking-wide">
+              {data.termResult?.remarksFinal ? "PROMOTED WITH GRACE" : "PROMOTED WITH GRACE"}
+            </td>
+            <td colSpan={4} className="py-1 font-bold text-center">
+              {data.termResult?.rank ? `${data.termResult.rank}` : "NA"}
+            </td>
+          </tr>
+
+          {/* 11. Comments layout box */}
+          <tr className="border-b-2 border-black text-left font-normal text-[9.5px]">
+            <td colSpan={7} className="py-6 px-3 border-r border-black align-top leading-relaxed w-1/2">
+              <span className="font-sans text-stone-800">{data.termResult?.remarksMid || "Dear put some extra efforts to do studies .You can achieve your goal"}</span>
+            </td>
+            <td colSpan={9} className="py-6 px-3 align-top leading-relaxed w-1/2">
+              <span className="font-sans text-stone-800">{data.termResult?.remarksFinal || "Dear put some extra efforts to do studies .You can achieve your goal"}</span>
+            </td>
+          </tr>
+
+          {/* 12. Signatures Row */}
+          <tr className="text-center font-bold text-[9px] uppercase">
+            <td colSpan={5} className="py-6 px-2 border-r border-black valign-bottom">
+              <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">CLASS TEACHER SIGNATURE</div>
+            </td>
+            <td colSpan={6} className="py-6 px-2 border-r border-black valign-bottom">
+              <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">PARENTS SIGNATURE</div>
+            </td>
+            <td colSpan={5} className="py-6 px-2 valign-bottom">
+              <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">PRINCIPAL SIGNATURE</div>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+
+    </div>
   );
 }
