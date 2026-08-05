@@ -17,6 +17,8 @@ import {
   type MarkAttendanceInput,
   type MonthlySummaryInput,
 } from "@/server/validators/attendance.validator";
+import ExcelJS from "exceljs";
+
 
 function countWorkingDays(
   days: Date[],
@@ -41,6 +43,23 @@ export async function markAttendance(input: MarkAttendanceInput) {
   if (!session || !section || section.class.schoolId !== schoolId) {
     throw new Error("Invalid session or section");
   }
+
+  // Check if month is locked
+  const month = date.getUTCMonth() + 1;
+  const year = date.getUTCFullYear();
+  const lock = await prisma.attendanceLock.findUnique({
+    where: {
+      sessionId_year_month: {
+        sessionId: data.sessionId,
+        year,
+        month,
+      },
+    },
+  });
+  if (lock?.isLocked) {
+    throw new Error("Attendance for this month is locked and cannot be modified.");
+  }
+
 
   const enrolledIds = await prisma.studentEnrollment.findMany({
     where: { sessionId: data.sessionId, sectionId: data.sectionId, status: "ACTIVE" },
@@ -308,3 +327,203 @@ export async function getMonthlyAttendanceSummary(input: MonthlySummaryInput) {
     ),
   };
 }
+
+export async function toggleMonthLock(input: {
+  sessionId: string;
+  year: number;
+  month: number;
+  isLocked: boolean;
+}) {
+  const { user } = await requirePermission("attendance.create");
+  if (user.role !== Role.PRINCIPAL) {
+    throw new Error("Only the Principal can lock or unlock attendance records.");
+  }
+
+  return prisma.attendanceLock.upsert({
+    where: {
+      sessionId_year_month: {
+        sessionId: input.sessionId,
+        year: input.year,
+        month: input.month,
+      },
+    },
+    create: {
+      sessionId: input.sessionId,
+      year: input.year,
+      month: input.month,
+      isLocked: input.isLocked,
+    },
+    update: {
+      isLocked: input.isLocked,
+    },
+  });
+}
+
+export async function getSectionSessionRecords(sessionId: string, sectionId: string) {
+  const { user } = await requirePermission("attendance.view");
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: { sessionId, sectionId, status: "ACTIVE" },
+    select: { studentId: true },
+  });
+  const studentIds = enrollments.map((e) => e.studentId);
+  return prisma.attendanceRecord.findMany({
+    where: { sessionId, studentId: { in: studentIds } },
+    orderBy: { date: "asc" },
+  });
+}
+
+export async function getLockedMonths(sessionId: string) {
+  const { user } = await requirePermission("attendance.view");
+  return prisma.attendanceLock.findMany({
+    where: { sessionId, isLocked: true },
+  });
+}
+
+export async function exportAttendanceExcel(input: {
+  sessionId: string;
+  classId: string;
+  sectionId?: string;
+  month?: number;
+  year?: number;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const { user } = await requirePermission("report.view");
+  const schoolId = schoolIdFromUser(user);
+
+  let start: Date;
+  let end: Date;
+
+  if (input.month && input.year) {
+    start = new Date(Date.UTC(input.year, input.month - 1, 1));
+    end = new Date(Date.UTC(input.year, input.month, 0));
+  } else if (input.startDate && input.endDate) {
+    start = normalizeDateOnly(input.startDate);
+    end = normalizeDateOnly(input.endDate);
+  } else {
+    const session = await prisma.academicSession.findFirst({
+      where: { id: input.sessionId, schoolId },
+    });
+    if (!session) throw new Error("Academic session not found");
+    start = normalizeDateOnly(session.startDate);
+    end = normalizeDateOnly(session.endDate);
+  }
+
+  const studentFilters: any = {
+    sessionId: input.sessionId,
+    status: "ACTIVE",
+    classId: input.classId,
+  };
+  if (input.sectionId) {
+    studentFilters.sectionId = input.sectionId;
+  }
+
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: studentFilters,
+    include: {
+      student: { select: { id: true, fullName: true, admissionNo: true } },
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+    },
+    orderBy: { rollNo: "asc" },
+  });
+
+  if (enrollments.length === 0) throw new Error("No students found");
+
+  const studentIds = enrollments.map((e) => e.studentId);
+  const records = await prisma.attendanceRecord.findMany({
+    where: {
+      sessionId: input.sessionId,
+      studentId: { in: studentIds },
+      date: { gte: start, lte: end },
+    },
+  });
+
+  const holidayDates = await getHolidayDateSet(schoolId, start, end);
+  const allDays = eachDayInRange(start, end);
+  const activeDays = allDays.filter((d) => {
+    const key = normalizeDateOnly(d).toISOString().slice(0, 10);
+    return d.getUTCDay() !== 0 && !holidayDates.has(key);
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Attendance");
+
+  const className = enrollments[0].class.name;
+  const sectionName = input.sectionId ? enrollments[0].section.name : "All";
+  sheet.addRow([`Attendance Report - Class ${className} (${sectionName})`]);
+  sheet.addRow([`Period: ${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}`]);
+  sheet.addRow([]);
+
+  const headers = ["Admission No", "Student Name", "Roll No"];
+  activeDays.forEach((d) => {
+    headers.push(d.getUTCDate().toString());
+  });
+  headers.push("Present", "Absent", "Leave", "%");
+  sheet.addRow(headers);
+
+  const headerRow = sheet.getRow(4);
+  headerRow.font = { bold: true };
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "F2F2F2" },
+    };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+
+  enrollments.forEach((e) => {
+    const studentRecords = records.filter((r) => r.studentId === e.studentId);
+    const rowData: any[] = [e.student.admissionNo, e.student.fullName, e.rollNo ?? "—"];
+
+    let present = 0;
+    let absent = 0;
+    let leave = 0;
+
+    activeDays.forEach((d) => {
+      const match = studentRecords.find(
+        (r) => normalizeDateOnly(r.date).getTime() === normalizeDateOnly(d).getTime()
+      );
+      if (!match) {
+        rowData.push("—");
+      } else {
+        const st = match.status;
+        if (st === "PRESENT" || st === "LATE") {
+          rowData.push("P");
+          present += 1;
+        } else if (st === "ABSENT") {
+          rowData.push("A");
+          absent += 1;
+        } else if (st === "EXCUSED") {
+          rowData.push("L");
+          leave += 1;
+        } else if (st === "HALF_DAY") {
+          rowData.push("HD");
+          present += 0.5;
+          absent += 0.5;
+        }
+      }
+    });
+
+    const totalDays = activeDays.length;
+    const attended = present + leave;
+    const percentage = totalDays > 0 ? Math.round((attended / totalDays) * 100) : 0;
+
+    rowData.push(present, absent, leave, `${percentage}%`);
+    sheet.addRow(rowData);
+  });
+
+  sheet.getColumn(1).width = 15;
+  sheet.getColumn(2).width = 25;
+  sheet.getColumn(3).width = 10;
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer).toString("base64");
+}
+

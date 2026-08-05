@@ -27,7 +27,8 @@ type PaymentRow = {
   paidAt: string;
   method: string;
   allocatedToStudent: string;
-  lines: Array<{ feeHead: string; amount: number }>;
+  recordedBy: string | null;
+  lines: Array<{ feeHead: string; amount: number; dueDate: Date | string | null }>;
 };
 
 type PendingDue = {
@@ -65,6 +66,7 @@ export function StudentFeePageClient({
   siblings,
   enrollments,
   paymentHistory,
+  monthCollectors,
   pendingDues,
   feeHeadRows,
   allMonths,
@@ -89,6 +91,7 @@ export function StudentFeePageClient({
     photoUrl: string | null | undefined;
     apaarId: string | null | undefined;
     penId: string | null | undefined;
+    srNo: string | null | undefined;
   };
   family: {
     fatherName: string | null;
@@ -103,6 +106,7 @@ export function StudentFeePageClient({
   siblings: Sibling[];
   enrollments: EnrollmentRow[];
   paymentHistory: PaymentRow[];
+  monthCollectors: Partial<Record<string, string[]>>;
   pendingDues: PendingDue[];
   feeHeadRows: FeeHeadRow[];
   allMonths: string[];
@@ -219,7 +223,7 @@ export function StudentFeePageClient({
                 <InfoRow label="Mobile No." value={family.primaryPhone} />
                 <InfoRow label="APAAR ID" value={student.apaarId} />
                 <InfoRow label="PEN ID" value={student.penId} />
-                <InfoRow label="SR Number" value="—" />
+                <InfoRow label="SR Number" value={student.srNo} />
               </div>
             </div>
           </div>
@@ -269,12 +273,13 @@ export function StudentFeePageClient({
                   <EmptyState label="No payment transactions recorded." />
                 ) : (
                   <ActivityTable
-                    headers={["Rec No.", "Date", "Amount", "Mode", ""]}
+                    headers={["Rec No.", "Date", "Amount", "Mode", ...(!isStudentSelf ? ["Collected By"] : []), ""]}
                     rows={paymentHistory.map((p) => [
                       <span key="r" className="font-mono font-bold text-stone-700">{p.receiptNo}</span>,
                       <span key="d" className="text-stone-500">{p.paidAt}</span>,
                       <span key="a" className="font-bold text-stone-900">{p.allocatedToStudent}</span>,
                       <span key="m" className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">{p.method}</span>,
+                      ...(!isStudentSelf ? [<span key="collector" className="text-stone-500 truncate" title={p.recordedBy ?? undefined}>{p.recordedBy ?? "—"}</span>] : []),
                       <button
                         key="print"
                         onClick={() => handlePrint(p.id)}
@@ -464,6 +469,22 @@ export function StudentFeePageClient({
                       {feeHeadRows.reduce((s, r) => s + r.totalPaid, 0).toLocaleString()}
                     </td>
                   </tr>
+
+                  {/* Internal tracking only — never included in the printed receipt. */}
+                  {!isStudentSelf && (
+                    <tr className="bg-indigo-50/30">
+                      <td className="py-2 px-3 font-bold text-indigo-700">Collected By</td>
+                      {allMonths.map((m) => {
+                        const collectors = monthCollectors[m] ?? [];
+                        return (
+                          <td key={m} className="py-2 px-2 text-center text-[10px] font-semibold text-indigo-700" title={collectors.join(", ") || undefined}>
+                            {collectors.length > 0 ? collectors.join(", ") : "—"}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-3 text-right bg-indigo-100 text-[10px] font-semibold text-indigo-700">Internal</td>
+                    </tr>
+                  )}
 
                   {/* Balance Row */}
                   <tr className="bg-rose-50/40">

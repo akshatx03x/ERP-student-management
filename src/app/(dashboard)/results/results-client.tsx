@@ -90,7 +90,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
   const [imagesLoadedCount, setImagesLoadedCount] = useState(0);
   const [totalImagesToLoad, setTotalImagesToLoad] = useState(0);
   const [isPrintingLoading, setIsPrintingLoading] = useState(false);
-  
+
   // Excel Marks Import state
   const [showAddMarksModal, setShowAddMarksModal] = useState(false);
   const [importStep, setImportStep] = useState(1);
@@ -99,7 +99,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
   const [importSectionId, setImportSectionId] = useState("ALL");
   const [importExamIds, setImportExamIds] = useState<string[]>([]);
   const [importSubjectIds, setImportSubjectIds] = useState<string[]>([]);
-  
+
   const [isTemplateLoading, setIsTemplateLoading] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImportValidating, setIsImportValidating] = useState(false);
@@ -118,10 +118,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
         try {
           const exams = await listClassExamsAction(importClassId, importSessionId);
           setImportClassExams(exams);
-          
+
           const assigned = await listClassSubjectsAction(importClassId, importSessionId);
           setImportClassSubjects(assigned.map((a: any) => a.subject));
-          
+
           setImportExamIds([]);
           setImportSubjectIds([]);
         } catch (err: any) {
@@ -183,7 +183,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     setGenerationProgress(0);
     setGenerationTotal(studentsToPrint.length);
     setMultiReportData([]);
-    
+
     const results: any[] = [];
     try {
       for (let i = 0; i < studentsToPrint.length; i++) {
@@ -199,13 +199,13 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
       const photoUrls = results
         .map((r) => r.student.photoUrl)
         .filter((url) => !!url);
-      
+
       const logoUrls = results
         .map((r) => r.schoolBranding?.logoDocumentId ? `/api/documents/${r.schoolBranding.logoDocumentId}` : null)
         .filter((url) => !!url);
-      
+
       const allUrlsToLoad = [...new Set([...photoUrls, ...logoUrls])];
-      
+
       if (allUrlsToLoad.length > 0) {
         setIsPrintingLoading(true);
         setTotalImagesToLoad(allUrlsToLoad.length);
@@ -232,7 +232,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
         await Promise.all(promises);
         setIsPrintingLoading(false);
       }
-      
+
       setTimeout(() => {
         window.print();
       }, 500);
@@ -281,17 +281,17 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      
+
       const sessionName = sessions.find((s) => s.id === importSessionId)?.name || "Session";
       const className = classes.find((c) => c.id === importClassId)?.name || "Class";
       const sectionName = importSectionId === "ALL" ? "AllSections" : classes.find((c) => c.id === importClassId)?.sections.find((sec) => sec.id === importSectionId)?.name || "Sec";
-      
+
       a.download = `${sessionName}_${className}_${sectionName}_marks_template.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       toast.success("Template downloaded successfully!");
       setImportStep(3); // go to upload step
     } catch (err: any) {
@@ -322,7 +322,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             binary += String.fromCharCode(uint8[i]);
           }
           const base64 = btoa(binary);
-          
+
           const summary = await validateMarksImportAction({
             base64File: base64,
             classId: importClassId,
@@ -331,7 +331,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             examIds: importExamIds,
             sessionId: importSessionId,
           });
-          
+
           setValidationSummary(summary);
           setImportStep(4); // go to validation summary
         } catch (err: any) {
@@ -393,10 +393,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
   const handleDownloadErrorReport = () => {
     if (!validationSummary) return;
-    
+
     const headers = ["Sheet/Exam", "Row Number", "Student Name", "Subject", "Validation Error"];
     const rows: any[] = [];
-    
+
     validationSummary.sheets.forEach((sheet: any) => {
       sheet.errors.forEach((e: any) => {
         rows.push([
@@ -410,10 +410,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     });
 
     if (rows.length === 0) return;
-    
-    const csvContent = "data:text/csv;charset=utf-8," 
+
+    const csvContent = "data:text/csv;charset=utf-8,"
       + [headers.join(","), ...rows.map((r: any) => r.join(","))].join("\n");
-      
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -483,11 +483,11 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     try {
       const data = await getStudentMarksDataAction(studentId, sessionId);
       setPreviewData(data);
-      
+
       const photoUrl = data.student.photoUrl;
       const logoId = data.schoolBranding?.logoDocumentId;
       const promises: Promise<void>[] = [];
-      
+
       if (photoUrl) {
         promises.push(new Promise<void>((resolve) => {
           const img = new Image();
@@ -514,7 +514,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
       setPreviewLoading(false);
     }
   };
- 
+
   // Load preselected student report preview if studentId parameter is passed
   useEffect(() => {
     if (mounted && preselectedFilters?.studentId && sessionId) {
@@ -665,8 +665,8 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
       setModificationReason("");
 
       setEditingTerm({
-        workingDays: data.termResult?.workingDays ?? "",
-        presentDays: data.termResult?.presentDays ?? "",
+        workingDays: data.termResult?.workingDays ?? data.autoWorkingDays ?? "",
+        presentDays: data.termResult?.presentDays ?? data.autoPresentDays ?? "",
         remarksMid: data.termResult?.remarksMid ?? "",
         remarksFinal: data.termResult?.remarksFinal ?? "",
         resultOutcome: data.termResult?.resultOutcome ?? "PASS",
@@ -917,8 +917,8 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     <td className="py-3 px-6">
                       <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold border",
                         st.status === "PUBLISHED" ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : st.status === "LOCKED" ? "bg-stone-100 text-stone-700 border-stone-200"
-                        : "bg-amber-50 text-amber-800 border-amber-200"
+                          : st.status === "LOCKED" ? "bg-stone-100 text-stone-700 border-stone-200"
+                            : "bg-amber-50 text-amber-800 border-amber-200"
                       )}>
                         {st.status}
                       </span>
@@ -1034,7 +1034,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                               <td className="py-2 px-4 border-r border-stone-200 font-semibold text-stone-700">
                                 {sub.name} <span className="text-[10px] text-stone-400 font-mono">({sub.code})</span>
                               </td>
-                              
+
                               {/* Term 1 Input Cells */}
                               {t1Exams.map((ex: any, colIdx: number) => {
                                 const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
@@ -1054,10 +1054,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                                   </td>
                                 );
                               })}
-                              
+
                               <td className="py-2 px-2 text-center font-mono font-bold bg-indigo-50/10 border-r border-stone-200 text-stone-850">{sub.t1Total} <span className="text-[9px] text-stone-400">/{sub.t1Max}</span></td>
                               <td className="py-2 px-2 text-center font-bold bg-indigo-50/10 border-r border-stone-200 text-indigo-700">{sub.t1Max > 0 ? sub.grade : "—"}</td>
-                              
+
                               {/* Term 2 Input Cells */}
                               {t2Exams.map((ex: any, colIdx: number) => {
                                 const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
@@ -1078,10 +1078,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                                   </td>
                                 );
                               })}
-                              
+
                               <td className="py-2 px-2 text-center font-mono font-bold bg-emerald-50/10 border-r border-stone-200 text-stone-850">{sub.t2Total} <span className="text-[9px] text-stone-400">/{sub.t2Max}</span></td>
                               <td className="py-2 px-2 text-center font-bold bg-emerald-50/10 border-r border-stone-200 text-emerald-700">{sub.t2Max > 0 ? sub.grade : "—"}</td>
-                              
+
                               {/* Final */}
                               <td className="py-2 px-2 text-center font-mono font-bold bg-violet-50/10 border-r border-stone-200 text-stone-900">{sub.total} <span className="text-[9px] text-stone-450">/{sub.max}</span></td>
                               <td className="py-2 px-2 text-center font-mono font-bold bg-violet-50/10 border-r border-stone-200 text-stone-700">{sub.max > 0 ? `${Math.round((sub.total / sub.max) * 100)}%` : "—"}</td>
@@ -1228,24 +1228,24 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               <span className="text-xs text-stone-500 font-medium">Use arrow keys (↑ ↓ ← →) or Enter/Tab to navigate cells like Excel.</span>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setShowMarksEntry(false)}>Cancel</Button>
-                
-                <Button 
+
+                <Button
                   onClick={() => {
                     setEditingTerm((t: any) => ({ ...t, status: "DRAFT" }));
                     setTimeout(saveMarks, 100);
-                  }} 
-                  disabled={marksSaving} 
+                  }}
+                  disabled={marksSaving}
                   className="bg-stone-750 hover:bg-indigo-600 text-grey font-bold"
                 >
                   {marksSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Draft"}
                 </Button>
-                
-                <Button 
+
+                <Button
                   onClick={() => {
                     setEditingTerm((t: any) => ({ ...t, status: "COMPLETED" }));
                     setTimeout(saveMarks, 100);
-                  }} 
-                  disabled={marksSaving} 
+                  }}
+                  disabled={marksSaving}
                   className="bg-indigo-650 hover:bg-indigo-600 text-grey font-bold"
                 >
                   {marksSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save & Complete"}
@@ -1391,7 +1391,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     ))}
                   </select>
                 </div>
-                 <div className="h-[380px] overflow-y-auto border border-stone-200 rounded-xl divide-y divide-stone-100 p-2">
+                <div className="h-[380px] overflow-y-auto border border-stone-200 rounded-xl divide-y divide-stone-100 p-2">
                   {subjectsList.map((sub) => (
                     <div key={sub.id} className="py-2.5 px-3 flex items-center justify-between hover:bg-stone-50/50">
                       <div className="flex items-center gap-2">
@@ -1591,7 +1591,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
       {mounted && showReportPreview && createPortal(
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-6 overflow-hidden print-modal-backdrop">
           <div className="bg-white w-full h-full md:rounded-2xl max-w-6xl md:h-[95vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden print-modal-panel">
-            
+
             {/* Header toolbar */}
             <div className="bg-stone-50 px-6 py-4 border-b border-stone-200 flex justify-between items-center shrink-0 no-print">
               <div>
@@ -1600,10 +1600,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowReportPreview(false)}>Close</Button>
-                
+
                 {previewData && (previewData.termResult?.status === "DRAFT" || previewData.termResult?.status === "COMPLETED") && (
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     onClick={async () => {
                       setPublishLoading(true);
                       try {
@@ -1627,19 +1627,19 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                         setPublishLoading(false);
                       }
                     }}
-                    disabled={publishLoading} 
+                    disabled={publishLoading}
                     className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold h-8 text-xs"
                   >
                     Publish Result
                   </Button>
                 )}
 
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={() => {
                     window.print();
-                  }} 
-                  className="bg-emerald-650 hover:bg-emerald-600 text-white font-bold h-8 text-xs"
+                  }}
+                  className="bg-emerald-650 hover:bg-emerald-600 text-grey-400 font-bold h-8 text-xs"
                 >
                   Print / Save PDF
                 </Button>
@@ -1647,7 +1647,8 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             </div>
 
             {/* Print styling block */}
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+              __html: `
               @media print {
                 html, body {
                   height: auto !important;
@@ -1724,31 +1725,31 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
           </div>
         </div>
-      , document.body)}
+        , document.body)}
 
       {/* ══ MULTI-REPORT CARD PREVIEW MODAL ════════════════════════════════ */}
       {mounted && showMultiReportPreview && createPortal(
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-6 overflow-hidden print-modal-backdrop">
           <div className="bg-white w-full h-full md:rounded-2xl max-w-6xl md:h-[95vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden print-modal-panel">
-            
+
             {/* Header toolbar */}
             <div className="bg-stone-50 px-6 py-4 border-b border-stone-200 flex justify-between items-center shrink-0 no-print">
               <div>
                 <h3 className="font-extrabold text-stone-900 text-sm">Class Results Print Preview ({multiReportData.length} students)</h3>
                 <p className="text-stone-500 text-xs mt-0.5 font-medium">
-                  {isPrintingLoading 
+                  {isPrintingLoading
                     ? `Preloading student photographs: ${imagesLoadedCount}/${totalImagesToLoad} loaded...`
                     : "Verify report cards before printing."}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowMultiReportPreview(false)}>Close</Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   disabled={isPrintingLoading}
                   onClick={() => {
                     window.print();
-                  }} 
+                  }}
                   className="bg-emerald-650 hover:bg-emerald-600 text-grey-500 font-bold h-8 text-xs flex items-center gap-1.5"
                 >
                   {isPrintingLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -1758,7 +1759,8 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             </div>
 
             {/* Print styling block */}
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style dangerouslySetInnerHTML={{
+              __html: `
               @media print {
                 html, body {
                   height: auto !important;
@@ -1836,13 +1838,13 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
           </div>
         </div>
-      , document.body)}
+        , document.body)}
 
-            {/* ══ EXCEL MARKS IMPORT MODAL (WIZARD FLOW) ═════════════════════════ */}
+      {/* ══ EXCEL MARKS IMPORT MODAL (WIZARD FLOW) ═════════════════════════ */}
       {mounted && showAddMarksModal && createPortal(
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] text-xs text-stone-700">
-            
+
             {/* Header */}
             <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4 shrink-0">
               <div className="flex items-center gap-2">
@@ -1851,15 +1853,15 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   <h3 className="font-extrabold text-stone-900 text-sm">Excel-Based Marks Import</h3>
                   <p className="text-[10px] text-stone-400 font-medium">Step {importStep} of 6: {
                     importStep === 1 ? "Select Academic Details" :
-                    importStep === 2 ? "Download Template" :
-                    importStep === 3 ? "Upload Excel Spreadsheet" :
-                    importStep === 4 ? "Review Validation Summary" :
-                    importStep === 5 ? "Conflict Resolution & Confirmation" :
-                    "Import Complete"
+                      importStep === 2 ? "Download Template" :
+                        importStep === 3 ? "Upload Excel Spreadsheet" :
+                          importStep === 4 ? "Review Validation Summary" :
+                            importStep === 5 ? "Conflict Resolution & Confirmation" :
+                              "Import Complete"
                   }</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowAddMarksModal(false)}
                 disabled={isImportValidating || isSavingImport || isTemplateLoading}
                 className="text-stone-400 hover:text-stone-700 text-lg font-bold"
@@ -1870,7 +1872,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto min-h-0 py-2">
-              
+
               {/* STEP 1: Academic Selections */}
               {importStep === 1 && (
                 <div className="space-y-5 max-w-2xl mx-auto py-2">
@@ -2041,7 +2043,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                           Generate a clean spreadsheet containing active students and columns for every selected subject.
                         </p>
                       </div>
-                      <Button 
+                      <Button
                         onClick={handleDownloadTemplate}
                         disabled={isTemplateLoading}
                         className="bg-indigo-650 hover:bg-indigo-600 text-grey-500 font-bold h-9 px-6 text-xs w-full"
@@ -2062,7 +2064,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                           I already have the populated template filled with marks. Proceed directly to the upload step.
                         </p>
                       </div>
-                      <Button 
+                      <Button
                         onClick={() => setImportStep(3)}
                         variant="outline"
                         className="border-stone-300 font-bold h-9 px-6 text-xs w-full"
@@ -2181,7 +2183,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                         <h4 className="font-extrabold text-stone-850 text-[12px] flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-600" /> Existing marks detected</h4>
                         <p className="text-[10px] text-stone-400 mt-0.5">Database already contains marks for {validationSummary.totalExisting} student exam entries.</p>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <label className={cn("p-3 rounded-lg border-2 flex items-start gap-2.5 cursor-pointer transition select-none bg-white", conflictResolution === "UPDATE" ? "border-indigo-650 bg-indigo-50/10" : "border-stone-200")}>
                           <input
@@ -2218,7 +2220,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   <div className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-xl text-center space-y-2">
                     <span className="font-extrabold text-indigo-755 text-sm uppercase">Import Summary</span>
                     <p className="text-[11px] text-stone-600 leading-normal max-w-md mx-auto">
-                      Only the <strong className="text-stone-800">{validationSummary.totalValid} valid student marks</strong> will be imported. 
+                      Only the <strong className="text-stone-800">{validationSummary.totalValid} valid student marks</strong> will be imported.
                       {validationSummary.totalInvalid > 0 && ` The remaining ${validationSummary.totalInvalid} invalid student rows containing errors will be skipped.`}
                     </p>
                   </div>
@@ -2259,9 +2261,9 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             <div className="border-t border-stone-200 pt-3 mt-4 flex justify-between shrink-0">
               <div>
                 {importStep > 1 && importStep < 6 && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setImportStep(prev => prev - 1)}
                     disabled={isImportValidating || isSavingImport || isTemplateLoading}
                   >
@@ -2270,9 +2272,9 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 )}
               </div>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={isImportValidating || isSavingImport || isTemplateLoading}
                   onClick={() => setShowAddMarksModal(false)}
                 >
@@ -2280,7 +2282,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 </Button>
 
                 {importStep === 1 && (
-                  <Button 
+                  <Button
                     size="sm"
                     disabled={!importSessionId || !importClassId || importExamIds.length === 0 || importSubjectIds.length === 0}
                     onClick={() => setImportStep(2)}
@@ -2293,16 +2295,16 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 {importStep === 4 && validationSummary && (
                   <div className="flex gap-2">
                     {validationSummary.totalInvalid > 0 && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={handleDownloadErrorReport}
                         className="h-9 border-stone-300 font-bold text-xs"
                       >
                         <Download className="w-3.5 h-3.5 mr-1" /> Download Error Report
                       </Button>
                     )}
-                    <Button 
+                    <Button
                       size="sm"
                       disabled={validationSummary.totalValid === 0 || isSavingImport}
                       onClick={() => {
@@ -2320,7 +2322,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 )}
 
                 {importStep === 5 && (
-                  <Button 
+                  <Button
                     size="sm"
                     disabled={isSavingImport}
                     onClick={() => handleExecuteImport(false)}
@@ -2335,7 +2337,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
           </div>
         </div>
-      , document.body)}
+        , document.body)}
 
       {/* ══ CONFIRM PARTIAL IMPORT DIALOG ══════════════════════════════════ */}
       {showConfirmPartial && validationSummary && (
@@ -2348,7 +2350,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             <p className="text-[10px] text-stone-400">Do you want to continue with importing the valid records?</p>
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-150">
               <Button variant="outline" size="sm" onClick={() => setShowConfirmPartial(false)}>Cancel</Button>
-              <Button 
+              <Button
                 onClick={() => handleExecuteImport(true)}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-8 text-[11px]"
               >
@@ -2369,7 +2371,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             <p className="text-[10px] text-stone-400">Do you want to continue with importing the valid records?</p>
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-150">
               <Button variant="outline" size="sm" onClick={() => setShowConfirmPartial(false)}>Cancel</Button>
-              <Button 
+              <Button
                 onClick={() => handleExecuteImport(true)}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold h-8 text-[11px]"
               >
@@ -2389,8 +2391,8 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 <FileText className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-extrabold text-stone-900 text-sm">Print Class Results</h3>
               </div>
-              <button 
-                onClick={() => setShowPrintClassModal(false)} 
+              <button
+                onClick={() => setShowPrintClassModal(false)}
                 disabled={isGeneratingClassReport}
                 className="text-stone-400 hover:text-stone-700 text-lg"
               >
@@ -2555,14 +2557,14 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 )}
               </div>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   disabled={isGeneratingClassReport}
                   onClick={() => setShowPrintClassModal(false)}
                 >
                   Cancel
                 </Button>
-                
+
                 <Button
                   onClick={() => {
                     const selectedList = filteredPrintStudents.filter((st) => selectedPrintStudentIds[st.studentId]);
@@ -2689,7 +2691,7 @@ function renderReportCard(data: any) {
   const cardCalc = getCalculatedTotalsForData(data);
   return (
     <div id="report-card-print" className="bg-white p-8 w-full max-w-[297mm] min-h-[210mm] shadow-md flex flex-col justify-between font-serif text-black text-xs select-none">
-      
+
       {/* Master Table Container representing the exact printed layout */}
       <table className="w-full border-collapse border-2 border-black text-center text-[10px] font-bold text-black">
         <tbody>
@@ -2740,7 +2742,7 @@ function renderReportCard(data: any) {
           </tr>
 
           {/* 2. Student Info Row */}
-          <tr className="border-b-2 border-black text-left text-[10px]">
+          <tr className="border-b border-black text-left text-[10px]">
             <td colSpan={5} className="py-2 px-2 border-r border-black">
               <span>Name: </span><span className="font-extrabold font-sans uppercase">{data.student.fullName}</span>
             </td>
@@ -2755,16 +2757,40 @@ function renderReportCard(data: any) {
             </td>
           </tr>
 
+          {/* Student Info Row 2: Roll No, Admission No, Attendance details */}
+          <tr className="border-b-2 border-black text-left text-[10px]">
+            <td colSpan={3} className="py-2 px-2 border-r border-black">
+              <span>ROLL NO: </span><span className="font-extrabold font-sans">{data.student.rollNo || "—"}</span>
+            </td>
+            <td colSpan={3} className="py-2 px-2 border-r border-black">
+              <span>ADM NO: </span><span className="font-extrabold font-sans uppercase">{data.student.admissionNo || "—"}</span>
+            </td>
+            <td colSpan={3} className="py-2 px-2 border-r border-black">
+              <span>WORKING DAYS: </span><span className="font-extrabold font-sans">{data.termResult?.workingDays ?? "—"}</span>
+            </td>
+            <td colSpan={3} className="py-2 px-2 border-r border-black">
+              <span>PRESENT DAYS: </span><span className="font-extrabold font-sans">{data.termResult?.presentDays ?? "—"}</span>
+            </td>
+            <td colSpan={4} className="py-2 px-2">
+              <span>ATTENDANCE %: </span>
+              <span className="font-extrabold font-sans">
+                {data.termResult?.workingDays && data.termResult?.presentDays && Number(data.termResult.workingDays) > 0
+                  ? `${Math.round((Number(data.termResult.presentDays) / Number(data.termResult.workingDays)) * 100)}%`
+                  : "—"}
+              </span>
+            </td>
+          </tr>
+
           {/* 3. Main Assessment Column Headers */}
           <tr className="border-b border-black text-[9px] uppercase">
             <th rowSpan={2} className="py-2.5 border-r border-black w-8">S.No.</th>
             <th rowSpan={2} className="py-2.5 px-2 text-left border-r border-black w-36">SUBJECTS</th>
             <th colSpan={5} className="py-1 border-r border-black">FIRST TERM EVALUATION</th>
             <th colSpan={5} className="py-1 border-r border-black">SECOND TERM EVALUATION</th>
-            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br/>(1st<br/>Term)</th>
-            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br/>(2nd<br/>Term)</th>
-            <th rowSpan={2} className="py-2.5 border-r border-black w-14 text-[8px] leading-tight">FINAL TOTAL<br/>(1st Term +<br/>2nd Term)</th>
-            <th rowSpan={2} className="py-2.5 w-12 text-[8px] leading-tight">FINAL<br/>GRADES</th>
+            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br />(1st<br />Term)</th>
+            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br />(2nd<br />Term)</th>
+            <th rowSpan={2} className="py-2.5 border-r border-black w-14 text-[8px] leading-tight">FINAL TOTAL<br />(1st Term +<br />2nd Term)</th>
+            <th rowSpan={2} className="py-2.5 w-12 text-[8px] leading-tight">FINAL<br />GRADES</th>
           </tr>
 
           {/* Sub-headers row */}
@@ -2889,24 +2915,7 @@ function renderReportCard(data: any) {
             <td className="font-bold">{cardCalc?.finalGrade}</td>
           </tr>
 
-          {/* 7. Attendance Row */}
-          <tr className="border-b border-black text-black">
-            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">ATTENDANCE</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{data.termResult?.presentDays ?? "—"}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{data.termResult?.workingDays ?? "—"}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-black">
-              {data.termResult?.presentDays && data.termResult?.workingDays 
-                ? Number(data.termResult.presentDays) + Number(data.termResult.workingDays) 
-                : "—"}
-            </td>
-            <td>&nbsp;</td>
-          </tr>
+
 
           {/* 8. Art & Activity Row */}
           <tr className="border-b border-black text-black">

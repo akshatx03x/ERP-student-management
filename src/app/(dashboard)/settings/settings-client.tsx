@@ -608,7 +608,7 @@ export function SettingsClient({
                                 disabled={pending}
                                 onClick={() => handleCreateLogin(s.id)}
                               >
-                                  Create Login
+                                Create Login
                               </Button>
                             )}
                           </td>

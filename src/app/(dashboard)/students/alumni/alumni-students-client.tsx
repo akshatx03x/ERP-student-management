@@ -23,6 +23,7 @@ type AlumniStudent = {
     fatherName?: string | null;
     motherName?: string | null;
     primaryPhone?: string | null;
+    secondaryPhone?: string | null;
   } | null;
   exitInfo?: {
     leavingDate: Date | string;
@@ -64,7 +65,10 @@ export function AlumniStudentsClient({
       const q = search.toLowerCase().trim();
       const matchName = s.fullName.toLowerCase().includes(q);
       const matchAdm = s.admissionNo.toLowerCase().includes(q);
-      return matchName || matchAdm;
+      const matchFather = s.family?.fatherName?.toLowerCase().includes(q);
+      const matchMother = s.family?.motherName?.toLowerCase().includes(q);
+      const matchPhone = s.family?.primaryPhone?.includes(q) || s.family?.secondaryPhone?.includes(q);
+      return matchName || matchAdm || matchFather || matchMother || matchPhone;
     }
     return true;
   });
@@ -80,7 +84,7 @@ export function AlumniStudentsClient({
         </div>
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Search alumni name or adm no..."
+            placeholder="Search name, adm no, parents, phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full sm:w-64 h-8 text-xs"

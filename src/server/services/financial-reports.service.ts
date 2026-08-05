@@ -1282,6 +1282,10 @@ export async function getClasswisePendingList(filters: ClasswisePendingListFilte
             OR: [
               { fullName: { contains: filters.search } },
               { admissionNo: { contains: filters.search } },
+              { family: { fatherName: { contains: filters.search } } },
+              { family: { motherName: { contains: filters.search } } },
+              { family: { primaryPhone: { contains: filters.search } } },
+              { family: { secondaryPhone: { contains: filters.search } } },
             ],
           }
         : {}),
@@ -1505,7 +1509,9 @@ export async function getClassWiseFeeStatusReport(filters: ClassWiseFeeStatusFil
               { fullName: { contains: search } },
               { admissionNo: { contains: search } },
               { family: { fatherName: { contains: search } } },
+              { family: { motherName: { contains: search } } },
               { family: { primaryPhone: { contains: search } } },
+              { family: { secondaryPhone: { contains: search } } },
             ],
           }
         : {}),
@@ -1687,8 +1693,12 @@ export async function getClassWiseFeeStatusReport(filters: ClassWiseFeeStatusFil
 function buildUniversalStudentSearch(q: string) {
   return {
     OR: [
-      { fullName: { contains: q } },
-      { admissionNo: { contains: q } },
+          { fullName: { contains: q } },
+          { admissionNo: { contains: q } },
+          { family: { fatherName: { contains: q } } },
+          { family: { motherName: { contains: q } } },
+          { family: { primaryPhone: { contains: q } } },
+          { family: { secondaryPhone: { contains: q } } },
       { srNo: { contains: q } },
       { family: { fatherName: { contains: q } } },
       { family: { motherName: { contains: q } } },
@@ -1702,8 +1712,9 @@ function buildUniversalFamilySearch(q: string) {
   return {
     OR: [
       { fatherName: { contains: q } },
-      { motherName: { contains: q } },
-      { primaryPhone: { contains: q } },
+          { motherName: { contains: q } },
+          { primaryPhone: { contains: q } },
+          { secondaryPhone: { contains: q } },
       { secondaryPhone: { contains: q } },
       { students: { some: { fullName: { contains: q } } } },
       { students: { some: { admissionNo: { contains: q } } } },

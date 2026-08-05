@@ -628,6 +628,15 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
     },
   });
 
+  const attRecords = await prisma.attendanceRecord.findMany({
+    where: { studentId, sessionId },
+  });
+
+  const autoWorkingDays = attRecords.length;
+  const autoPresentDays = attRecords.filter(
+    (r) => r.status === "PRESENT" || r.status === "LATE" || r.status === "EXCUSED"
+  ).length + attRecords.filter((r) => r.status === "HALF_DAY").length * 0.5;
+
   const branding = await prisma.schoolBranding.findFirst({
     where: { schoolId },
   });
@@ -674,6 +683,8 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
       remarks: m.remarks,
     })),
     termResult: student.termResults[0] ?? null,
+    autoWorkingDays,
+    autoPresentDays,
   };
 }
 

@@ -1611,3 +1611,14 @@ enum ContactOwner {
   GUARDIAN_2
   OTHER
 }
+
+model AttendanceLock {
+  id        String   @id @default(cuid())
+  sessionId String
+  year      Int
+  month     Int      // 1-12
+  isLocked  Boolean  @default(true)
+
+  @@unique([sessionId, year, month])
+}
+

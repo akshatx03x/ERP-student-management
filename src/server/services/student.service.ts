@@ -138,6 +138,7 @@ export async function listStudents(input?: {
             fatherName: true,
             motherName: true,
             primaryPhone: true,
+            secondaryPhone: true,
           },
         },
         // medical excluded: not displayed in the list view
@@ -182,6 +183,16 @@ export async function listFormerStudents(input?: {
           OR: [
             { fullName: { contains: params.search } },
             { admissionNo: { contains: params.search } },
+            {
+              family: {
+                OR: [
+                  { fatherName: { contains: params.search } },
+                  { motherName: { contains: params.search } },
+                  { primaryPhone: { contains: params.search } },
+                  { secondaryPhone: { contains: params.search } },
+                ],
+              },
+            },
           ],
         }
       : {}),
@@ -198,7 +209,7 @@ export async function listFormerStudents(input?: {
         dateOfBirth: true,
         gender: true,
         status: true,
-        family: { select: { fatherName: true, motherName: true, primaryPhone: true } },
+        family: { select: { fatherName: true, motherName: true, primaryPhone: true, secondaryPhone: true } },
         exitInfo: {
           select: {
             leavingDate: true,
@@ -243,6 +254,16 @@ export async function listAlumniStudents(input?: {
           OR: [
             { fullName: { contains: params.search } },
             { admissionNo: { contains: params.search } },
+            {
+              family: {
+                OR: [
+                  { fatherName: { contains: params.search } },
+                  { motherName: { contains: params.search } },
+                  { primaryPhone: { contains: params.search } },
+                  { secondaryPhone: { contains: params.search } },
+                ],
+              },
+            },
           ],
         }
       : {}),
@@ -259,7 +280,7 @@ export async function listAlumniStudents(input?: {
         dateOfBirth: true,
         gender: true,
         status: true,
-        family: { select: { fatherName: true, motherName: true, primaryPhone: true } },
+        family: { select: { fatherName: true, motherName: true, primaryPhone: true, secondaryPhone: true } },
         exitInfo: {
           select: {
             leavingDate: true,

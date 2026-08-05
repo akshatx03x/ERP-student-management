@@ -159,8 +159,6 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Administration",
     items: [
-      { title: "Documents", href: "/documents", resource: "document", icon: "FolderOpen" },
-      { title: "Reports & Audits", href: "/reports", resource: "report", icon: "BarChart3" },
       { title: "Notices", href: "/notices", resource: "notice", icon: "Megaphone" },
       { title: "Settings", href: "/settings", resource: "settings", icon: "Settings" },
     ],

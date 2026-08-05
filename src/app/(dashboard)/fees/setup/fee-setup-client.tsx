@@ -72,7 +72,7 @@ export function FeeSetupClient({
   rules: Rule[];
 }) {
   const [pending, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<"heads" | "structures" | "rules">("heads");
+  const [activeTab, setActiveTab] = useState<"heads" | "structures" | "rules">("structures");
 
   // HEADS CRUD
   const [heads, setHeads] = useState<Head[]>(initialHeads);
@@ -272,8 +272,8 @@ export function FeeSetupClient({
       {/* TABS SELECTOR */}
       <div className="bg-stone-50 border-b border-stone-200 px-5 py-3 flex gap-2 shrink-0">
         {[
-          { id: "heads", label: "Fee Heads", icon: Settings },
           { id: "structures", label: "Fee Structures", icon: Layers },
+          { id: "heads", label: "Fee Heads", icon: Settings },
           { id: "rules", label: "Late Fee Rules", icon: Clock },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}

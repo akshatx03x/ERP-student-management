@@ -255,7 +255,7 @@ export function ClassWiseStatusClient({ metaData }: { metaData: MetaData }) {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search student, father or phone..."
+                placeholder="Search name, adm no, parents, phone..."
                 className="pl-9 bg-white border-stone-300 text-stone-900 h-9 rounded-lg"
               />
               
@@ -408,12 +408,13 @@ export function ClassWiseStatusClient({ metaData }: { metaData: MetaData }) {
                     <th className="p-3 text-right text-rose-700">Pending</th>
                     <th className="p-3 text-center">Status</th>
                     <th className="p-3">Last Payment</th>
+                    <th className="p-3 text-center print:hidden">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-150">
                   {reportData.items.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-12 text-center text-stone-400 font-medium">
+                      <td colSpan={11} className="p-12 text-center text-stone-400 font-medium">
                         No students match the current filters.
                       </td>
                     </tr>
@@ -465,12 +466,20 @@ export function ClassWiseStatusClient({ metaData }: { metaData: MetaData }) {
                             <td className="p-3 text-stone-500">
                               {row.lastPaymentDate ? formatDate(row.lastPaymentDate) : "—"}
                             </td>
+                            <td className="p-3 text-center print:hidden">
+                              <Link
+                                href={`/fees?student=${encodeURIComponent(row.studentId)}`}
+                                className="inline-flex h-7 items-center rounded-md border border-indigo-200 bg-indigo-50 px-2.5 text-[10px] font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
+                              >
+                                Fee Collection
+                              </Link>
+                            </td>
                           </tr>
 
                           {/* Expanded Detail Accordion Row */}
                           {isExpanded && (
                             <tr className="bg-stone-50/50 border-t border-stone-200">
-                              <td colSpan={10} className="p-4 pl-12">
+                              <td colSpan={11} className="p-4 pl-12">
                                 <div className="border border-stone-200 rounded-lg overflow-hidden max-w-3xl bg-white shadow-sm">
                                   <div className="bg-stone-50 px-3.5 py-2 text-[10px] uppercase font-bold text-stone-500 tracking-wider border-b border-stone-200">
                                     Monthly Fee Summaries

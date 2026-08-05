@@ -45,8 +45,10 @@ export default async function FeeCollectionPage({
           admissionNo: s.admissionNo,
           familyId: s.familyId,
           fatherName: s.family?.fatherName ?? null,
+          motherName: s.family?.motherName ?? null,
           classLabel: s.enrollments?.[0] ? `${s.enrollments[0].class.name}-${s.enrollments[0].section.name}` : null,
           primaryPhone: s.family?.primaryPhone ?? null,
+          secondaryPhone: s.family?.secondaryPhone ?? null,
         }))}
         sessions={sessions.items}
         currentSessionId={current?.id ?? null}

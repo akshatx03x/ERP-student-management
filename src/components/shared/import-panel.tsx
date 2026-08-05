@@ -89,66 +89,7 @@ export function ImportPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Excel import</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Import order for students: import Families first, then Students (template links rows
-          by the optional family code column). Invalid
-          rows are skipped.
-        </p>
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Type</Label>
-            <Select value={type} onChange={(e) => setType(e.target.value as ImportType)}>
-              {TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex items-end">
-            <Button type="button" variant="outline" disabled={pending} onClick={downloadTemplate}>
-              Download template
-            </Button>
-          </div>
-          <div className="space-y-2">
-            <Label>Upload file</Label>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              disabled={pending}
-              onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-            />
-          </div>
-        </div>
-
-        {preview ? (
-          <div className="space-y-3 rounded-md border p-4">
-            <p className="text-sm">
-              Total {preview.total} · Valid {preview.validCount} · Failed {preview.failCount}
-            </p>
-            {preview.errors.length > 0 ? (
-              <div className="max-h-40 overflow-auto text-sm text-destructive">
-                {preview.errors.map((e) => (
-                  <p key={`${e.row}-${e.message}`}>
-                    Row {e.row}: {e.message}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-            <Button
-              type="button"
-              disabled={pending || preview.validCount === 0}
-              onClick={commit}
-            >
-              Import valid rows
-            </Button>
-          </div>
-        ) : null}
-      </CardContent>
+      
     </Card>
   );
 }

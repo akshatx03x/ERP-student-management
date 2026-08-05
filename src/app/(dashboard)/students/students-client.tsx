@@ -107,7 +107,8 @@ export function StudentsClient({
         s.admissionNo.toLowerCase().includes(q) ||
         s.family?.fatherName?.toLowerCase().includes(q) ||
         s.family?.motherName?.toLowerCase().includes(q) ||
-        s.family?.primaryPhone?.includes(q)
+        s.family?.primaryPhone?.includes(q) ||
+        s.family?.secondaryPhone?.includes(q)
       );
     });
   }, [students, search]);
@@ -376,7 +377,8 @@ export function StudentsClient({
                       s.admissionNo.toLowerCase().includes(q) ||
                       s.family?.fatherName?.toLowerCase().includes(q) ||
                       s.family?.motherName?.toLowerCase().includes(q) ||
-                      s.family?.primaryPhone?.includes(q)
+                      s.family?.primaryPhone?.includes(q) ||
+                      s.family?.secondaryPhone?.includes(q)
                     );
                   })
                   .slice(0, 10)
@@ -411,7 +413,8 @@ export function StudentsClient({
                     s.admissionNo.toLowerCase().includes(q) ||
                     s.family?.fatherName?.toLowerCase().includes(q) ||
                     s.family?.motherName?.toLowerCase().includes(q) ||
-                    s.family?.primaryPhone?.includes(q)
+                    s.family?.primaryPhone?.includes(q) ||
+                    s.family?.secondaryPhone?.includes(q)
                   );
                 }).length === 0 && (
                   <div className="p-3 text-center text-xs text-muted-foreground">

@@ -25,7 +25,7 @@ export function EditStudentForm({
     firstName: string;
     middleName: string | null;
     lastName: string | null;
-    dateOfBirth: string | Date;
+    dateOfBirth: string | Date | null;
     admissionDate?: string | Date | null;
     gender: string | null;
     bloodGroup: string | null;
@@ -58,7 +58,7 @@ export function EditStudentForm({
   const [matchingFamily, setMatchingFamily] = useState<any>(null);
 
   // Helper to format date for input field
-  const formatDateString = (d: string | Date) => {
+  const formatDateString = (d: string | Date | null | undefined) => {
     if (!d) return "";
     const date = new Date(d);
     return date.toISOString().split("T")[0];

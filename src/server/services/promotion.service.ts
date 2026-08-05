@@ -76,8 +76,12 @@ export async function getPromotionPreview(input: GetPromotionPreviewInput) {
     const mapping = data.classMappings.find(
       (m) => m.fromClassId === enr.classId && m.fromSectionId === enr.sectionId
     );
-    const isClass10 = /\b(10|x|10th)\b/i.test(enr.class.name) || enr.class.name.includes("10") || mapping?.toClassId === "ALUMNI";
-    const defaultAction: "PROMOTE" | "RETAIN" | "TRANSFER" | "WITHDRAW" | "GRADUATE" = isClass10
+    // Only mark GRADUATE if the mapping explicitly points to Alumni OR the class name is genuinely "10"
+    const isTerminalClass =
+      mapping?.toClassId === "ALUMNI" ||
+      /(?:^|\s|-)(?:10|x|10th)(?:\s|-|$)/i.test(enr.class.name) ||
+      /^10$/.test(enr.class.name.trim());
+    const defaultAction: "PROMOTE" | "RETAIN" | "TRANSFER" | "WITHDRAW" | "GRADUATE" = isTerminalClass
       ? "GRADUATE"
       : "PROMOTE";
 

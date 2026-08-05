@@ -11,6 +11,10 @@ import {
   markAttendance,
   listAttendanceForSection,
   getMonthlyAttendanceSummary,
+  toggleMonthLock,
+  getLockedMonths,
+  exportAttendanceExcel,
+  getSectionSessionRecords,
 } from "@/server/services/attendance.service";
 import {
   listLeaveRequests,
@@ -76,6 +80,26 @@ export async function listAttendanceAction(input: Parameters<typeof listAttendan
 export async function monthlyAttendanceAction(input: MonthlySummaryInput) {
   return getMonthlyAttendanceSummary(input);
 }
+export async function toggleMonthLockAction(input: {
+  sessionId: string;
+  year: number;
+  month: number;
+  isLocked: boolean;
+}) {
+  const r = await toggleMonthLock(input);
+  revalidatePath("/attendance");
+  return r;
+}
+export async function getLockedMonthsAction(sessionId: string) {
+  return getLockedMonths(sessionId);
+}
+export async function exportAttendanceExcelAction(input: Parameters<typeof exportAttendanceExcel>[0]) {
+  return exportAttendanceExcel(input);
+}
+export async function getSectionSessionRecordsAction(sessionId: string, sectionId: string) {
+  return getSectionSessionRecords(sessionId, sectionId);
+}
+
 
 export async function listLeaveAction(input?: Parameters<typeof listLeaveRequests>[0]) {
   return listLeaveRequests(input);

@@ -66,7 +66,7 @@ export async function GET(request: Request) {
       type: "family",
       id: f.id,
       label: [f.fatherName, f.motherName, f.primaryPhone].filter(Boolean).join(" · "),
-      href: `/families/${f.id}`,
+      href: `/students?q=${encodeURIComponent(f.primaryPhone || f.fatherName || "")}`,
     })),
     ...payments.map((p) => ({
       type: "receipt",

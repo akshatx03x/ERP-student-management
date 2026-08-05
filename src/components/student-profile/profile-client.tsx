@@ -212,10 +212,14 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3.5 text-[11px] text-stone-500 max-w-4xl border-t pt-3 border-stone-100">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3.5 text-[11px] text-stone-500 max-w-4xl border-t pt-3 border-stone-100">
               <div>
                 <span className="block text-[10px] uppercase font-bold tracking-wider text-stone-400">Admission No</span>
                 <span className="font-bold text-stone-900">{student.admissionNo}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-bold tracking-wider text-stone-400">SR Number</span>
+                <span className="font-bold text-stone-900">{student.srNo || "—"}</span>
               </div>
               <div>
                 <span className="block text-[10px] uppercase font-bold tracking-wider text-stone-400">Admission Date</span>

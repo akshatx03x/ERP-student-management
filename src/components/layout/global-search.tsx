@@ -55,7 +55,7 @@ export function GlobalSearch() {
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => hits.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search students, families, receipts…"
+          placeholder="Search name, adm no, parents, phone, receipts…"
           aria-label="Global search"
           className="h-9 bg-background pr-9"
         />
@@ -87,4 +87,3 @@ export function GlobalSearch() {
     </div>
   );
 }
-

@@ -47,8 +47,10 @@ type StudentItem = {
   admissionNo: string;
   familyId: string;
   fatherName?: string | null;
+  motherName?: string | null;
   classLabel?: string | null;
   primaryPhone?: string | null;
+  secondaryPhone?: string | null;
 };
 
 type Session = { id: string; name: string };
@@ -109,7 +111,7 @@ export function FeeCollectionClient({
     const q = studentSearch.trim().toLowerCase();
     if (!q) return [];
     return students.filter(s =>
-      `${s.fullName} ${s.admissionNo} ${s.fatherName ?? ""} ${s.classLabel ?? ""} ${s.primaryPhone ?? ""}`.toLowerCase().includes(q)
+      `${s.fullName} ${s.admissionNo} ${s.fatherName ?? ""} ${s.motherName ?? ""} ${s.classLabel ?? ""} ${s.primaryPhone ?? ""} ${s.secondaryPhone ?? ""}`.toLowerCase().includes(q)
     ).slice(0, 10);
   }, [studentSearch, students]);
 
@@ -391,7 +393,7 @@ export function FeeCollectionClient({
               value={studentSearch}
               onChange={e => { setStudentSearch(e.target.value); setShowDropdown(true); }}
               onFocus={() => setShowDropdown(true)}
-              placeholder="Search student, parent, phone..."
+              placeholder="Search name, adm no, parents, phone..."
               className="pl-9 h-10 text-sm border-stone-355 rounded-lg"
             />
             {showDropdown && filteredStudents.length > 0 && (
@@ -698,6 +700,7 @@ export function FeeCollectionClient({
                     <th className="py-3 px-4 text-right">Late Fine</th>
                     <th className="py-3 px-4 text-right">Outstanding</th>
                     <th className="py-3 px-4 text-center">Receipts</th>
+                    <th className="py-3 px-4 text-right">Collected By</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-150">
@@ -710,6 +713,9 @@ export function FeeCollectionClient({
                     const monthReceipts = profile.paymentHistory?.filter((p: any) =>
                       p.allocations?.some((a: any) => a.month === m.month)
                     ) || [];
+                    const collectors = Array.from(
+                      new Set(monthReceipts.map((p: any) => p.recordedBy).filter(Boolean))
+                    ) as string[];
 
                     return (
                       <Fragment key={m.month}>
@@ -763,12 +769,19 @@ export function FeeCollectionClient({
                               </Badge>
                             ) : "—"}
                           </td>
+                          <td
+                            className="py-3 px-4 text-right text-[10px] font-semibold text-stone-500"
+                            title={collectors.join(", ") || undefined}
+                            onClick={() => toggleMonth(m.month)}
+                          >
+                            {collectors.length > 0 ? collectors.join(", ") : "—"}
+                          </td>
                         </tr>
 
                         {/* Expand Details panel */}
                         {isExpanded && (
                           <tr key={`${m.month}-details`} className="bg-stone-50/40" onClick={(e) => e.stopPropagation()}>
-                            <td colSpan={8} className="p-4 border-t border-stone-200" onClick={(e) => e.stopPropagation()}>
+                            <td colSpan={9} className="p-4 border-t border-stone-200" onClick={(e) => e.stopPropagation()}>
                               <div className="grid grid-cols-[1fr_1.2fr] gap-4" onClick={(e) => e.stopPropagation()}>
                                 
                                 {/* 1. Fee Head charges breakdown */}
@@ -820,8 +833,9 @@ export function FeeCollectionClient({
                                           <tr className="bg-stone-50/50 text-[9px] font-bold uppercase text-stone-500 border-b">
                                             <th className="py-2 px-3 w-[30%]">Receipt No</th>
                                             <th className="py-2 px-3 w-[30%]">Date</th>
-                                            <th className="py-2 px-3 w-[20%]">Mode</th>
-                                            <th className="py-2 px-3 text-right w-[20%] min-w-[85px]">Allocated</th>
+                                            <th className="py-2 px-3 w-[15%]">Mode</th>
+                                            <th className="py-2 px-3 w-[20%]">Collected By</th>
+                                            <th className="py-2 px-3 text-right w-[15%] min-w-[85px]">Allocated</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-stone-100">
@@ -839,6 +853,7 @@ export function FeeCollectionClient({
                                                   }}>{r.receiptNo}</td>
                                                 <td className="py-2 px-3 text-stone-500 truncate">{formatDate(r.paidAt)}</td>
                                                 <td className="py-2 px-3"><Badge variant="outline" className="text-[9px]">{r.method}</Badge></td>
+                                                <td className="py-2 px-3 text-stone-500 truncate" title={r.recordedBy ?? undefined}>{r.recordedBy ?? "—"}</td>
                                                 <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">{formatCurrency(allocForThisMonth)}</td>
                                               </tr>
                                             );

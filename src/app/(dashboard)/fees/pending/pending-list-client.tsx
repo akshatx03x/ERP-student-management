@@ -273,7 +273,7 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search Student..."
+                placeholder="Search name, adm no, parents, phone..."
                 className="pl-9 bg-white border-stone-300 text-stone-900 h-9 rounded-lg"
               />
             </div>

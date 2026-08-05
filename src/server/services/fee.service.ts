@@ -854,6 +854,16 @@ export async function listStudentFees(input?: {
             OR: [
               { fullName: { contains: params.search } },
               { admissionNo: { contains: params.search } },
+              {
+                family: {
+                  OR: [
+                    { fatherName: { contains: params.search } },
+                    { motherName: { contains: params.search } },
+                    { primaryPhone: { contains: params.search } },
+                    { secondaryPhone: { contains: params.search } },
+                  ],
+                },
+              },
             ],
           }
         : {}),
@@ -979,6 +989,7 @@ export async function getStudentFeeLedger(studentId: string) {
             referenceNo: true,
             notes: true,
             amount: true,
+            recordedBy: { select: { name: true } },
           },
         },
         studentFee: { include: { feeHead: true } },
@@ -1027,7 +1038,8 @@ export async function getStudentFeeLedger(studentId: string) {
       notes: string | null;
       paymentAmount: number;
       allocatedToStudent: number;
-      lines: Array<{ feeHead: string; amount: number }>;
+      recordedBy: string | null;
+      lines: Array<{ feeHead: string; amount: number; dueDate: Date | null }>;
     }
   >();
 
@@ -1037,6 +1049,7 @@ export async function getStudentFeeLedger(studentId: string) {
     const line = {
       feeHead: a.studentFee?.feeHead.name ?? "Advance",
       amount: decimalToNumber(a.amount),
+      dueDate: a.studentFee?.dueDate ?? null,
     };
     if (existing) {
       existing.allocatedToStudent += line.amount;
@@ -1051,6 +1064,7 @@ export async function getStudentFeeLedger(studentId: string) {
         notes: a.payment.notes,
         paymentAmount: decimalToNumber(a.payment.amount),
         allocatedToStudent: line.amount,
+        recordedBy: user.role === Role.STUDENT ? null : a.payment.recordedBy?.name ?? null,
         lines: [line],
       });
     }

@@ -2,12 +2,14 @@ import { listClasses } from "@/server/services/class.service";
 import { getCurrentSession, listSessions } from "@/server/services/session.service";
 import { PageHeader } from "@/components/shared/states";
 import { AttendanceClient } from "./attendance-client";
+import { getCurrentUser } from "@/server/auth/session";
 
 export default async function AttendancePage() {
-  const [classes, sessions, current] = await Promise.all([
+  const [classes, sessions, current, user] = await Promise.all([
     listClasses({ pageSize: 50 }),
     listSessions({ pageSize: 20 }),
     getCurrentSession(),
+    getCurrentUser(),
   ]);
 
   return (
@@ -17,6 +19,7 @@ export default async function AttendancePage() {
         classes={classes.items}
         sessions={sessions.items}
         currentSessionId={current?.id ?? null}
+        userRole={user?.role ?? "TEACHER"}
       />
     </div>
   );

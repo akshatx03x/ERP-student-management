@@ -35,7 +35,7 @@ export function GlobalFinancialSearchBar() {
       <div className="relative">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
         <Input
-          placeholder="Search student, receipt #, phone, family name..."
+          placeholder="Search name, adm no, parents, phone, receipt #..."
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           className="pl-9 bg-slate-900/60 border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-500"

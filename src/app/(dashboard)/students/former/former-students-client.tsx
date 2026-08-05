@@ -23,6 +23,7 @@ type FormerStudent = {
     fatherName?: string | null;
     motherName?: string | null;
     primaryPhone?: string | null;
+    secondaryPhone?: string | null;
   } | null;
   exitInfo?: {
     leavingDate: Date | string;
@@ -67,7 +68,10 @@ export function FormerStudentsClient({
       const matchName = s.fullName.toLowerCase().includes(q);
       const matchAdm = s.admissionNo.toLowerCase().includes(q);
       const matchTc = s.exitInfo?.tcNumber?.toLowerCase().includes(q);
-      return matchName || matchAdm || matchTc;
+      const matchFather = s.family?.fatherName?.toLowerCase().includes(q);
+      const matchMother = s.family?.motherName?.toLowerCase().includes(q);
+      const matchPhone = s.family?.primaryPhone?.includes(q) || s.family?.secondaryPhone?.includes(q);
+      return matchName || matchAdm || matchTc || matchFather || matchMother || matchPhone;
     }
     return true;
   });
@@ -83,7 +87,7 @@ export function FormerStudentsClient({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            placeholder="Search student or TC no..."
+            placeholder="Search name, adm no, parents, phone, TC..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full sm:w-60 h-8 text-xs"

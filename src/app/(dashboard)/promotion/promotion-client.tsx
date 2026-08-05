@@ -74,24 +74,36 @@ export function PromotionClient({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [confirmModal, setConfirmModal] = useState(false);
 
+  // Helper: returns true only for genuine Class 10 / X / 10th
+  function isClass10Name(name: string): boolean {
+    // Match whole-word "10", "X" (roman ten), "10th" — must be standalone, not "1" or "100"
+    return /(?:^|\s|-)(?:10|x|10th)(?:\s|-|$)/i.test(name) || /^10$/.test(name.trim());
+  }
+
   // Quick helper to auto-populate class mappings based on class sort / index order
   function handleAutoMap() {
     const mappings: Array<{ fromClassId: string; fromSectionId: string; toClassId: string; toSectionId: string }> = [];
     classes.forEach((cls, idx) => {
-      const isClass10 = /\b(10|x|10th)\b/i.test(cls.name) || cls.name.includes("10");
+      const isTerminal = isClass10Name(cls.name);
       const nextCls = classes[idx + 1];
       cls.sections.forEach((sec) => {
+        // Determine target:
+        //   - If this is Class 10 → Alumni
+        //   - If there is a next class → promote to next class
+        //   - Otherwise (last non-10 class, unusual) → map to same class (not Alumni)
+        const toClassId = isTerminal ? "ALUMNI" : nextCls?.id ?? cls.id;
         const matchingTargetSec = nextCls?.sections.find((s) => s.name === sec.name) ?? nextCls?.sections[0] ?? sec;
+        const toSectionId = isTerminal ? sec.id : (nextCls ? matchingTargetSec.id : sec.id);
         mappings.push({
           fromClassId: cls.id,
           fromSectionId: sec.id,
-          toClassId: isClass10 || !nextCls ? "ALUMNI" : nextCls.id,
-          toSectionId: matchingTargetSec.id,
+          toClassId,
+          toSectionId,
         });
       });
     });
     setClassMappings(mappings);
-    toast.success(`Auto-mapped ${mappings.length} class sections (Class 10 defaulted to Alumni)`);
+    toast.success(`Auto-mapped ${mappings.length} class sections (Class 10 → Alumni, others → next class)`);
   }
 
   function handleAddMapping() {
@@ -174,12 +186,9 @@ export function PromotionClient({
         ...prev,
         students: prev.students.map((s) => {
           if (targetClassId !== "ALL" && s.currentClassId !== targetClassId) return s;
-          const isStudentClass10 =
-            /\b(10|x|10th)\b/i.test(s.currentClassName) ||
-            s.currentClassName.includes("10") ||
-            s.targetClassId === "ALUMNI";
+          const isTerminal = isClass10Name(s.currentClassName) || s.targetClassId === "ALUMNI";
           let act = action;
-          if (isStudentClass10 && act === "PROMOTE") {
+          if (isTerminal && act === "PROMOTE") {
             act = "GRADUATE";
           }
           return { ...s, action: act };
@@ -386,7 +395,7 @@ export function PromotionClient({
                     <tr>
                       <th className="p-2.5">Source Class & Section</th>
                       <th className="p-2.5 text-center">To</th>
-                      <th className="p-2.5">Target Class & Section</th>
+      <th className="p-2.5">Target Class & Section</th>
                       <th className="p-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -396,7 +405,7 @@ export function PromotionClient({
                       const toCls = classes.find((c) => c.id === m.toClassId);
                       const fromSecs = fromCls?.sections ?? [];
                       const toSecs = toCls?.sections ?? [];
-                      const isClass10 = fromCls?.name ? /\b(10|x|10th)\b/i.test(fromCls.name) || fromCls.name.includes("10") : false;
+                      const isTerminalClass = fromCls?.name ? isClass10Name(fromCls.name) : false;
 
                       return (
                         <tr key={idx} className="hover:bg-muted/10">
@@ -408,8 +417,9 @@ export function PromotionClient({
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   const newCls = classes.find((c) => c.id === val);
-                                  const isC10 = newCls?.name ? /\b(10|x|10th)\b/i.test(newCls.name) || newCls.name.includes("10") : false;
-                                  const nextC = classes.find((c, i) => classes.findIndex((x) => x.id === val) + 1 === i);
+                                  const isTerminal = newCls?.name ? isClass10Name(newCls.name) : false;
+                                  const clsIndex = classes.findIndex((c) => c.id === val);
+                                  const nextC = clsIndex >= 0 ? classes[clsIndex + 1] : undefined;
                                   setClassMappings((prev) =>
                                     prev.map((item, i) =>
                                       i === idx
@@ -417,8 +427,10 @@ export function PromotionClient({
                                             ...item,
                                             fromClassId: val,
                                             fromSectionId: newCls?.sections[0]?.id ?? "",
-                                            toClassId: isC10 || !nextC ? "ALUMNI" : nextC.id,
-                                            toSectionId: isC10 || !nextC ? (newCls?.sections[0]?.id ?? "") : (nextC?.sections[0]?.id ?? ""),
+                                            toClassId: isTerminal ? "ALUMNI" : (nextC?.id ?? val),
+                                            toSectionId: isTerminal
+                                              ? (newCls?.sections[0]?.id ?? "")
+                                              : (nextC?.sections[0]?.id ?? newCls?.sections[0]?.id ?? ""),
                                           }
                                         : item
                                     )
@@ -452,7 +464,7 @@ export function PromotionClient({
                           <td className="p-2 text-center text-muted-foreground font-bold font-mono">➔</td>
                           <td className="p-2">
                             <div className="flex items-center gap-2">
-                              {isClass10 || m.toClassId === "ALUMNI" ? (
+                              {isTerminalClass || m.toClassId === "ALUMNI" ? (
                                 <div className="h-8 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-2.5 flex items-center">
                                   Alumni (Graduated)
                                 </div>

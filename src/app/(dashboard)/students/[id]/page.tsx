@@ -112,8 +112,21 @@ export default async function StudentDetailPage({
     paidAt: formatDate(p.paidAt),
     method: p.method,
     allocatedToStudent: formatCurrency(p.allocatedToStudent),
+    recordedBy: p.recordedBy,
     lines: p.lines,
   }));
+
+  const monthCollectors = paymentHistory.reduce((collectors, payment) => {
+    if (!payment.recordedBy) return collectors;
+
+    for (const line of payment.lines) {
+      const month = monthFromDueDate(line.dueDate);
+      const names = collectors[month] ?? [];
+      if (!names.includes(payment.recordedBy)) names.push(payment.recordedBy);
+      collectors[month] = names;
+    }
+    return collectors;
+  }, {} as Partial<Record<MonthKey, string[]>>);
 
   // ── Pending dues: lines with remaining > 0 ──
   const pendingDues = lines
@@ -145,6 +158,7 @@ export default async function StudentDetailPage({
         photoUrl: student.photoUrl,
         apaarId: student.apaarId,
         penId: student.penId,
+        srNo: student.srNo,
       }}
       family={{
         fatherName: family.fatherName,
@@ -166,6 +180,7 @@ export default async function StudentDetailPage({
         status: e.status,
       }))}
       paymentHistory={paymentHistory}
+      monthCollectors={monthCollectors}
       pendingDues={pendingDues}
       feeHeadRows={feeHeadRows}
       allMonths={ALL_MONTHS as unknown as string[]}

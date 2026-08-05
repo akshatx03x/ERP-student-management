@@ -235,7 +235,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
     let filename = "report.csv";
 
     if (activeTab === "receipt" && receiptData?.items) {
-      header = "Date,Receipt No,Method,Student(s),Class,Amount,Status,Recorded By\n";
+      header = "Date,Receipt No,Method,Student(s),Class,Amount,Status,Collected By\n";
       body = receiptData.items.map((r: any) =>
         `"${formatDate(r.paidAt)}","${r.receiptNo}","${r.method}","${r.students.map((s: any) => s.name).join("; ")}","${r.students[0]?.classSection ?? ""}",${r.amount},"${r.status}","${r.recordedBy?.name ?? ""}"`
       ).join("\n");
@@ -404,7 +404,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, phone, admission no…"
+              placeholder="Search name, adm no, parents, phone…"
               className="pl-8 h-8 text-xs bg-white rounded-lg border-stone-300"
             />
           </div>
@@ -530,7 +530,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
                   <th className="py-3 px-4">Parent</th>
                   <th className="py-3 px-4 text-right">Amount</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Recorded By</th>
+                  <th className="py-3 px-4">Collected By</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
