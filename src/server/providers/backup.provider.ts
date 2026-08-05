@@ -2,8 +2,81 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import zlib from "zlib";
+// @ts-ignore
+import { DatabaseSync } from "node:sqlite";
 import { appConfig } from "../../config/app-config";
-import { prisma, ensureSqlitePragmas } from "../lib/prisma";
+import { prisma, ensureSqlitePragmas, recreatePrismaInstance } from "../lib/prisma";
+
+export function getSchemaFingerprint(): string {
+  try {
+    const schemaPath = path.resolve(process.cwd(), "prisma/schema.prisma");
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error(`Schema file not found at: ${schemaPath}`);
+    }
+    const content = fs.readFileSync(schemaPath, "utf8");
+    // Normalize content:
+    // 1. Remove single-line comments // ...
+    // 2. Remove multi-line comments /* ... */
+    // 3. Normalize all line endings to \n
+    // 4. Collapse consecutive spaces/tabs to a single space
+    // 5. Remove blank lines
+    // 6. Trim leading/trailing whitespace
+    const normalized = content
+      .replace(/\/\/.*$/gm, "")                     // remove line comments
+      .replace(/\/\*[\s\S]*?\*\//g, "")             // remove block comments
+      .replace(/\r\n/g, "\n")                        // normalize line endings
+      .replace(/[ \t]+/g, " ")                      // collapse spaces/tabs
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .join("\n");
+      
+    return crypto.createHash("sha256").update(normalized).digest("hex");
+  } catch (err: any) {
+    console.error("[BackupProvider] Failed to compute schema fingerprint:", err);
+    return "unknown-fingerprint";
+  }
+}
+
+/**
+ * Validate a database file snapshot using native SQLite library (NO PRISMA).
+ * Verifies integrity and foreign keys.
+ */
+export function verifyBackupDbSnapshot(dbFilePath: string): { sqliteVersion: string } {
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(dbFilePath);
+    
+    // 1. SQLite PRAGMA integrity_check
+    const integrity = db.prepare("PRAGMA integrity_check;").all() as { integrity_check: string }[];
+    if (!integrity || integrity.length === 0 || integrity[0].integrity_check !== "ok") {
+      throw new BackupError("CORRUPT_ARCHIVE", "Database integrity validation failed.");
+    }
+    
+    // 2. SQLite PRAGMA foreign_key_check
+    const fkChecks = db.prepare("PRAGMA foreign_key_check;").all();
+    if (fkChecks && fkChecks.length > 0) {
+      throw new BackupError("INVALID_FORMAT", "Foreign key validation failed.");
+    }
+
+    // 3. Get SQLite Version
+    const sqlVersionRow = db.prepare("SELECT sqlite_version() AS version;").get() as { version: string } | undefined;
+    const sqliteVersion = sqlVersionRow?.version ?? "unknown";
+
+    return { sqliteVersion };
+  } catch (err: any) {
+    if (err instanceof BackupError) {
+      throw err;
+    }
+    throw new BackupError("CORRUPT_ARCHIVE", `Database integrity validation failed: ${err.message}`);
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+}
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -37,11 +110,12 @@ export class BackupError extends Error {
 export interface BackupFileMetadata {
   backupFormatVersion: number;
   erpVersion: string;
-  dbVersion: string;
+  sqliteVersion: string;
   createdAt: string; // ISO 8601
   schoolName: string;
   label?: string;
   sha256: string; // SHA-256 hex digest of the inner database.db
+  schemaFingerprint: string;
 }
 
 export interface BackupMetadata {
@@ -56,6 +130,7 @@ export interface BackupMetadata {
   backupFormatVersion: number;
   erpVersion: string;
   sha256: string;
+  schemaFingerprint: string;
   label?: string;
 }
 
@@ -244,30 +319,48 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     }
 
     try {
-      // Step 2 — compute SHA-256 of the snapshot
+      // Step 2 — Verify and validate the temporary database snapshot using native SQLite
+      const { sqliteVersion } = verifyBackupDbSnapshot(tempDbPath);
+
+      // Step 3 — compute SHA-256 of the snapshot
       const sha256 = await sha256File(tempDbPath);
 
-      // Step 3 — read school name for metadata
+      // Step 4 — read school details and session for metadata
       let schoolName = "Unknown School";
+      let schoolId = "";
+      let activeSession = "";
       try {
-        const school = await prisma.school.findFirst({ select: { name: true } });
-        if (school) schoolName = school.name;
+        const school = await prisma.school.findFirst({ select: { id: true, name: true } });
+        if (school) {
+          schoolName = school.name;
+          schoolId = school.id;
+        }
+        const session = await prisma.academicSession.findFirst({ where: { isCurrent: true }, select: { name: true } });
+        if (session) {
+          activeSession = session.name;
+        }
       } catch {
         // non-critical
       }
 
-      // Step 4 — build metadata
-      const fileMetadata: BackupFileMetadata = {
+      const tempDbStats = await fs.promises.stat(tempDbPath);
+
+      // Step 5 — build metadata with schemaFingerprint
+      const fileMetadata: BackupFileMetadata & { schoolId?: string; activeSession?: string; backupSize?: number } = {
         backupFormatVersion: BACKUP_FORMAT_VERSION,
         erpVersion: getErpVersion(),
-        dbVersion: "sqlite3",
+        sqliteVersion,
         createdAt: new Date().toISOString(),
         schoolName,
+        schoolId,
+        activeSession,
+        backupSize: tempDbStats.size,
         sha256,
+        schemaFingerprint: getSchemaFingerprint(),
         ...(label ? { label } : {}),
       };
 
-      // Step 5 — read snapshot into buffer and create archive
+      // Step 6 — read snapshot into buffer and create archive
       const dbBuffer = await fs.promises.readFile(tempDbPath);
       const metaBuffer = Buffer.from(JSON.stringify(fileMetadata, null, 2), "utf8");
 
@@ -295,6 +388,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         backupFormatVersion: fileMetadata.backupFormatVersion,
         erpVersion: fileMetadata.erpVersion,
         sha256: fileMetadata.sha256,
+        schemaFingerprint: fileMetadata.schemaFingerprint,
         ...(label ? { label } : {}),
       };
     } finally {
@@ -312,7 +406,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
   async validateAndPrepareRestore(backupFilePath: string): Promise<RestoreValidationResult> {
     // 1. File must exist
     if (!fs.existsSync(backupFilePath)) {
-      throw new BackupError("FILE_NOT_FOUND", `Backup file not found at: ${backupFilePath}`);
+      throw new BackupError("FILE_NOT_FOUND", "Backup file not found.");
     }
 
     // 2. Read archive
@@ -320,7 +414,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     try {
       archiveBuffer = await fs.promises.readFile(backupFilePath);
     } catch (err: unknown) {
-      throw new BackupError("FILE_NOT_FOUND", `Cannot read backup file: ${(err as Error).message}`);
+      throw new BackupError("FILE_NOT_FOUND", "Cannot read backup file.");
     }
 
     // 3. Extract entries
@@ -329,20 +423,20 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       entries = await zipExtract(archiveBuffer);
     } catch (err: unknown) {
       if (err instanceof BackupError) throw err;
-      throw new BackupError("CORRUPT_ARCHIVE", `Failed to read archive: ${(err as Error).message}`);
+      throw new BackupError("CORRUPT_ARCHIVE", "Backup archive is corrupted.");
     }
 
     // 4. Validate metadata.json exists
     const metaRaw = entries.get("metadata.json");
     if (!metaRaw) {
-      throw new BackupError("INVALID_FORMAT", "Backup file is missing metadata.json. This does not appear to be a valid .erpbackup file.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
     }
 
     let fileMetadata: BackupFileMetadata;
     try {
       fileMetadata = JSON.parse(metaRaw.toString("utf8")) as BackupFileMetadata;
     } catch {
-      throw new BackupError("INVALID_FORMAT", "metadata.json in the backup file is corrupted and cannot be parsed.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
     }
 
     // 5. Validate required metadata fields
@@ -352,38 +446,53 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       typeof fileMetadata.createdAt !== "string" ||
       typeof fileMetadata.schoolName !== "string"
     ) {
-      throw new BackupError("INVALID_FORMAT", "metadata.json is missing required fields. The backup may be from an incompatible version.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
     }
 
-    // 6. Version compatibility check
+    // 6. Compare Backup Format Version
     if (fileMetadata.backupFormatVersion > BACKUP_FORMAT_VERSION) {
+      throw new BackupError("VERSION_INCOMPATIBLE", "Backup format is unsupported.");
+    }
+
+    // 7. Compare Schema Fingerprint (detect mismatch as older ERP version)
+    const currentFingerprint = getSchemaFingerprint();
+    if (!fileMetadata.schemaFingerprint || fileMetadata.schemaFingerprint !== currentFingerprint) {
+      console.warn(`[BackupRestore] Fingerprint mismatch! Current: ${currentFingerprint}, Backup: ${fileMetadata.schemaFingerprint}`);
       throw new BackupError(
         "VERSION_INCOMPATIBLE",
-        `This backup was created with a newer version of the ERP (format v${fileMetadata.backupFormatVersion}). The current system only supports format v${BACKUP_FORMAT_VERSION}. Please upgrade the ERP before restoring.`,
+        "Backup was created with an older ERP version. Database migration is required before restore."
       );
     }
 
-    // 7. database.db must be present
+    // 8. database.db must be present
     const dbBuffer = entries.get("database.db");
     if (!dbBuffer) {
-      throw new BackupError("INVALID_FORMAT", "Backup archive does not contain a database.db file. The backup is incomplete.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
     }
 
-    // 8. Integrity check — SHA-256 of the extracted database.db
+    // 9. Integrity check — SHA-256 checksum mismatch
     const actualHash = sha256Buffer(dbBuffer);
     if (actualHash !== fileMetadata.sha256) {
-      throw new BackupError(
-        "INTEGRITY_MISMATCH",
-        `SHA-256 integrity check failed. The backup file may be corrupted or tampered with.\nExpected: ${fileMetadata.sha256}\nActual:   ${actualHash}`,
-      );
+      throw new BackupError("INTEGRITY_MISMATCH", "Database checksum mismatch.");
     }
 
-    // 9. Write validated database to temp path
+    // 10. Write database to temp path
     const tempDbPath = path.join(
       this.tempDir,
       `restore_validated_${Date.now()}.db`,
     );
     await fs.promises.writeFile(tempDbPath, dbBuffer);
+
+    // 11. Deep native SQLite diagnostics (integrity, FKs)
+    try {
+      verifyBackupDbSnapshot(tempDbPath);
+    } catch (err: any) {
+      try { await fs.promises.unlink(tempDbPath); } catch { /* ignore */ }
+      if (err instanceof BackupError) {
+        throw err;
+      }
+      throw new BackupError("CORRUPT_ARCHIVE", "Database integrity validation failed.");
+    }
 
     console.log(`[BackupProvider] Backup validated successfully. Temp DB at: ${tempDbPath}`);
 
@@ -410,35 +519,58 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
 
     // Create a safety backup of the current db before overwriting
     const safetyBackupPath = `${targetDbFile}.pre-restore-${Date.now()}.bak`;
+    const safetyWalPath = `${walFile}.pre-restore-${Date.now()}.bak`;
+    const safetyShmPath = `${shmFile}.pre-restore-${Date.now()}.bak`;
+
+    let safetyBackupCreated = false;
 
     try {
-      // Step 1 — Snapshot current DB as a safety net
+      // 1. Create safety backup
       if (fs.existsSync(targetDbFile)) {
         await fs.promises.copyFile(targetDbFile, safetyBackupPath);
+        safetyBackupCreated = true;
+      }
+      if (fs.existsSync(walFile)) {
+        await fs.promises.copyFile(walFile, safetyWalPath);
+      }
+      if (fs.existsSync(shmFile)) {
+        await fs.promises.copyFile(shmFile, safetyShmPath);
       }
 
-      // Step 2 — Disconnect Prisma to release all file locks
-      await prisma.$disconnect();
+      // 2. Destroy and disconnect all Prisma connections
+      await recreatePrismaInstance();
 
-      // Step 3 — Delete WAL/SHM files (leftover journal files can interfere)
+      // 3. Replace Database: remove WAL/SHM and copy new database
       for (const f of [walFile, shmFile]) {
         if (fs.existsSync(f)) {
           try { await fs.promises.unlink(f); } catch { /* non-critical */ }
         }
       }
-
-      // Step 4 — Atomic file copy (this is the point of no return)
       await fs.promises.copyFile(validatedTempDbPath, targetDbFile);
 
-      // Step 5 — Reconnect Prisma to the restored database
-      await prisma.$connect();
-      await ensureSqlitePragmas(prisma);
+      // 4. Recreate Prisma instances & Reconnect
+      await recreatePrismaInstance();
 
-      // Step 6 — Clean up temp file
+      // 5. Smoke test: Verify we can query the new database successfully
+      try {
+        await prisma.school.findFirst();
+        const principalExists = await prisma.user.findFirst({ where: { role: "PRINCIPAL" } });
+        if (!principalExists) {
+          throw new Error("No Principal");
+        }
+      } catch (smokeErr) {
+        throw new Error("Smoke test failed");
+      }
+
+      // Clean up temp file
       try { await fs.promises.unlink(validatedTempDbPath); } catch { /* non-critical */ }
 
-      // Step 7 — Remove safety backup (restore succeeded)
-      try { await fs.promises.unlink(safetyBackupPath); } catch { /* non-critical */ }
+      // Clean up safety backups
+      try {
+        if (fs.existsSync(safetyBackupPath)) await fs.promises.unlink(safetyBackupPath);
+        if (fs.existsSync(safetyWalPath)) await fs.promises.unlink(safetyWalPath);
+        if (fs.existsSync(safetyShmPath)) await fs.promises.unlink(safetyShmPath);
+      } catch { /* non-critical */ }
 
       console.log("[BackupProvider] Database restored successfully.");
 
@@ -446,34 +578,48 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         success: true,
         message: "Database restored successfully. The ERP is now running on the restored data.",
       };
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error("[BackupProvider] Restore failed:", err);
 
-      // Attempt to roll back using the safety backup
-      try {
-        await prisma.$disconnect();
-      } catch { /* ignore */ }
+      // Rollback atomically
+      if (safetyBackupCreated) {
+        try {
+          await recreatePrismaInstance();
 
-      if (fs.existsSync(safetyBackupPath)) {
-        try {
-          await fs.promises.copyFile(safetyBackupPath, targetDbFile);
-          await prisma.$connect();
-          await ensureSqlitePragmas(prisma);
-          console.log("[BackupProvider] Rolled back to pre-restore database successfully.");
-        } catch (rollbackErr: unknown) {
-          console.error("[BackupProvider] Rollback also failed:", rollbackErr);
+          for (const f of [targetDbFile, walFile, shmFile]) {
+            if (fs.existsSync(f)) {
+              try { await fs.promises.unlink(f); } catch {}
+            }
+          }
+
+          if (fs.existsSync(safetyBackupPath)) {
+            await fs.promises.copyFile(safetyBackupPath, targetDbFile);
+          }
+          if (fs.existsSync(safetyWalPath)) {
+            await fs.promises.copyFile(safetyWalPath, walFile);
+          }
+          if (fs.existsSync(safetyShmPath)) {
+            await fs.promises.copyFile(safetyShmPath, shmFile);
+          }
+
+          await recreatePrismaInstance();
+          console.log("[BackupProvider] Rolled back to safety backup successfully.");
+        } catch (rollbackErr: any) {
+          console.error("[BackupProvider] Critical rollback failure:", rollbackErr);
         }
-      } else {
-        // Try to reconnect regardless
-        try {
-          await prisma.$connect();
-        } catch { /* ignore */ }
       }
 
-      return {
-        success: false,
-        message: `Restore failed: ${(err as Error).message}. The original database has been restored automatically.`,
-      };
+      throw new BackupError(
+        "RESTORE_FAILED",
+        "Restore failed and the original database has been restored automatically."
+      );
+    } finally {
+      // Remove any leftover safety files
+      try {
+        if (fs.existsSync(safetyBackupPath)) await fs.promises.unlink(safetyBackupPath);
+        if (fs.existsSync(safetyWalPath)) await fs.promises.unlink(safetyWalPath);
+        if (fs.existsSync(safetyShmPath)) await fs.promises.unlink(safetyShmPath);
+      } catch {}
     }
   }
 
@@ -503,6 +649,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         backupFormatVersion: fileMetadata?.backupFormatVersion ?? 1,
         erpVersion: fileMetadata?.erpVersion ?? "unknown",
         sha256: fileMetadata?.sha256 ?? "",
+        schemaFingerprint: fileMetadata?.schemaFingerprint ?? "",
         ...(fileMetadata?.label ? { label: fileMetadata.label } : {}),
       });
     }

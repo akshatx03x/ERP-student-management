@@ -115,7 +115,13 @@ export const appConfig: AppConfig = {
     return {
       baseDir,
       dataDir: path.join(baseDir, "data"),
-      dbFilePath: path.join(baseDir, "data", "school.db"),
+      dbFilePath: (() => {
+        const url = resolveDatabaseUrl();
+        if (url.startsWith("file:")) {
+          return url.replace(/^file:/, "");
+        }
+        return path.join(baseDir, "data", "school.db");
+      })(),
       uploadsDir:
         process.env.OFFLINE_UPLOAD_DIR || path.join(baseDir, "uploads"),
       backupsDir:

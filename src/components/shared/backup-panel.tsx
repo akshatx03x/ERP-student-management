@@ -92,12 +92,12 @@ const BACKUP_STEP_LABELS: Record<BackupStep, string> = {
 
 const RESTORE_STEP_LABELS: Record<RestoreStep, string> = {
   idle: "",
-  uploading: "Uploading backup file…",
-  validating: "Validating backup integrity…",
+  uploading: "Extracting Backup…",
+  validating: "Reading Metadata & Validating Database…",
   confirm: "",
-  clearing: "Clearing existing data…",
-  restoring: "Restoring database…",
-  finalizing: "Finalizing restore…",
+  clearing: "Creating Safety Backup…",
+  restoring: "Replacing Database…",
+  finalizing: "Restarting Database Connection…",
   done: "Restore complete",
   error: "Restore failed",
 };
@@ -127,7 +127,6 @@ function BackupInfoCard({ backup }: { backup: BackupInfo }) {
       <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
         <Info className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
         <div>
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Backup Format</p>
           <p className="text-sm font-semibold text-slate-800 mt-0.5">ERP Backup v{backup.backupFormatVersion}</p>
           <p className="text-xs text-slate-500">v{backup.erpVersion}</p>
         </div>
@@ -157,6 +156,54 @@ function ProgressBanner({
       {variant === "success" && <CheckCircle2 className="h-4 w-4 shrink-0" />}
       {variant === "error" && <AlertTriangle className="h-4 w-4 shrink-0" />}
       {label}
+    </div>
+  );
+}
+
+const RESTORE_PROGRESS: Record<RestoreStep, { stage: string; percentage: number }> = {
+  idle: { stage: "", percentage: 0 },
+  uploading: { stage: "Extracting Backup", percentage: 10 },
+  validating: { stage: "Reading Metadata & Validating Database", percentage: 40 },
+  confirm: { stage: "Awaiting Confirmation...", percentage: 45 },
+  clearing: { stage: "Creating Safety Backup", percentage: 60 },
+  restoring: { stage: "Replacing Database", percentage: 80 },
+  finalizing: { stage: "Restarting Database Connection", percentage: 90 },
+  done: { stage: "Restore Complete", percentage: 100 },
+  error: { stage: "Restore failed", percentage: 0 },
+};
+
+function RestoreProgressDialog({ step }: { step: RestoreStep }) {
+  const { stage, percentage } = RESTORE_PROGRESS[step];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-6 text-center">
+        <div className="flex justify-center">
+          <Loader2 className="h-10 w-10 text-indigo-600 animate-spin" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold text-slate-800">Restoring Database</h2>
+          <p className="text-sm text-slate-500">{stage}</p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs font-semibold text-slate-400">
+            <span>Progress</span>
+            <span>{percentage}%</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div
+              className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+        </div>
+
+        <p className="text-[10px] text-slate-400">
+          Please do not close this tab or refresh the page. User interaction is disabled until restore completes.
+        </p>
+      </div>
     </div>
   );
 }
@@ -477,6 +524,11 @@ export function BackupPanel({
           onCancel={handleCancelRestore}
           isPending={isRestorePending}
         />
+      )}
+
+      {/* Restore Progress Dialog */}
+      {isRestoreBusy && restoreStep !== "confirm" && (
+        <RestoreProgressDialog step={restoreStep} />
       )}
 
       <Card className="border-slate-200 shadow-sm">
