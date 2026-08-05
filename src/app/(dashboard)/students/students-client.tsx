@@ -181,6 +181,7 @@ export function StudentsClient({
       missingRequired?: number;
       unknownClasses?: number;
       unknownSections?: number;
+      missingFeeStructures?: number;
     };
     rows: Array<{
       rowNumber: number;
@@ -906,7 +907,7 @@ export function StudentsClient({
                   {importStep === "PREVIEW" && previewData && (
                     <div className="space-y-4 flex flex-col h-full min-h-0">
                       {/* Summary Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5 shrink-0">
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 shrink-0">
                         <div className="bg-stone-50 border p-2.5 rounded-lg text-center">
                           <span className="text-[9px] uppercase font-bold text-stone-400 block mb-0.5">Total Rows</span>
                           <span className="text-base font-extrabold text-stone-700">{previewData.summary.total}</span>
@@ -934,6 +935,10 @@ export function StudentsClient({
                         <div className="bg-purple-50 border border-purple-100 p-2.5 rounded-lg text-center">
                           <span className="text-[9px] uppercase font-bold text-purple-600 block mb-0.5">Bad Section</span>
                           <span className="text-base font-extrabold text-purple-700">{previewData.summary.unknownSections ?? 0}</span>
+                        </div>
+                        <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-red-600 block mb-0.5">Missing Fee Struct</span>
+                          <span className="text-base font-extrabold text-red-700">{previewData.summary.missingFeeStructures ?? 0}</span>
                         </div>
                       </div>
 
@@ -998,55 +1003,15 @@ export function StudentsClient({
                                   <td className="px-3 py-2.5 font-mono font-semibold">{row.admissionNo || "—"}</td>
                                   <td className="px-3 py-2.5 font-bold text-stone-800">{row.studentName || "—"}</td>
                                   <td className="px-3 py-2.5">
-                                    <div className="flex flex-col gap-1">
-                                      <select
-                                        value={row.className || ""}
-                                        onChange={(e) => handleInlineEdit(row.rowNumber, "className", e.target.value)}
-                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
-                                      >
-                                        <option value="">-- Class --</option>
-                                        {classes.map(c => (
-                                          <option key={c.id} value={c.name}>{c.name}</option>
-                                        ))}
-                                      </select>
-                                      <select
-                                        value={row.sectionName || ""}
-                                        onChange={(e) => handleInlineEdit(row.rowNumber, "sectionName", e.target.value)}
-                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
-                                        disabled={!row.className}
-                                      >
-                                        <option value="">-- Section --</option>
-                                        {classes.find(c => c.name === row.className)?.sections.map(s => (
-                                          <option key={s.id} value={s.name}>{s.name}</option>
-                                        )) || null}
-                                      </select>
+                                    <div className="flex flex-col gap-0.5 text-stone-700">
+                                      <span className="font-semibold">{row.className || "—"}</span>
+                                      <span className="text-stone-400 text-[10px]">Section: {row.sectionName || "—"}</span>
                                     </div>
                                   </td>
                                   <td className="px-3 py-2.5">
-                                    <div className="flex flex-col gap-1">
-                                      <select
-                                        value={row.data.gender || ""}
-                                        onChange={(e) => handleInlineEdit(row.rowNumber, "gender", e.target.value)}
-                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
-                                      >
-                                        <option value="">-- Gender --</option>
-                                        <option value="MALE">Male</option>
-                                        <option value="FEMALE">Female</option>
-                                        <option value="OTHER">Other</option>
-                                      </select>
-                                      <select
-                                        value={row.data.category || ""}
-                                        onChange={(e) => handleInlineEdit(row.rowNumber, "category", e.target.value)}
-                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
-                                      >
-                                        <option value="">-- Category --</option>
-                                        <option value="GENERAL">General</option>
-                                        <option value="OBC">OBC</option>
-                                        <option value="SC">SC</option>
-                                        <option value="ST">ST</option>
-                                        <option value="EWS">EWS</option>
-                                        <option value="OTHER">Other</option>
-                                      </select>
+                                    <div className="flex flex-col gap-0.5 text-stone-700">
+                                      <span className="capitalize">{(row.data.gender || "—").toLowerCase()}</span>
+                                      <span className="text-stone-400 text-[10px] capitalize">{(row.data.category || "—").toLowerCase()}</span>
                                     </div>
                                   </td>
                                   <td className="px-3 py-2.5">

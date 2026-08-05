@@ -357,6 +357,13 @@ export async function validateStudentsImport(
     where: { schoolId, isCurrent: true },
   });
 
+  const sessionFeeStructures = currentSession
+    ? await prisma.feeStructure.findMany({
+        where: { sessionId: currentSession.id },
+        select: { classId: true }
+      })
+    : [];
+
   const admBase = await getNextAdmissionNoBase(schoolId);
 
   const rows: ValidationResultRow[] = [];
@@ -438,6 +445,14 @@ export async function validateStudentsImport(
       const { matchedClass, suggestion } = findClassMatch(rawClass, dbClasses);
       if (matchedClass) {
         classId = matchedClass.id;
+        
+        // Fee Structure check
+        const feeStructureExists = sessionFeeStructures.some(fs => fs.classId === classId);
+        if (!feeStructureExists) {
+          status = "ERROR";
+          reasons.push(`Fee Structure not found for Class ${matchedClass.name}. Please create the Fee Structure before importing students.`);
+        }
+
         if (rawSection) {
           const cleanSectionInput = normalizeSectionName(rawSection);
           const matchedSection = (matchedClass as any).sections.find(
@@ -578,6 +593,7 @@ export async function validateStudentsImport(
   const missingRequiredCount = rows.filter(r => r.reason.toLowerCase().includes("required")).length;
   const unknownClassCount = rows.filter(r => r.reason.toLowerCase().includes("class") && r.reason.toLowerCase().includes("not found")).length;
   const unknownSectionCount = rows.filter(r => r.reason.toLowerCase().includes("section") && r.reason.toLowerCase().includes("not found")).length;
+  const missingFeeStructureCount = rows.filter(r => r.reason.toLowerCase().includes("fee structure not found")).length;
 
   return {
     summary: {
@@ -588,7 +604,8 @@ export async function validateStudentsImport(
       duplicates: duplicateCount,
       missingRequired: missingRequiredCount,
       unknownClasses: unknownClassCount,
-      unknownSections: unknownSectionCount
+      unknownSections: unknownSectionCount,
+      missingFeeStructures: missingFeeStructureCount
     },
     rows
   };

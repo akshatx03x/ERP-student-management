@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/shared/states";
 import { BackupPanel } from "@/components/shared/backup-panel";
 import { unstable_cache } from "next/cache";
 import { getBackupProvider } from "@/server/providers/backup.provider";
+import { SessionFilter } from "./session-filter";
 
 import { LucideIcon, GraduationCap, CalendarCheck, Coins, AlertCircle, BookOpen } from "lucide-react";
 
@@ -41,7 +42,11 @@ function Metric({
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sessionId?: string }>;
+}) {
   const { user } = await requirePermission("dashboard.view");
 
   // Gracefully handle users not linked to a school (e.g. manually registered accounts).
@@ -74,6 +79,14 @@ export default async function DashboardPage() {
   }
 
   const schoolId = user.schoolId;
+
+  const sessions = await prisma.academicSession.findMany({
+    where: { schoolId },
+    orderBy: { startDate: "desc" },
+  });
+  const currentSession = sessions.find((s) => s.isCurrent) || sessions[0];
+  const resolvedParams = await searchParams;
+  const selectedSessionId = resolvedParams?.sessionId || currentSession?.id;
 
   if (user.role === "STUDENT" && user.studentId) {
     const student = await prisma.student.findUnique({
@@ -138,22 +151,20 @@ export default async function DashboardPage() {
   }
 
   const fetchCachedStats = unstable_cache(
-    async (sId: string) => {
-      const [students, attendanceToday, feesCollected, pendingFeeRows] = await Promise.all([
+    async (sId: string, sessId: string | undefined) => {
+      const [students, feesCollected, pendingFeeRows] = await Promise.all([
         prisma.student.count({ where: { schoolId: sId, status: "ACTIVE" } }),
-        prisma.attendanceRecord.count({
+        prisma.feePaymentAllocation.aggregate({
           where: {
-            date: new Date(new Date().toISOString().slice(0, 10)),
             student: { schoolId: sId },
+            studentFee: sessId ? { sessionId: sessId } : undefined
           },
-        }),
-        prisma.familyPayment.aggregate({
-          where: { family: { schoolId: sId } },
           _sum: { amount: true },
         }),
         prisma.studentFee.findMany({
           where: {
             student: { schoolId: sId },
+            sessionId: sessId || undefined,
             status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
           },
           include: { allocations: true },
@@ -168,17 +179,16 @@ export default async function DashboardPage() {
 
       return {
         students,
-        attendanceToday,
         collected,
         pending,
       };
     },
-    [`dashboard-stats-${schoolId}`],
+    [`dashboard-stats-${schoolId}-${selectedSessionId || "default"}`],
     { revalidate: 15, tags: [`dashboard-stats-${schoolId}`] }
   );
 
-  const stats = await fetchCachedStats(schoolId);
-  const { students, attendanceToday, collected, pending } = stats;
+  const stats = await fetchCachedStats(schoolId, selectedSessionId);
+  const { students, collected, pending } = stats;
 
   // Load last backup info for the Principal's dashboard (non-blocking)
   const principalView = isPrincipal(user.role);
@@ -208,12 +218,17 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-800">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Welcome back, {user.name}</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-800">Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500">Welcome back, {user.name}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <SessionFilter sessions={sessions} selectedSessionId={selectedSessionId} />
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Metric 
           label="Active Students" 
           value={students} 
@@ -224,18 +239,9 @@ export default async function DashboardPage() {
           iconColorClass="text-emerald-600"
         />
         <Metric 
-          label="Today's Attendance" 
-          value={attendanceToday} 
-          subtext="Student daily records entered"
-          icon={CalendarCheck}
-          borderClass="border-l-indigo-500"
-          iconBgClass="bg-indigo-50"
-          iconColorClass="text-indigo-600"
-        />
-        <Metric 
           label="Fees Collected" 
           value={formatCurrency(collected)} 
-          subtext="All-time payment collection"
+          subtext="Selected session payment collection"
           icon={Coins}
           borderClass="border-l-amber-500"
           iconBgClass="bg-amber-50"
@@ -244,7 +250,7 @@ export default async function DashboardPage() {
         <Metric 
           label="Fees Pending" 
           value={formatCurrency(pending)} 
-          subtext="Awaiting invoice payments"
+          subtext="Selected session pending payments"
           icon={AlertCircle}
           borderClass="border-l-rose-500"
           iconBgClass="bg-rose-50"
