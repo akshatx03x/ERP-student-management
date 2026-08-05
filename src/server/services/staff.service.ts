@@ -85,7 +85,7 @@ export async function listStaff(input?: {
     prisma.staffProfile.findMany({
       where,
       include: {
-        user: { select: { id: true, email: true, isActive: true, mustChangePassword: true } },
+        user: { select: { id: true, email: true, isActive: true, mustChangePassword: true, loginIdentifier: true } },
       },
       orderBy: { fullName: "asc" },
       skip,
@@ -104,7 +104,7 @@ export async function getStaff(staffProfileId: string) {
   const staff = await prisma.staffProfile.findFirst({
     where: { id: staffProfileId, schoolId },
     include: {
-      user: { select: { id: true, email: true, isActive: true, mustChangePassword: true } },
+      user: { select: { id: true, email: true, isActive: true, mustChangePassword: true, loginIdentifier: true } },
       classTeacherAssignments: {
         include: { section: { include: { class: true } }, session: true },
         orderBy: { createdAt: "desc" },
@@ -209,8 +209,16 @@ export async function deleteStaff(staffProfileId: string) {
     where: { id: staffProfileId, schoolId },
     include: { user: true },
   });
+
   if (!existing) throw new Error("Staff member not found");
-  if (existing.role === Role.PRINCIPAL) throw new Error("Cannot delete principal account");
+  if (existing.role === Role.PRINCIPAL) {
+    const principalCount = await prisma.staffProfile.count({
+      where: { role: Role.PRINCIPAL, schoolId },
+    });
+    if (principalCount <= 1) {
+      throw new Error("Cannot delete the last remaining Principal account");
+    }
+  }
 
   return prisma.$transaction(async (tx) => {
     if (existing.user) {

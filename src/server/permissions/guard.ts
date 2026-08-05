@@ -21,7 +21,7 @@ export const resolveEffectivePermissions = cache(async function resolveEffective
 ): Promise<Set<PermissionKey>> {
   const t0 = process.env.NODE_ENV === "development" ? performance.now() : 0;
 
-  if (isPrincipal(role)) {
+  if (isPrincipal(role) || role === "DEVELOPER") {
     const all = new Set<PermissionKey>();
     for (const resource of PERMISSION_RESOURCES) {
       for (const action of PERMISSION_ACTIONS) {
@@ -29,7 +29,7 @@ export const resolveEffectivePermissions = cache(async function resolveEffective
       }
     }
     if (process.env.NODE_ENV === "development") {
-      console.log(`[perf] resolveEffectivePermissions (PRINCIPAL, no DB): ${(performance.now() - t0).toFixed(1)}ms`);
+      console.log(`[perf] resolveEffectivePermissions (PRINCIPAL/DEVELOPER, no DB): ${(performance.now() - t0).toFixed(1)}ms`);
     }
     return all;
   }
@@ -72,6 +72,13 @@ export const resolveEffectivePermissions = cache(async function resolveEffective
     }
   }
 
+  console.log(`[DEBUG PERMISSIONS] resolveEffectivePermissions:`, {
+    userId,
+    role,
+    totalResolved: effective.size,
+    allowed: Array.from(effective),
+  });
+
   return effective;
 });
 
@@ -81,7 +88,17 @@ export async function requirePermission(key: PermissionKey) {
     throw new Error("PASSWORD_CHANGE_REQUIRED");
   }
   const perms = await resolveEffectivePermissions(user.id, user.role);
-  if (!perms.has(key)) {
+  const isAllowed = perms.has(key);
+  console.log(`[DEBUG RBAC] requirePermission Decision:`, {
+    currentUser: user.email,
+    role: user.role,
+    totalResolved: perms.size,
+    allowed: Array.from(perms),
+    requestedPermission: key,
+    decision: isAllowed ? "ALLOWED" : "DENIED",
+  });
+  if (!isAllowed) {
+    console.warn(`[RBAC DENIED] Access denied for user ${user.email} (${user.role}). Required: "${key}"`);
     throw new Error("FORBIDDEN");
   }
   return { user, permissions: perms };

@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/server/lib/prisma";
 import {
   listStudents,
   listFormerStudents,
   listAlumniStudents,
+  listRetainedStudents,
   getStudent,
   createStudent,
   createStudentWithFamily,
@@ -40,6 +42,10 @@ export async function listFormerStudentsAction(input?: Parameters<typeof listFor
 
 export async function listAlumniStudentsAction(input?: Parameters<typeof listAlumniStudents>[0]) {
   return listAlumniStudents(input);
+}
+
+export async function listRetainedStudentsAction(input?: Parameters<typeof listRetainedStudents>[0]) {
+  return listRetainedStudents(input);
 }
 
 export async function getStudentAction(id: string) {
@@ -126,16 +132,16 @@ export async function exportStudentsAction(filters: {
   return buffer.toString("base64");
 }
 
-export async function validateStudentsImportAction(base64: string, duplicateStrategy: "SKIP" | "FAIL") {
+export async function validateStudentsImportAction(base64: string, duplicateStrategy: "SKIP" | "UPDATE" | "FAIL") {
   const { user } = await requirePermission("student.create");
   const schoolId = schoolIdFromUser(user);
   return validateStudentsImport(base64, schoolId, duplicateStrategy);
 }
 
-export async function executeStudentsImportAction(validatedRows: any[], duplicateStrategy: "SKIP" | "FAIL") {
+export async function executeStudentsImportAction(validatedRows: any[], duplicateStrategy: "SKIP" | "UPDATE" | "FAIL") {
   const { user } = await requirePermission("student.create");
   const schoolId = schoolIdFromUser(user);
-  const result = await executeStudentsImport(validatedRows, schoolId, user.id);
+  const result = await executeStudentsImport(validatedRows, schoolId, user.id, duplicateStrategy);
   revalidatePath("/students");
   revalidatePath("/families");
   return result;
@@ -147,9 +153,49 @@ export async function downloadImportSampleAction() {
   return buffer.toString("base64");
 }
 
+export async function executeSingleRowImportAction(row: any, duplicateStrategy: "SKIP" | "UPDATE" | "FAIL") {
+  const { user } = await requirePermission("student.create");
+  const schoolId = schoolIdFromUser(user);
+  return executeStudentsImport([row], schoolId, user.id, duplicateStrategy);
+}
+
 export async function unlinkStudentFamilyAction(studentId: string) {
   const result = await unlinkStudentFamily(studentId);
   revalidatePath("/students");
   revalidatePath("/families");
   return result;
+}
+
+export async function getStudentIdCardDataAction(studentIds: string[]) {
+  const { user } = await requirePermission("student.view");
+  const schoolId = schoolIdFromUser(user);
+
+  // Fetch school branding
+  const branding = await prisma.schoolBranding.findUnique({
+    where: { schoolId },
+  });
+
+  // Fetch student details
+  const students = await prisma.student.findMany({
+    where: {
+      id: { in: studentIds },
+      schoolId,
+    },
+    include: {
+      family: true,
+      enrollments: {
+        include: {
+          class: true,
+          section: true,
+          session: true,
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  return {
+    branding,
+    students,
+  };
 }

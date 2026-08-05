@@ -4,7 +4,8 @@ import { buildFullName, schoolIdFromUser, decimalToNumber } from "@/server/lib/h
 import { writeAuditLog } from "@/server/services/audit.service";
 import { createStudentWithFamily } from "@/server/services/student.service";
 import { requirePermission } from "@/server/permissions/guard";
-import { Gender, StudentCategory, StudentStatus } from "@prisma/client";
+import { Gender, StudentCategory, StudentStatus, Prisma } from "@prisma/client";
+import { createStudentWithFamilySchema } from "@/server/validators/student.validator";
 
 // Normalize headers: strip capitalization, extra spaces, line breaks, quotes, hidden Unicode characters
 function normalizeHeaderStr(str: string): string {
@@ -48,6 +49,13 @@ function matchHeader(cellValue: string): string | null {
       return key;
     }
   }
+  // Try camelCase matching as fallback
+  const shape = createStudentWithFamilySchema.shape;
+  for (const key of Object.keys(shape)) {
+    if (key.toLowerCase() === clean.replace(/\s+/g, "")) {
+      return key;
+    }
+  }
   return null;
 }
 
@@ -76,10 +84,34 @@ const CLASS_ALIAS_MAP: Record<string, string> = {
 };
 
 export function getNormalizedClassNameAlias(className: string): string {
-  const normalized = className
+  let normalized = className
     .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "")
     .trim()
     .toLowerCase();
+
+  // Strip prefixes like "grade", "class", "std", "standard"
+  normalized = normalized
+    .replace(/^(grade|class|std|standard)\s+/g, "")
+    .trim();
+
+  const ordinalNames: Record<string, string> = {
+    first: "class 1",
+    second: "class 2",
+    third: "class 3",
+    fourth: "class 4",
+    fifth: "class 5",
+    sixth: "class 6",
+    seventh: "class 7",
+    eighth: "class 8",
+    ninth: "class 9",
+    tenth: "class 10",
+    eleventh: "class 11",
+    twelfth: "class 12",
+  };
+
+  if (ordinalNames[normalized]) {
+    return ordinalNames[normalized];
+  }
 
   if (CLASS_ALIAS_MAP[normalized]) {
     return CLASS_ALIAS_MAP[normalized];
@@ -122,6 +154,18 @@ function normalizeClassName(name: string): string {
     .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "") // remove leading/trailing quotes/spaces/hidden characters
     .trim()
     .replace(/[\s\u200B-\u200D\uFEFF]+/g, " "); // collapse spacing and hidden characters
+}
+
+// Normalize section inputs
+function normalizeSectionName(sectionName: string): string {
+  let normalized = sectionName
+    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "")
+    .trim()
+    .toLowerCase();
+
+  // Strip prefixes like "section" or "division" or "stream"
+  normalized = normalized.replace(/^(section|division|stream)\s+/g, "").trim();
+  return normalized;
 }
 
 // Helper to normalize class inputs and find matches/suggestions
@@ -259,7 +303,7 @@ interface ValidationResultRow {
 export async function validateStudentsImport(
   base64: string,
   schoolId: string,
-  duplicateStrategy: "SKIP" | "FAIL"
+  duplicateStrategy: "SKIP" | "UPDATE" | "FAIL"
 ) {
   const buffer = Buffer.from(base64, "base64");
   const workbook = new ExcelJS.Workbook();
@@ -314,12 +358,9 @@ export async function validateStudentsImport(
   });
 
   const admBase = await getNextAdmissionNoBase(schoolId);
-  let generatedCount = 0;
 
   const rows: ValidationResultRow[] = [];
   const processedAdmissions = new Set<string>();
-  const processedPens = new Set<string>();
-  const processedAadhaars = new Set<string>();
 
   // Parse Row Data
   const getValue = (row: ExcelJS.Row, key: string): string | null => {
@@ -348,7 +389,6 @@ export async function validateStudentsImport(
     // Skip empty lines
     if (!rawName && !rawClass && !rawAdmissionNo && !rawPen) return;
 
-    // Logging first imported row for easier template debugging
     if (!loggedFirstRow) {
       loggedFirstRow = true;
       const rawObj: Record<string, any> = {};
@@ -362,25 +402,22 @@ export async function validateStudentsImport(
     let status: "READY" | "WARNING" | "ERROR" = "READY";
     const reasons: string[] = [];
 
-    // 1. Mandatory Fields Validation
+    // Enforce exactly four mandatory fields
+    if (!rawAdmissionNo) {
+      status = "ERROR";
+      reasons.push("Admission Number is required");
+    }
     if (!rawName) {
       status = "ERROR";
       reasons.push("Student Name is required");
     }
-
-    // Auto-generate Admission Number if blank/missing
-    let finalAdmissionNo = rawAdmissionNo;
-    if (!finalAdmissionNo) {
-      while (true) {
-        const nextNum = admBase.currentNum + 1 + generatedCount;
-        const padded = String(nextNum).padStart(admBase.formatLength, "0");
-        const candidate = `${admBase.prefix}${padded}`;
-        generatedCount++;
-        if (!admBase.existingNos.has(candidate) && !processedAdmissions.has(candidate)) {
-          finalAdmissionNo = candidate;
-          break;
-        }
-      }
+    if (!rawClass) {
+      status = "ERROR";
+      reasons.push("Class is required");
+    }
+    if (!rawSection) {
+      status = "ERROR";
+      reasons.push("Section is required");
     }
 
     // Date of Birth check (optional/nullable)
@@ -388,14 +425,13 @@ export async function validateStudentsImport(
     if (rawDob) {
       const ts = Date.parse(rawDob);
       if (isNaN(ts)) {
-        // Fallback silently to null
         dobDate = null;
       } else {
         dobDate = new Date(ts);
       }
     }
 
-    // 2. Class & Section mapping validation
+    // Class & Section mapping validation
     let classId: string | null = null;
     let sectionId: string | null = null;
     if (rawClass) {
@@ -403,8 +439,9 @@ export async function validateStudentsImport(
       if (matchedClass) {
         classId = matchedClass.id;
         if (rawSection) {
+          const cleanSectionInput = normalizeSectionName(rawSection);
           const matchedSection = (matchedClass as any).sections.find(
-            (s: any) => s.name.trim().toLowerCase() === rawSection.trim().toLowerCase()
+            (s: any) => normalizeSectionName(s.name) === cleanSectionInput
           );
           if (matchedSection) {
             sectionId = matchedSection.id;
@@ -412,9 +449,6 @@ export async function validateStudentsImport(
             status = "ERROR";
             reasons.push(`Section "${rawSection}" not found in class "${matchedClass.name}"`);
           }
-        } else {
-          status = "ERROR";
-          reasons.push("Section name is required when Class is specified");
         }
       } else {
         status = "ERROR";
@@ -424,41 +458,38 @@ export async function validateStudentsImport(
           reasons.push(`Class "${rawClass}" not found in ERP`);
         }
       }
-    } else {
+    }
+
+    // Duplicate checks within Excel sheet itself
+    if (rawAdmissionNo && processedAdmissions.has(rawAdmissionNo)) {
       status = "ERROR";
-      reasons.push("Class name is required");
+      reasons.push(`Duplicate Admission No "${rawAdmissionNo}" in Excel`);
+    } else if (rawAdmissionNo) {
+      processedAdmissions.add(rawAdmissionNo);
     }
 
-    // 3. Duplicate checks within Excel sheet itself
-    if (finalAdmissionNo && processedAdmissions.has(finalAdmissionNo)) {
-      status = "ERROR";
-      reasons.push(`Duplicate Admission No "${finalAdmissionNo}" in Excel`);
-    } else if (finalAdmissionNo) {
-      processedAdmissions.add(finalAdmissionNo);
-    }
-
-    if (rawPen && processedPens.has(rawPen)) {
-      processedPens.add(rawPen);
-    }
-
-    if (rawAadhaar && rawAadhaar !== "NOT AVAILABLE" && !rawAadhaar.includes("*") && processedAadhaars.has(rawAadhaar)) {
-      processedAadhaars.add(rawAadhaar);
-    }
-
-    // 4. Database Unique Constraint Checks (AdmissionNo)
-    if (status !== "ERROR" && finalAdmissionNo) {
-      if (admBase.existingNos.has(finalAdmissionNo)) {
+    // Database Unique Constraint Checks (AdmissionNo)
+    if (status !== "ERROR" && rawAdmissionNo) {
+      if (admBase.existingNos.has(rawAdmissionNo)) {
         if (duplicateStrategy === "FAIL") {
           status = "ERROR";
-          reasons.push(`Admission No. "${finalAdmissionNo}" already exists in ERP`);
-        } else {
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists in ERP`);
+        } else if (duplicateStrategy === "SKIP") {
           status = "WARNING";
-          reasons.push(`Admission No. "${finalAdmissionNo}" already exists (Row will be skipped)`);
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists (Row will be skipped)`);
+        } else if (duplicateStrategy === "UPDATE") {
+          status = "READY";
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists (Existing record will be updated)`);
         }
       }
     }
 
-    // Normalize Full Name logic safely (preserve original fullName)
+    // Name matching warning (name match warning, not primary identifier)
+    if (status === "READY" && rawName) {
+      // (Optional simple warning check if name matches existing database record)
+    }
+
+    // Normalize Full Name logic safely
     let firstName = "";
     let middleName = "";
     let lastName = "";
@@ -477,12 +508,26 @@ export async function validateStudentsImport(
     let motherName = normalizeString(getValue(row, "motherName"));
     let guardianName = normalizeString(getValue(row, "guardianName"));
     if (!fatherName && !motherName && !guardianName) {
-      // Fallback/placeholder guardianName to satisfy validation in createStudentWithFamily
       guardianName = "Parent/Guardian";
     }
 
+    // Dynamic extraction of additional fields from Zod Schema
+    const shape = createStudentWithFamilySchema.shape;
+    const additionalData: Record<string, any> = {};
+    for (const key of Object.keys(shape)) {
+      if ([
+        "allowDuplicate", "createLogin", "status", "enroll", "classId",
+        "sectionId", "sessionId", "admissionNo", "firstName", "middleName", "lastName"
+      ].includes(key)) continue;
+
+      const rawVal = getValue(row, key);
+      if (rawVal !== null && rawVal !== undefined) {
+        additionalData[key] = normalizeString(rawVal);
+      }
+    }
+
     const payload = {
-      admissionNo: finalAdmissionNo,
+      admissionNo: rawAdmissionNo,
       firstName,
       middleName: middleName || null,
       lastName: lastName || null,
@@ -495,30 +540,28 @@ export async function validateStudentsImport(
       fatherName,
       motherName,
       guardianName,
-      phone: normalizeString(getValue(row, "primaryPhone")),
+      phone: normalizeString(getValue(row, "primaryPhone")) || normalizeString(getValue(row, "phone")),
       secondaryPhone: normalizeString(getValue(row, "secondaryPhone")),
       email: normalizeString(getValue(row, "email")),
       address: normalizeString(getValue(row, "address")),
-      resAddressLine2: normalizeString(getValue(row, "addressLine2")),
-      resCity: normalizeString(getValue(row, "city")),
-      resState: normalizeString(getValue(row, "state")),
-      resPincode: normalizeString(getValue(row, "pincode")),
+      resAddressLine1: normalizeString(getValue(row, "resAddressLine1")) || normalizeString(getValue(row, "address")),
+      resAddressLine2: normalizeString(getValue(row, "resAddressLine2")) || normalizeString(getValue(row, "addressLine2")),
+      resCity: normalizeString(getValue(row, "resCity")) || normalizeString(getValue(row, "city")),
+      resState: normalizeString(getValue(row, "resState")) || normalizeString(getValue(row, "state")),
+      resPincode: normalizeString(getValue(row, "resPincode")) || normalizeString(getValue(row, "pincode")),
       enroll: true,
       sessionId: currentSession?.id || null,
       classId,
       sectionId,
       allowDuplicate: true,
-      createLogin: true
+      createLogin: true,
+      ...additionalData
     };
-
-    if (rowNumber === headerRowIndex + 1) {
-      console.log("[StudentImport Logging] Final mapped student object before validation:", payload);
-    }
 
     rows.push({
       rowNumber,
       studentName: rawName || "",
-      admissionNo: finalAdmissionNo || "",
+      admissionNo: rawAdmissionNo || "",
       className: rawClass || "",
       sectionName: rawSection || "",
       status,
@@ -531,13 +574,21 @@ export async function validateStudentsImport(
   const readyCount = rows.filter(r => r.status === "READY").length;
   const warningCount = rows.filter(r => r.status === "WARNING").length;
   const errorCount = rows.filter(r => r.status === "ERROR").length;
+  const duplicateCount = rows.filter(r => r.reason.toLowerCase().includes("duplicate") || r.reason.toLowerCase().includes("already exists")).length;
+  const missingRequiredCount = rows.filter(r => r.reason.toLowerCase().includes("required")).length;
+  const unknownClassCount = rows.filter(r => r.reason.toLowerCase().includes("class") && r.reason.toLowerCase().includes("not found")).length;
+  const unknownSectionCount = rows.filter(r => r.reason.toLowerCase().includes("section") && r.reason.toLowerCase().includes("not found")).length;
 
   return {
     summary: {
       ready: readyCount,
       warnings: warningCount,
       errors: errorCount,
-      total: rows.length
+      total: rows.length,
+      duplicates: duplicateCount,
+      missingRequired: missingRequiredCount,
+      unknownClasses: unknownClassCount,
+      unknownSections: unknownSectionCount
     },
     rows
   };
@@ -550,10 +601,12 @@ export async function validateStudentsImport(
 export async function executeStudentsImport(
   validatedRows: ValidationResultRow[],
   schoolId: string,
-  userId: string
+  userId: string,
+  duplicateStrategy: "SKIP" | "UPDATE" | "FAIL"
 ) {
   const { user } = await requirePermission("student.create");
   let importedCount = 0;
+  let updatedCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
 
@@ -562,7 +615,7 @@ export async function executeStudentsImport(
   // Single global transaction execution (timeout: 5 minutes / 300000 ms)
   await prisma.$transaction(async (tx) => {
     for (const item of rowsToProcess) {
-      if (item.status === "WARNING") {
+      if (item.status === "WARNING" && duplicateStrategy === "SKIP") {
         skippedCount++;
         continue;
       }
@@ -572,11 +625,86 @@ export async function executeStudentsImport(
           ...item.data,
           schoolId
         };
-        
-        await createStudentWithFamily(studentInput, tx);
-        importedCount++;
+
+        const existingStudent = await tx.student.findFirst({
+          where: { schoolId, admissionNo: studentInput.admissionNo }
+        });
+
+        if (existingStudent) {
+          if (duplicateStrategy === "SKIP") {
+            skippedCount++;
+            continue;
+          } else if (duplicateStrategy === "UPDATE") {
+            // Update existing student fields
+            await tx.student.update({
+              where: { id: existingStudent.id },
+              data: {
+                firstName: studentInput.firstName,
+                middleName: studentInput.middleName,
+                lastName: studentInput.lastName,
+                fullName: studentInput.fullName,
+                dateOfBirth: studentInput.dateOfBirth,
+                gender: studentInput.gender,
+                bloodGroup: studentInput.bloodGroup,
+                aadhaar: studentInput.aadhaar,
+                religion: studentInput.religion,
+                category: studentInput.category,
+                apaarId: studentInput.apaarId,
+                penId: studentInput.penId,
+                srNo: studentInput.srNo,
+              }
+            });
+
+            // Update linked family if it exists
+            if (existingStudent.familyId) {
+              await tx.family.update({
+                where: { id: existingStudent.familyId },
+                data: {
+                  fatherName: studentInput.fatherName,
+                  motherName: studentInput.motherName,
+                  guardianName: studentInput.guardianName,
+                  primaryPhone: studentInput.phone,
+                  secondaryPhone: studentInput.secondaryPhone,
+                  email: studentInput.email,
+                  resAddressLine1: studentInput.resAddressLine1 || studentInput.address,
+                  resAddressLine2: studentInput.resAddressLine2,
+                  resCity: studentInput.resCity,
+                  resState: studentInput.resState,
+                  resPincode: studentInput.resPincode,
+                }
+              });
+            }
+
+            // Upsert enrollment details in active session
+            if (studentInput.enroll && studentInput.sessionId && studentInput.classId && studentInput.sectionId) {
+              await tx.studentEnrollment.upsert({
+                where: {
+                  studentId_sessionId: {
+                    studentId: existingStudent.id,
+                    sessionId: studentInput.sessionId,
+                  }
+                },
+                create: {
+                  studentId: existingStudent.id,
+                  sessionId: studentInput.sessionId,
+                  classId: studentInput.classId,
+                  sectionId: studentInput.sectionId,
+                  status: "ACTIVE"
+                },
+                update: {
+                  classId: studentInput.classId,
+                  sectionId: studentInput.sectionId,
+                }
+              });
+            }
+            updatedCount++;
+          }
+        } else {
+          await createStudentWithFamily(studentInput, tx);
+          importedCount++;
+        }
       } catch (err) {
-        failedCount = rowsToProcess.length - importedCount;
+        failedCount = rowsToProcess.length - importedCount - updatedCount;
         throw new Error(
           `Import aborted & rolled back. Failed on Excel Row ${item.rowNumber} (${item.studentName}): ${err instanceof Error ? err.message : "Database write error"}`
         );
@@ -594,19 +722,89 @@ export async function executeStudentsImport(
       newValue: {
         filename: "Excel Batch Student Import",
         importedCount,
+        updatedCount,
         skippedCount,
         failedCount
       }
     }, tx);
   }, {
-    timeout: 300000 // 5 minutes timeout to allow full atomic processing of 268+ students
+    timeout: 300000
   });
 
   return {
     imported: importedCount,
+    updated: updatedCount,
     skipped: skippedCount,
     failed: failedCount
   };
+}
+
+export function getColumnsFromSchema() {
+  const shape = createStudentWithFamilySchema.shape;
+  const keys = Object.keys(shape);
+
+  const excludeKeys = new Set([
+    "allowDuplicate",
+    "createLogin",
+    "status",
+    "enroll",
+    "classId",
+    "sectionId",
+    "sessionId",
+  ]);
+
+  const customHeaders: Record<string, string> = {
+    admissionNo: "Admission No",
+    firstName: "First Name",
+    middleName: "Middle Name",
+    lastName: "Last Name",
+    dateOfBirth: "Date of Birth",
+    gender: "Gender",
+    aadhaar: "AADHAAR No.",
+    phone: "Primary Phone",
+    address: "Address Line 1",
+  };
+
+  const columns: { header: string; key: string; width: number }[] = [];
+
+  // Add the basic required/important ones first in order
+  const order = ["admissionNo", "firstName", "middleName", "lastName", "gender", "dateOfBirth"];
+  const added = new Set<string>();
+
+  for (const k of order) {
+    if (shape[k as keyof typeof shape]) {
+      const header = customHeaders[k] || camelToTitle(k);
+      columns.push({ header, key: k, width: getWidth(k) });
+      added.add(k);
+    }
+  }
+
+  // Add class and section columns (mapped to className and sectionName in Excel parsing)
+  columns.push({ header: "Class", key: "className", width: 15 });
+  columns.push({ header: "Section", key: "sectionName", width: 12 });
+  added.add("classId");
+  added.add("sectionId");
+  added.add("className");
+  added.add("sectionName");
+
+  for (const k of keys) {
+    if (excludeKeys.has(k) || added.has(k)) continue;
+    const header = customHeaders[k] || camelToTitle(k);
+    columns.push({ header, key: k, width: getWidth(k) });
+  }
+
+  return columns;
+}
+
+function camelToTitle(camel: string): string {
+  const result = camel.replace(/([A-Z])/g, " $1");
+  return result.charAt(0).toUpperCase() + result.slice(1).trim();
+}
+
+function getWidth(key: string): number {
+  if (key.includes("Name")) return 20;
+  if (key.includes("address") || key.includes("Address")) return 25;
+  return 15;
 }
 
 /**
@@ -616,28 +814,8 @@ export async function downloadImportSample() {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Students Template");
 
-  worksheet.columns = [
-    { header: "Admission No", key: "admissionNo", width: 15 },
-    { header: "Name", key: "name", width: 25 },
-    { header: "Gender", key: "gender", width: 12 },
-    { header: "Date of Birth", key: "dateOfBirth", width: 15 },
-    { header: "Student PEN", key: "penId", width: 15 },
-    { header: "Father Name", key: "fatherName", width: 20 },
-    { header: "Mother Name", key: "motherName", width: 20 },
-    { header: "Guardian Name", key: "guardianName", width: 20 },
-    { header: "Social Category", key: "category", width: 15 },
-    { header: "AADHAAR No.", key: "aadhaar", width: 15 },
-    { header: "Class", key: "className", width: 15 },
-    { header: "Section", key: "sectionName", width: 12 },
-    { header: "Primary Phone", key: "primaryPhone", width: 15 },
-    { header: "Secondary Phone", key: "secondaryPhone", width: 15 },
-    { header: "Email", key: "email", width: 25 },
-    { header: "Address Line 1", key: "address", width: 30 },
-    { header: "Address Line 2", key: "addressLine2", width: 30 },
-    { header: "City", key: "city", width: 15 },
-    { header: "State", key: "state", width: 15 },
-    { header: "Pincode", key: "pincode", width: 12 }
-  ];
+  const columns = getColumnsFromSchema();
+  worksheet.columns = columns;
 
   worksheet.getRow(1).font = { bold: true };
   worksheet.getRow(1).fill = {
@@ -646,9 +824,11 @@ export async function downloadImportSample() {
     fgColor: { argb: "F2F2F2" },
   };
 
-  worksheet.addRow({
+  const sampleRow: Record<string, any> = {
     admissionNo: "ADM-2026-001",
     name: "John Doe",
+    firstName: "John",
+    lastName: "Doe",
     gender: "Male",
     dateOfBirth: "2018-05-15",
     penId: "23201140523",
@@ -659,15 +839,16 @@ export async function downloadImportSample() {
     aadhaar: "123456789012",
     className: "XII",
     sectionName: "A",
-    primaryPhone: "9876543210",
+    phone: "9876543210",
     secondaryPhone: "",
     email: "john.doe@example.com",
     address: "123 School Lane",
-    addressLine2: "",
+    resAddressLine1: "123 School Lane",
     city: "New Delhi",
     state: "Delhi",
     pincode: "110001"
-  });
+  };
+  worksheet.addRow(sampleRow);
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);

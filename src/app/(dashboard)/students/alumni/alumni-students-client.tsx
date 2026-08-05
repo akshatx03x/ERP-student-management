@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,17 +34,25 @@ type AlumniStudent = {
   enrollments: Array<{
     class: { name: string };
     section: { name: string };
-    session: { name: string };
+    session: { id: string; name: string };
   }>;
+};
+
+type SessionRow = {
+  id: string;
+  name: string;
 };
 
 export function AlumniStudentsClient({
   students,
+  sessions,
 }: {
   students: AlumniStudent[];
+  sessions: SessionRow[];
 }) {
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("ALL");
 
   function handleReactivate(studentId: string, studentName: string) {
     if (!confirm(`Are you sure you want to re-activate ${studentName}? This will restore their active status and enrollment.`)) return;
@@ -61,6 +68,13 @@ export function AlumniStudentsClient({
   }
 
   const filtered = students.filter((s) => {
+    // Session filter
+    if (selectedSessionId !== "ALL") {
+      const lastEnr = s.enrollments[0];
+      if (lastEnr?.session?.id !== selectedSessionId) return false;
+    }
+
+    // Search filter
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       const matchName = s.fullName.toLowerCase().includes(q);
@@ -89,6 +103,18 @@ export function AlumniStudentsClient({
             onChange={(e) => setSearch(e.target.value)}
             className="w-full sm:w-64 h-8 text-xs"
           />
+          <select
+            value={selectedSessionId}
+            onChange={(e) => setSelectedSessionId(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="ALL">All Graduation Sessions</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         </div>
       </CardHeader>
       <CardContent className="pt-4">

@@ -1,34 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
-import { Role } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
-
-async function attachNewUserToSchool(userId: string, name: string) {
-  const school = await prisma.school.findFirst({ orderBy: { createdAt: "asc" } });
-  if (!school) return;
-
-  const staff = await prisma.staffProfile.create({
-    data: {
-      schoolId: school.id,
-      employeeCode: `USR-${userId.slice(-6).toUpperCase()}`,
-      fullName: name,
-      designation: "Staff",
-      role: Role.PRINCIPAL,
-    },
-  });
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      role: Role.PRINCIPAL,
-      isActive: true,
-      mustChangePassword: false,
-      schoolId: school.id,
-      staffProfileId: staff.id,
-    },
-  });
-}
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET,
@@ -83,19 +56,10 @@ export const auth = betterAuth({
       },
     },
   },
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          await attachNewUserToSchool(user.id, user.name);
-        },
-      },
-    },
-  },
   session: {
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
-    disableSessionRefresh: true, // Prevents database writes on GET session requests
+    disableSessionRefresh: true,
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60,
@@ -114,3 +78,10 @@ export const auth = betterAuth({
 });
 
 export type Session = typeof auth.$Infer.Session;
+
+// Non-blocking startup seed — runs once when the module is first loaded.
+// Idempotent: safe to call on every cold start; no-op if accounts already exist.
+import("@/server/auth/seed-accounts").then(({ seedSystemAccounts }) => {
+  seedSystemAccounts().catch(() => {});
+});
+

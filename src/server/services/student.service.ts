@@ -306,6 +306,73 @@ export async function listAlumniStudents(input?: {
   return { items, total, page, pageSize };
 }
 
+export async function listRetainedStudents(input?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sessionId?: string;
+}) {
+  const { user } = await requirePermission("student.view");
+  const schoolId = schoolIdFromUser(user);
+  const params = parseOrThrow(listStudentsSchema, input ?? {});
+  const { skip, take, page, pageSize } = parsePagination(params.page, params.pageSize);
+
+  const where = {
+    schoolId,
+    status: StudentStatus.ACTIVE,
+    enrollments: {
+      some: {
+        status: EnrollmentStatus.RETAINED,
+        ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+      },
+    },
+    ...(params.search
+      ? {
+          OR: [
+            { fullName: { contains: params.search } },
+            { admissionNo: { contains: params.search } },
+            {
+              family: {
+                OR: [
+                  { fatherName: { contains: params.search } },
+                  { motherName: { contains: params.search } },
+                  { primaryPhone: { contains: params.search } },
+                  { secondaryPhone: { contains: params.search } },
+                ],
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.student.findMany({
+      where,
+      select: {
+        id: true,
+        admissionNo: true,
+        fullName: true,
+        photoUrl: true,
+        dateOfBirth: true,
+        gender: true,
+        status: true,
+        family: { select: { fatherName: true, motherName: true, primaryPhone: true, secondaryPhone: true } },
+        enrollments: {
+          include: { class: true, section: true, session: true },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: { fullName: "asc" },
+      skip,
+      take,
+    }),
+    prisma.student.count({ where }),
+  ]);
+
+  return { items, total, page, pageSize };
+}
+
 export async function getStudent(studentId: string) {
   const { user } = await requirePermission("student.view");
   const schoolId = schoolIdFromUser(user);

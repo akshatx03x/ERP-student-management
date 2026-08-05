@@ -1,21 +1,21 @@
 import { getSchoolBranding } from "@/server/services/branding.service";
-import { listPermissionCatalog, getUserPermissionOverrides } from "@/server/services/settings.service";
+import { listUsers } from "@/server/services/settings.service";
 import { listStaff } from "@/server/services/staff.service";
 import { PageHeader } from "@/components/shared/states";
 import { ImportPanel } from "@/components/shared/import-panel";
 import { BackupPanel } from "@/components/shared/backup-panel";
 import { SettingsClient } from "./settings-client";
-import { getCurrentUser } from "@/server/auth/session";
-import { isPrincipal } from "@/server/auth/session";
+import { getCurrentUser, isPrincipal } from "@/server/auth/session";
 import { getBackupProvider } from "@/server/providers/backup.provider";
+import { PERMISSION_GROUPS, PERMISSION_PRESETS } from "@/config/permissions";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  const principalView = isPrincipal(user.role);
+  const isAdminView = isPrincipal(user.role) || user.role === "DEVELOPER";
 
   // Load last backup info (non-blocking)
   let lastBackup = null;
-  if (principalView) {
+  if (isAdminView) {
     try {
       const provider = getBackupProvider();
       const backups = await provider.listBackups();
@@ -38,19 +38,11 @@ export default async function SettingsPage() {
     }
   }
 
-  const [branding, staff, permissions] = await Promise.all([
+  const [branding, staff, usersData] = await Promise.all([
     getSchoolBranding(),
     listStaff({ pageSize: 100 }),
-    listPermissionCatalog(),
+    isAdminView ? listUsers({ pageSize: 200 }) : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 }),
   ]);
-
-  const firstStaffUser = staff.items.find(
-    (s: any) => s.user && (s.role === "ACCOUNTANT" || s.role === "TEACHER"),
-  );
-
-  const overrides = firstStaffUser?.user
-    ? await getUserPermissionOverrides(firstStaffUser.user.id)
-    : [];
 
   return (
     <div className="space-y-6">
@@ -58,7 +50,7 @@ export default async function SettingsPage() {
         title="Settings"
         description="School branding, user accounts, permissions, and Excel import"
       />
-      {principalView && (
+      {isAdminView && (
         <BackupPanel isPrincipal={true} lastBackup={lastBackup} />
       )}
       <ImportPanel />
@@ -76,16 +68,14 @@ export default async function SettingsPage() {
             id: s.user.id,
             email: s.user.email,
             isActive: s.user.isActive,
+            loginIdentifier: s.user.loginIdentifier,
           } : null,
         }))}
-        permissions={permissions}
-        initialOverrides={overrides.map((o) => ({
-          userId: o.userId,
-          permissionKey: o.permission.key,
-          allowed: o.allowed,
-        }))}
-        initialSelectedUserId={firstStaffUser?.user?.id ?? null}
+        users={usersData.items}
+        permissionGroups={PERMISSION_GROUPS}
+        permissionPresets={PERMISSION_PRESETS}
         schoolId={branding.schoolId}
+        isAdminView={isAdminView}
       />
     </div>
   );

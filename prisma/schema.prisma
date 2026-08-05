@@ -33,6 +33,7 @@ model School {
   subjects             Subject[]
   users                User[]
   cashBookEntries      CashBookEntry[]
+  transferCertificates TransferCertificate[]
 }
 
 model SchoolBranding {
@@ -91,6 +92,8 @@ model User {
   cashBookEntriesRecorded     CashBookEntry[]        @relation("CashBookRecorder")
   cashBookEntriesVoided       CashBookEntry[]        @relation("CashBookVoider")
   resultsEdited               ResultChangeLog[]      @relation("ResultEditor")
+  tcsCreated                  TransferCertificate[]  @relation("TCCreator")
+  tcsUpdated                  TransferCertificate[]  @relation("TCUpdater")
   student                     Student?               @relation(fields: [studentId], references: [id], onDelete: Cascade)
   staffProfile                StaffProfile?          @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
   school                      School?                @relation(fields: [schoolId], references: [id])
@@ -236,6 +239,7 @@ model AcademicSession {
   studentFees             StudentFee[]
   timetableSlots          TimetableSlot[]
   termResults             StudentTermResult[]
+  transferCertificates    TransferCertificate[]
 
   @@unique([schoolId, name])
   @@index([schoolId, isCurrent])
@@ -255,8 +259,9 @@ model Class {
   feeStructures  FeeStructure[]
   promotionsTo   PromotionHistory[]     @relation("ToClass")
   promotionsFrom PromotionHistory[]     @relation("FromClass")
-  sections       Section[]
-  enrollments    StudentEnrollment[]
+  sections             Section[]
+  enrollments          StudentEnrollment[]
+  transferCertificates TransferCertificate[]
 
   @@unique([schoolId, name])
   @@index([schoolId, sortOrder])
@@ -275,6 +280,7 @@ model Section {
   class                   Class                    @relation(fields: [classId], references: [id], onDelete: Cascade)
   enrollments             StudentEnrollment[]
   timetableSlots          TimetableSlot[]
+  transferCertificates    TransferCertificate[]
 
   @@unique([classId, name])
 }
@@ -483,6 +489,7 @@ model Student {
   medical              StudentMedical?
   user                 User?
   termResults          StudentTermResult[]
+  transferCertificates TransferCertificate[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, fullName])
@@ -1257,6 +1264,7 @@ enum Role {
   ACCOUNTANT
   TEACHER
   STUDENT
+  DEVELOPER
 }
 
 enum SessionStatus {
@@ -1622,3 +1630,41 @@ model AttendanceLock {
   @@unique([sessionId, year, month])
 }
 
+enum TCStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+model TransferCertificate {
+  id                String          @id @default(cuid())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  tcNumber          String          @unique
+  status            TCStatus        @default(DRAFT)
+  
+  studentId         String
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schoolId          String
+  school            School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sessionId         String
+  session           AcademicSession @relation(fields: [sessionId], references: [id])
+  classId           String
+  class             Class           @relation(fields: [classId], references: [id])
+  sectionId         String
+  section           Section         @relation(fields: [sectionId], references: [id])
+
+  snapshot          String          // Complete student, family, class, and branding details snapshot
+
+  dateOfIssue       DateTime        @default(now())
+  attendance        String?
+  conduct           String?         @default("Good")
+  remarks           String?
+  
+  previousStatus    String?         @default("ACTIVE")
+
+  createdById       String?
+  createdBy         User?           @relation("TCCreator", fields: [createdById], references: [id])
+  updatedById       String?
+  updatedBy         User?           @relation("TCUpdater", fields: [updatedById], references: [id])
+}

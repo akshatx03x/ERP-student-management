@@ -15,6 +15,7 @@ import {
   exportStudentsAction,
   validateStudentsImportAction,
   executeStudentsImportAction,
+  executeSingleRowImportAction,
   downloadImportSampleAction,
 } from "@/server/actions/student.actions";
 
@@ -28,6 +29,7 @@ type StudentRow = {
     fatherName: string | null;
     motherName: string | null;
     primaryPhone?: string | null;
+    secondaryPhone?: string | null;
   } | null;
   enrollments: Array<{
     class: { name: string };
@@ -154,15 +156,32 @@ export function StudentsClient({
 
   // Import Engine State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importStep, setImportStep] = useState<"UPLOAD" | "PREVIEW" | "RESULT">("UPLOAD");
+  const [importStep, setImportStep] = useState<"WIZARD_START" | "UPLOAD" | "PREVIEW" | "RESULT">("WIZARD_START");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [duplicateStrategy, setDuplicateStrategy] = useState<"SKIP" | "FAIL">("SKIP");
+  const [duplicateStrategy, setDuplicateStrategy] = useState<"SKIP" | "UPDATE" | "FAIL">("SKIP");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [previewFilter, setPreviewFilter] = useState<"ALL" | "READY" | "WARNING" | "ERROR">("ALL");
-  
+
+  const originalPreviewDataRef = useRef<any>(null);
+  const [importProgress, setImportProgress] = useState<{
+    total: number;
+    processed: number;
+    remaining: number;
+    currentName: string;
+  } | null>(null);
+
   const [previewData, setPreviewData] = useState<{
-    summary: { ready: number; warnings: number; errors: number; total: number };
+    summary: {
+      ready: number;
+      warnings: number;
+      errors: number;
+      total: number;
+      duplicates?: number;
+      missingRequired?: number;
+      unknownClasses?: number;
+      unknownSections?: number;
+    };
     rows: Array<{
       rowNumber: number;
       studentName: string;
@@ -177,6 +196,7 @@ export function StudentsClient({
 
   const [executionResult, setExecutionResult] = useState<{
     imported: number;
+    updated: number;
     skipped: number;
     failed: number;
   } | null>(null);
@@ -213,8 +233,9 @@ export function StudentsClient({
       }
       const base64 = btoa(binary);
       const result = await validateStudentsImportAction(base64, duplicateStrategy);
-      
+
       setPreviewData(result);
+      originalPreviewDataRef.current = JSON.parse(JSON.stringify(result));
       setImportStep("PREVIEW");
       toast.success("Excel analysis completed successfully");
     } catch (err: any) {
@@ -224,31 +245,218 @@ export function StudentsClient({
     }
   };
 
+  const handleInlineEdit = (rowIndex: number, field: "className" | "sectionName" | "gender" | "category", value: string) => {
+    if (!previewData) return;
+    const updatedRows = [...previewData.rows];
+    const rowIdx = updatedRows.findIndex(r => r.rowNumber === rowIndex);
+    if (rowIdx === -1) return;
+
+    const row = { ...updatedRows[rowIdx]! };
+    row.data = { ...row.data };
+
+    if (field === "className") {
+      row.className = value;
+      row.data.className = value;
+      const matchedClass = classes.find(c => c.name === value);
+      if (matchedClass) {
+        row.data.classId = matchedClass.id;
+        const hasSection = matchedClass.sections.some(s => s.name === row.sectionName);
+        if (!hasSection && matchedClass.sections.length > 0) {
+          row.sectionName = matchedClass.sections[0]!.name;
+          row.data.sectionName = matchedClass.sections[0]!.name;
+          row.data.sectionId = matchedClass.sections[0]!.id;
+        }
+      } else {
+        row.data.classId = null;
+        row.data.sectionId = null;
+      }
+    } else if (field === "sectionName") {
+      row.sectionName = value;
+      row.data.sectionName = value;
+      const matchedClass = classes.find(c => c.id === row.data.classId);
+      const matchedSec = matchedClass?.sections.find(s => s.name === value);
+      if (matchedSec) {
+        row.data.sectionId = matchedSec.id;
+      } else {
+        row.data.sectionId = null;
+      }
+    } else if (field === "gender") {
+      row.data.gender = value;
+    } else if (field === "category") {
+      row.data.category = value;
+    }
+
+    // Client-side re-validation
+    let status: "READY" | "WARNING" | "ERROR" = "READY";
+    const reasons: string[] = [];
+
+    if (!row.admissionNo) {
+      status = "ERROR";
+      reasons.push("Admission Number is required");
+    }
+    if (!row.studentName) {
+      status = "ERROR";
+      reasons.push("Student Name is required");
+    }
+    if (!row.className) {
+      status = "ERROR";
+      reasons.push("Class is required");
+    }
+    if (!row.sectionName) {
+      status = "ERROR";
+      reasons.push("Section is required");
+    }
+
+    const matchedClass = classes.find(c => c.name === row.className);
+    if (matchedClass) {
+      const matchedSec = matchedClass.sections.find(s => s.name === row.sectionName);
+      if (!matchedSec) {
+        status = "ERROR";
+        reasons.push(`Section "${row.sectionName}" not found in class "${row.className}"`);
+      }
+    } else {
+      status = "ERROR";
+      reasons.push(`Class "${row.className}" not found in ERP`);
+    }
+
+    const dupInSheet = updatedRows.some((r, idx) => idx !== rowIdx && r.admissionNo === row.admissionNo);
+    if (dupInSheet) {
+      status = "ERROR";
+      reasons.push(`Duplicate Admission No "${row.admissionNo}" in Excel`);
+    }
+
+    const originalRow = originalPreviewDataRef.current?.rows.find((r: any) => r.rowNumber === rowIndex);
+    if (originalRow && originalRow.admissionNo === row.admissionNo && originalRow.reason.includes("already exists")) {
+      if (duplicateStrategy === "FAIL") {
+        status = "ERROR";
+        reasons.push(`Admission No. "${row.admissionNo}" already exists in ERP`);
+      } else if (duplicateStrategy === "SKIP") {
+        status = "WARNING";
+        reasons.push(`Admission No. "${row.admissionNo}" already exists (Row will be skipped)`);
+      } else if (duplicateStrategy === "UPDATE") {
+        status = "READY";
+        reasons.push(`Admission No. "${row.admissionNo}" already exists (Existing record will be updated)`);
+      }
+    }
+
+    row.status = status;
+    row.reason = reasons.join("; ") || "Ready";
+
+    updatedRows[rowIdx] = row;
+
+    // Summaries update
+    const readyCount = updatedRows.filter(r => r.status === "READY").length;
+    const warningCount = updatedRows.filter(r => r.status === "WARNING").length;
+    const errorCount = updatedRows.filter(r => r.status === "ERROR").length;
+    const duplicateCount = updatedRows.filter(r => r.reason.toLowerCase().includes("duplicate") || r.reason.toLowerCase().includes("already exists")).length;
+    const missingRequiredCount = updatedRows.filter(r => r.reason.toLowerCase().includes("required")).length;
+    const unknownClassCount = updatedRows.filter(r => r.reason.toLowerCase().includes("class") && r.reason.toLowerCase().includes("not found")).length;
+    const unknownSectionCount = updatedRows.filter(r => r.reason.toLowerCase().includes("section") && r.reason.toLowerCase().includes("not found")).length;
+
+    setPreviewData({
+      summary: {
+        ready: readyCount,
+        warnings: warningCount,
+        errors: errorCount,
+        total: updatedRows.length,
+        duplicates: duplicateCount,
+        missingRequired: missingRequiredCount,
+        unknownClasses: unknownClassCount,
+        unknownSections: unknownSectionCount
+      },
+      rows: updatedRows
+    });
+  };
+
   const handleConfirmImport = async () => {
     if (!previewData || previewData.summary.errors > 0) {
       toast.error("Please fix all errors before importing");
       return;
     }
     setIsCommitting(true);
-    try {
-      const result = await executeStudentsImportAction(previewData.rows, duplicateStrategy);
-      setExecutionResult(result);
+
+    if (duplicateStrategy === "FAIL") {
+      setImportProgress({
+        total: previewData.rows.length,
+        processed: 0,
+        remaining: previewData.rows.length,
+        currentName: "Processing atomically (Single Transaction)..."
+      });
+      try {
+        const result = await executeStudentsImportAction(previewData.rows, "FAIL");
+        setExecutionResult(result);
+        setImportStep("RESULT");
+        toast.success("Excel batch import completed!");
+        router.refresh();
+      } catch (err: any) {
+        toast.error(err.message || "Batch transaction failed. Database rolled back.");
+      } finally {
+        setImportProgress(null);
+        setIsCommitting(false);
+      }
+    } else {
+      const rowsToProcess = previewData.rows.filter(r => r.status !== "ERROR");
+      const total = rowsToProcess.length;
+      let imported = 0;
+      let updated = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      setImportProgress({ total, processed: 0, remaining: total, currentName: "" });
+
+      for (let i = 0; i < total; i++) {
+        const row = rowsToProcess[i]!;
+        setImportProgress({
+          total,
+          processed: i,
+          remaining: total - i,
+          currentName: row.studentName || row.admissionNo
+        });
+
+        try {
+          const res = await executeSingleRowImportAction(row, duplicateStrategy);
+          imported += res.imported;
+          updated += res.updated;
+          skipped += res.skipped;
+          failed += res.failed;
+        } catch (err: any) {
+          failed++;
+        }
+      }
+
+      setImportProgress(null);
+      setIsCommitting(false);
+      setExecutionResult({ imported, updated, skipped, failed });
       setImportStep("RESULT");
       toast.success("Excel batch import completed!");
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "Batch transaction failed. Database rolled back.");
-    } finally {
-      setIsCommitting(false);
     }
+  };
+
+  const getSuggestedFix = (reason: string) => {
+    const r = reason.toLowerCase();
+    if (r.includes("class") && r.includes("not found")) {
+      return "Create the class in ERP or correct the class name.";
+    }
+    if (r.includes("section") && r.includes("not found")) {
+      return "Create the section or correct the section value.";
+    }
+    if (r.includes("admission") && (r.includes("exists") || r.includes("duplicate"))) {
+      return "Use a unique Admission Number or enable Update strategy.";
+    }
+    if (r.includes("required")) {
+      return "Fill in the required mandatory field.";
+    }
+    return "Verify the field formats and values.";
   };
 
   const handleDownloadErrorReport = () => {
     if (!previewData) return;
     const errorRows = previewData.rows.filter(r => r.status === "ERROR" || r.status === "WARNING");
-    let csvContent = "data:text/csv;charset=utf-8,Excel Row,Student Name,Admission No,Status,Validation Reason\n";
+    let csvContent = "data:text/csv;charset=utf-8,Excel Row,Admission No,Student Name,Error Message,Suggested Fix\n";
     errorRows.forEach(r => {
-      csvContent += `${r.rowNumber},"${r.studentName || ""}","${r.admissionNo || ""}",${r.status},"${r.reason || ""}"\n`;
+      const fix = getSuggestedFix(r.reason);
+      csvContent += `${r.rowNumber},"${r.admissionNo || ""}","${r.studentName || ""}","${r.reason || ""}","${fix}"\n`;
     });
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -586,270 +794,422 @@ export function StudentsClient({
                 ✕
               </button>
             </CardHeader>
-            
-            <CardContent className="p-6 overflow-y-auto flex-1 min-h-0 text-sm space-y-4">
-              
-              {/* STEP 1: UPLOAD & SETTINGS */}
-              {importStep === "UPLOAD" && (
-                <div className="space-y-6">
-                  <div className="border-2 border-dashed border-stone-200 rounded-xl p-8 text-center bg-stone-50/50 hover:bg-stone-50 transition-colors flex flex-col items-center justify-center gap-3">
-                    <span className="text-4xl">📁</span>
-                    <div>
-                      <p className="font-semibold text-stone-700">Choose Student Excel File</p>
-                      <p className="text-xs text-stone-450 mt-1">Supports .xlsx and .xls formats</p>
-                    </div>
-                    
-                    <input 
-                      type="file"
-                      id="excel-upload-file"
-                      accept=".xlsx,.xls"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleUploadAndAnalyze(file);
-                        e.target.value = "";
-                      }}
-                    />
-                    
-                    <Button 
-                      type="button" 
-                      onClick={() => document.getElementById("excel-upload-file")?.click()}
-                      loading={isAnalyzing}
-                      className="mt-2"
-                    >
-                      {isAnalyzing ? "Analyzing File..." : "Browse File"}
-                    </Button>
-                  </div>
+             <CardContent className="p-6 overflow-y-auto flex-1 min-h-0 text-sm space-y-4">
 
-                  <div className="bg-stone-50 border border-stone-150 rounded-lg p-4 space-y-3">
-                    <h4 className="font-semibold text-stone-800 text-xs uppercase tracking-wider">Configure Import Settings</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-stone-500">Duplicate Handling Strategy</label>
-                        <select 
-                          value={duplicateStrategy}
-                          onChange={(e) => setDuplicateStrategy(e.target.value as "SKIP" | "FAIL")}
-                          className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none"
-                        >
-                          <option value="SKIP">Skip Duplicates (Import Only Unique Students)</option>
-                          <option value="FAIL">Fail Import (Reject File on Any Duplicate)</option>
-                        </select>
+              {/* PROGRESS BAR OVERLAY */}
+              {importProgress ? (
+                <div className="flex flex-col items-center justify-center p-8 space-y-4">
+                  <div className="text-stone-700 font-bold text-base">Importing Student Records...</div>
+                  <div className="w-full max-w-md bg-stone-100 rounded-full h-4 overflow-hidden relative">
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-300"
+                      style={{ width: `${(importProgress.processed / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-stone-500 font-mono">
+                    Processed {importProgress.processed} / {importProgress.total} records ({importProgress.remaining} remaining)
+                  </div>
+                  {importProgress.currentName && (
+                    <div className="text-xs text-stone-455 italic">
+                      Current student: {importProgress.currentName}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* STEP 1: WELCOME & INSTRUCTIONS */}
+                  {importStep === "WIZARD_START" && (
+                    <div className="space-y-5 py-2">
+                      <div className="bg-stone-50 border border-stone-200 rounded-lg p-5 space-y-3">
+                        <h3 className="font-bold text-stone-800 text-sm">Welcome to the Student Import Wizard</h3>
+                        <p className="text-xs text-stone-650 leading-relaxed">
+                          This wizard guides you through importing student records in bulk.
+                        </p>
+                        <div className="space-y-1.5 pt-2">
+                          <h4 className="text-xs font-bold text-stone-700">Important Instructions:</h4>
+                          <ul className="list-disc list-inside text-xs text-stone-500 space-y-1 pl-1">
+                            <li>Only the following fields are mandatory: <strong className="text-stone-700">Admission Number</strong>, <strong className="text-stone-700">Student Name</strong>, <strong className="text-stone-700">Class</strong>, and <strong className="text-stone-700">Section</strong>.</li>
+                            <li>Every other field is optional and can be left blank.</li>
+                            <li>Classes and Sections must match existing records in the ERP. Classes (e.g. roman numerals like <code className="bg-stone-100 px-1 py-0.5 rounded text-[10px]">XII</code> or values like <code className="bg-stone-100 px-1 py-0.5 rounded text-[10px]">Class 12</code>) are mapped automatically.</li>
+                            <li>Duplicate Admission Numbers will be checked against the ERP database.</li>
+                          </ul>
+                        </div>
                       </div>
-                      <div className="flex flex-col justify-end">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
+
+                      <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-stone-50/30 gap-3">
+                        <p className="text-xs text-stone-500 font-medium">Download the dynamic template containing all form fields:</p>
+                        <Button
+                          type="button"
+                          variant="outline"
                           onClick={handleDownloadSample}
-                          className="h-9 w-full flex items-center justify-center gap-1.5"
+                          className="flex items-center gap-1.5"
                         >
                           📥 Download Sample Template
                         </Button>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {/* STEP 2: VALIDATION PREVIEW */}
-              {importStep === "PREVIEW" && previewData && (
-                <div className="space-y-4 flex flex-col h-full min-h-0">
-                  {/* Summary Badges */}
-                  <div className="grid grid-cols-4 gap-3 shrink-0">
-                    <div className="bg-stone-50 border p-3 rounded-lg text-center">
-                      <span className="text-[10px] uppercase font-bold text-stone-400 block mb-0.5">Total Rows</span>
-                      <span className="text-lg font-extrabold text-stone-700">{previewData.summary.total}</span>
-                    </div>
-                    <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-lg text-center">
-                      <span className="text-[10px] uppercase font-bold text-emerald-600 block mb-0.5">✓ Ready</span>
-                      <span className="text-lg font-extrabold text-emerald-700">{previewData.summary.ready}</span>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg text-center">
-                      <span className="text-[10px] uppercase font-bold text-amber-600 block mb-0.5">⚠ Warnings</span>
-                      <span className="text-lg font-extrabold text-amber-700">{previewData.summary.warnings}</span>
-                    </div>
-                    <div className="bg-rose-50 border border-rose-100 p-3 rounded-lg text-center">
-                      <span className="text-[10px] uppercase font-bold text-rose-600 block mb-0.5">✗ Errors</span>
-                      <span className="text-lg font-extrabold text-rose-700">{previewData.summary.errors}</span>
-                    </div>
-                  </div>
+                  {/* STEP 2: UPLOAD & SETTINGS */}
+                  {importStep === "UPLOAD" && (
+                    <div className="space-y-6">
+                      <div className="border-2 border-dashed border-stone-200 rounded-xl p-8 text-center bg-stone-50/50 hover:bg-stone-50 transition-colors flex flex-col items-center justify-center gap-3">
+                        <span className="text-4xl">📁</span>
+                        <div>
+                          <p className="font-semibold text-stone-700">Choose Student Excel File</p>
+                          <p className="text-xs text-stone-450 mt-1">Supports .xlsx and .xls formats</p>
+                        </div>
 
-                  {/* Filter tabs + Actions */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 shrink-0 border-b pb-3">
-                    <div className="flex gap-1">
-                      {(["ALL", "READY", "WARNING", "ERROR"] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          onClick={() => setPreviewFilter(tab)}
-                          className={cn(
-                            "px-3 py-1 rounded-md text-xs font-semibold border transition-all",
-                            previewFilter === tab
-                              ? "bg-stone-800 text-white border-stone-800"
-                              : "bg-white text-stone-600 hover:bg-stone-50 border-stone-200"
-                          )}
+                        <input
+                          type="file"
+                          id="excel-upload-file"
+                          accept=".xlsx,.xls"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadAndAnalyze(file);
+                            e.target.value = "";
+                          }}
+                        />
+
+                        <Button
+                          type="button"
+                          onClick={() => document.getElementById("excel-upload-file")?.click()}
+                          loading={isAnalyzing}
+                          className="mt-2"
                         >
-                          {tab === "ALL" && `All Rows (${previewData.summary.total})`}
-                          {tab === "READY" && `Ready (${previewData.summary.ready})`}
-                          {tab === "WARNING" && `Warnings (${previewData.summary.warnings})`}
-                          {tab === "ERROR" && `Errors (${previewData.summary.errors})`}
-                        </button>
-                      ))}
+                          {isAnalyzing ? "Analyzing File..." : "Browse File"}
+                        </Button>
+                      </div>
+
+                      <div className="bg-stone-50 border border-stone-150 rounded-lg p-4 space-y-3">
+                        <h4 className="font-semibold text-stone-800 text-xs uppercase tracking-wider">Configure Import Settings</h4>
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-stone-500">Duplicate Handling Strategy</label>
+                            <select
+                              value={duplicateStrategy}
+                              onChange={(e) => setDuplicateStrategy(e.target.value as "SKIP" | "UPDATE" | "FAIL")}
+                              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none"
+                            >
+                              <option value="SKIP">Skip Existing Student (Import Only Unique Students)</option>
+                              <option value="UPDATE">Update Existing Record (Overwrite Details)</option>
+                              <option value="FAIL">Fail Import (Reject File on Any Duplicate)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  )}
 
-                    {(previewData.summary.errors > 0 || previewData.summary.warnings > 0) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleDownloadErrorReport}
-                        className="text-xs h-8 text-rose-600 border-rose-200 hover:bg-rose-50/50"
-                      >
-                        🚨 Download Error Report
-                      </Button>
-                    )}
-                  </div>
+                  {/* STEP 3: VALIDATION PREVIEW */}
+                  {importStep === "PREVIEW" && previewData && (
+                    <div className="space-y-4 flex flex-col h-full min-h-0">
+                      {/* Summary Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5 shrink-0">
+                        <div className="bg-stone-50 border p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-stone-400 block mb-0.5">Total Rows</span>
+                          <span className="text-base font-extrabold text-stone-700">{previewData.summary.total}</span>
+                        </div>
+                        <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-emerald-600 block mb-0.5">✓ Valid</span>
+                          <span className="text-base font-extrabold text-emerald-700">{previewData.summary.ready}</span>
+                        </div>
+                        <div className="bg-rose-50 border border-rose-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-rose-600 block mb-0.5">✗ Invalid</span>
+                          <span className="text-base font-extrabold text-rose-700">{previewData.summary.errors}</span>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-amber-600 block mb-0.5">⚠ Duplicates</span>
+                          <span className="text-base font-extrabold text-amber-700">{previewData.summary.duplicates ?? 0}</span>
+                        </div>
+                        <div className="bg-blue-50 border border-blue-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-blue-600 block mb-0.5">Missing Fields</span>
+                          <span className="text-base font-extrabold text-blue-700">{previewData.summary.missingRequired ?? 0}</span>
+                        </div>
+                        <div className="bg-violet-50 border border-violet-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-violet-600 block mb-0.5">Bad Class</span>
+                          <span className="text-base font-extrabold text-violet-700">{previewData.summary.unknownClasses ?? 0}</span>
+                        </div>
+                        <div className="bg-purple-50 border border-purple-100 p-2.5 rounded-lg text-center">
+                          <span className="text-[9px] uppercase font-bold text-purple-600 block mb-0.5">Bad Section</span>
+                          <span className="text-base font-extrabold text-purple-700">{previewData.summary.unknownSections ?? 0}</span>
+                        </div>
+                      </div>
 
-                  {/* Preview Table */}
-                  <div className="overflow-auto border rounded-lg flex-1 min-h-[250px]">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-stone-50 border-b sticky top-0 bg-stone-50 z-10 font-bold text-stone-600">
-                        <tr>
-                          <th className="px-3 py-2.5 w-16 text-center">Row</th>
-                          <th className="px-3 py-2.5">Name</th>
-                          <th className="px-3 py-2.5">Admission No</th>
-                          <th className="px-3 py-2.5">Class / Section</th>
-                          <th className="px-3 py-2.5 w-24">Status</th>
-                          <th className="px-3 py-2.5">Validation Details</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {previewData.rows
-                          .filter(r => {
-                            if (previewFilter === "ALL") return true;
-                            return r.status === previewFilter;
-                          })
-                          .map((row, idx) => (
-                            <tr key={idx} className="hover:bg-stone-50/50 transition-colors">
-                              <td className="px-3 py-2.5 text-center font-mono font-bold text-stone-450">{row.rowNumber}</td>
-                              <td className="px-3 py-2.5 font-bold text-stone-800">{row.studentName || "—"}</td>
-                              <td className="px-3 py-2.5 font-mono">{row.admissionNo || "—"}</td>
-                              <td className="px-3 py-2.5">
-                                {row.className ? `${row.className}-${row.sectionName || ""}` : "—"}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <Badge
-                                  variant={
-                                    row.status === "READY"
-                                      ? "success"
-                                      : row.status === "WARNING"
-                                      ? "warning"
-                                      : "destructive"
-                                  }
-                                  className="text-[9px] px-1.5 py-0.5"
-                                >
-                                  {row.status}
-                                </Badge>
-                              </td>
-                              <td className={cn(
-                                "px-3 py-2.5 text-stone-500",
-                                row.status === "ERROR" && "text-rose-600 font-medium",
-                                row.status === "WARNING" && "text-amber-600"
-                              )}>
-                                {row.reason}
-                              </td>
-                            </tr>
+                      {/* Filter tabs + Actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 shrink-0 border-b pb-3">
+                        <div className="flex gap-1">
+                          {(["ALL", "READY", "WARNING", "ERROR"] as const).map((tab) => (
+                            <button
+                              key={tab}
+                              onClick={() => setPreviewFilter(tab)}
+                              className={cn(
+                                "px-3 py-1 rounded-md text-xs font-semibold border transition-all",
+                                previewFilter === tab
+                                  ? "bg-stone-800 text-white border-stone-800"
+                                  : "bg-white text-stone-600 hover:bg-stone-50 border-stone-200"
+                              )}
+                            >
+                              {tab === "ALL" && `All Rows (${previewData.summary.total})`}
+                              {tab === "READY" && `Ready (${previewData.summary.ready})`}
+                              {tab === "WARNING" && `Warnings (${previewData.summary.warnings})`}
+                              {tab === "ERROR" && `Errors (${previewData.summary.errors})`}
+                            </button>
                           ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </div>
 
-                  {previewData.summary.errors > 0 && (
-                    <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-rose-700 text-xs shrink-0 flex items-start gap-2">
-                      <span className="text-lg leading-none">⚠️</span>
-                      <p>
-                        <strong>Errors detected:</strong> Please fix the missing or invalid required data (like Class matching or missing Date of Birth) in your Excel file before proceeding. The import is blocked until errors are resolved.
+                        {(previewData.summary.errors > 0 || previewData.summary.warnings > 0) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDownloadErrorReport}
+                            className="text-xs h-8 text-rose-600 border-rose-200 hover:bg-rose-50/50"
+                          >
+                            🚨 Download Error Report
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Preview Table */}
+                      <div className="overflow-auto border rounded-lg flex-1 min-h-[250px]">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-stone-50 border-b sticky top-0 bg-stone-50 z-10 font-bold text-stone-600">
+                            <tr>
+                              <th className="px-3 py-2.5 w-16 text-center">Row</th>
+                              <th className="px-3 py-2.5">Admission No</th>
+                              <th className="px-3 py-2.5">Name</th>
+                              <th className="px-3 py-2.5 w-44">Class / Section</th>
+                              <th className="px-3 py-2.5 w-44">Gender / Category</th>
+                              <th className="px-3 py-2.5 w-24">Status</th>
+                              <th className="px-3 py-2.5">Validation Details / Reason</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {previewData.rows
+                              .filter(r => {
+                                if (previewFilter === "ALL") return true;
+                                return r.status === previewFilter;
+                              })
+                              .map((row, idx) => (
+                                <tr key={idx} className="hover:bg-stone-50/50 transition-colors">
+                                  <td className="px-3 py-2.5 text-center font-mono font-bold text-stone-450">{row.rowNumber}</td>
+                                  <td className="px-3 py-2.5 font-mono font-semibold">{row.admissionNo || "—"}</td>
+                                  <td className="px-3 py-2.5 font-bold text-stone-800">{row.studentName || "—"}</td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex flex-col gap-1">
+                                      <select
+                                        value={row.className || ""}
+                                        onChange={(e) => handleInlineEdit(row.rowNumber, "className", e.target.value)}
+                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
+                                      >
+                                        <option value="">-- Class --</option>
+                                        {classes.map(c => (
+                                          <option key={c.id} value={c.name}>{c.name}</option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={row.sectionName || ""}
+                                        onChange={(e) => handleInlineEdit(row.rowNumber, "sectionName", e.target.value)}
+                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
+                                        disabled={!row.className}
+                                      >
+                                        <option value="">-- Section --</option>
+                                        {classes.find(c => c.name === row.className)?.sections.map(s => (
+                                          <option key={s.id} value={s.name}>{s.name}</option>
+                                        )) || null}
+                                      </select>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex flex-col gap-1">
+                                      <select
+                                        value={row.data.gender || ""}
+                                        onChange={(e) => handleInlineEdit(row.rowNumber, "gender", e.target.value)}
+                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
+                                      >
+                                        <option value="">-- Gender --</option>
+                                        <option value="MALE">Male</option>
+                                        <option value="FEMALE">Female</option>
+                                        <option value="OTHER">Other</option>
+                                      </select>
+                                      <select
+                                        value={row.data.category || ""}
+                                        onChange={(e) => handleInlineEdit(row.rowNumber, "category", e.target.value)}
+                                        className="border border-stone-200 rounded px-1.5 py-0.5 text-xs bg-white text-stone-850"
+                                      >
+                                        <option value="">-- Category --</option>
+                                        <option value="GENERAL">General</option>
+                                        <option value="OBC">OBC</option>
+                                        <option value="SC">SC</option>
+                                        <option value="ST">ST</option>
+                                        <option value="EWS">EWS</option>
+                                        <option value="OTHER">Other</option>
+                                      </select>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <Badge
+                                      variant={
+                                        row.status === "READY"
+                                          ? "success"
+                                          : row.status === "WARNING"
+                                            ? "warning"
+                                            : "destructive"
+                                      }
+                                      className="text-[9px] px-1.5 py-0.5"
+                                    >
+                                      {row.status}
+                                    </Badge>
+                                  </td>
+                                  <td className={cn(
+                                    "px-3 py-2.5 text-stone-500",
+                                    row.status === "ERROR" && "text-rose-600 font-medium",
+                                    row.status === "WARNING" && "text-amber-600"
+                                  )}>
+                                    {row.reason}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {previewData.summary.errors > 0 && (
+                        <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-rose-700 text-xs shrink-0 flex items-start gap-2">
+                          <span className="text-lg leading-none">⚠️</span>
+                          <p>
+                            <strong>Errors detected:</strong> You can fix class, section, gender, or category options directly in the dropdown inputs above to resolve error issues. The import is blocked until errors are resolved.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* STEP 4: RESULT SUMMARY */}
+                  {importStep === "RESULT" && executionResult && (
+                    <div className="space-y-6 text-center py-6">
+                      <div className="text-4xl">🎉</div>
+                      <h3 className="text-lg font-bold text-stone-800">Import Job Processed</h3>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-lg mx-auto text-center">
+                        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+                          <span className="text-xs font-bold text-emerald-600 block mb-1">Imported</span>
+                          <span className="text-3xl font-extrabold text-emerald-700">{executionResult.imported}</span>
+                        </div>
+                        <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
+                          <span className="text-xs font-bold text-indigo-600 block mb-1">Updated</span>
+                          <span className="text-3xl font-extrabold text-indigo-700">{executionResult.updated}</span>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                          <span className="text-xs font-bold text-amber-600 block mb-1">Skipped</span>
+                          <span className="text-3xl font-extrabold text-amber-700">{executionResult.skipped}</span>
+                        </div>
+                        <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl">
+                          <span className="text-xs font-bold text-rose-600 block mb-1">Failed</span>
+                          <span className="text-3xl font-extrabold text-rose-700">{executionResult.failed}</span>
+                        </div>
+                      </div>
+
+                      {executionResult.failed > 0 && (
+                        <div className="pt-2">
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handleDownloadErrorReport}
+                            className="flex items-center gap-1.5 mx-auto"
+                          >
+                            🚨 Download Error Report
+                          </Button>
+                        </div>
+                      )}
+
+                      <p className="text-stone-500 text-xs max-w-sm mx-auto">
+                        All processed records were committed atomically under a single database transaction. Audit logs have been generated.
                       </p>
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* STEP 3: RESULT SUMMARY */}
-              {importStep === "RESULT" && executionResult && (
-                <div className="space-y-6 text-center py-6">
-                  <div className="text-4xl"></div>
-                  <h3 className="text-lg font-bold text-stone-800">Import Job Processed</h3>
-                  
-                  <div className="grid grid-cols-3 gap-4 max-w-md mx-auto text-center">
-                    <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
-                      <span className="text-xs font-bold text-emerald-600 block mb-1">Imported</span>
-                      <span className="text-3xl font-extrabold text-emerald-700">{executionResult.imported}</span>
-                    </div>
-                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
-                      <span className="text-xs font-bold text-amber-600 block mb-1">Skipped</span>
-                      <span className="text-3xl font-extrabold text-amber-700">{executionResult.skipped}</span>
-                    </div>
-                    <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl">
-                      <span className="text-xs font-bold text-rose-600 block mb-1">Failed</span>
-                      <span className="text-3xl font-extrabold text-rose-700">{executionResult.failed}</span>
-                    </div>
-                  </div>
-
-                  <p className="text-stone-500 text-xs max-w-sm mx-auto">
-                    All processed records were committed atomically under a single database transaction. Audit logs have been generated.
-                  </p>
-                </div>
+                </>
               )}
 
             </CardContent>
 
             <CardFooter className="border-t px-6 py-4 flex justify-between shrink-0 bg-stone-50/50 rounded-b-xl">
-              {importStep === "UPLOAD" && (
+              {importProgress ? (
+                <span className="text-xs text-stone-400 font-mono">Importing progress... Please do not close this window.</span>
+              ) : (
                 <>
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    onClick={() => setIsImportModalOpen(false)}
-                    disabled={isAnalyzing}
-                  >
-                    Cancel
-                  </Button>
-                  <span className="text-xs text-stone-400">Step 1 of 3</span>
-                </>
-              )}
+                  {importStep === "WIZARD_START" && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setIsImportModalOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-stone-450 mr-2">Step 1 of 4</span>
+                        <Button
+                          type="button"
+                          onClick={() => setImportStep("UPLOAD")}
+                        >
+                          Continue to Upload
+                        </Button>
+                      </div>
+                    </>
+                  )}
 
-              {importStep === "PREVIEW" && previewData && (
-                <>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setImportStep("UPLOAD")}
-                    disabled={isCommitting}
-                  >
-                    Back to Upload
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-stone-400 mr-2">Step 2 of 3</span>
-                    <Button 
-                      type="button" 
-                      onClick={handleConfirmImport}
-                      loading={isCommitting}
-                      disabled={previewData.summary.errors > 0}
-                    >
-                      {isCommitting ? "Importing Batch..." : `Confirm & Import (${previewData.summary.ready} Students)`}
-                    </Button>
-                  </div>
-                </>
-              )}
+                  {importStep === "UPLOAD" && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setImportStep("WIZARD_START")}
+                        disabled={isAnalyzing}
+                      >
+                        Back
+                      </Button>
+                      <span className="text-xs text-stone-400">Step 2 of 4</span>
+                    </>
+                  )}
 
-              {importStep === "RESULT" && (
-                <>
-                  <span />
-                  <Button 
-                    type="button" 
-                    onClick={() => setIsImportModalOpen(false)}
-                  >
-                    Done & Close
-                  </Button>
+                  {importStep === "PREVIEW" && previewData && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setImportStep("UPLOAD")}
+                        disabled={isCommitting}
+                      >
+                        Back to Upload
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-stone-400 mr-2">Step 3 of 4</span>
+                        <Button
+                          type="button"
+                          onClick={handleConfirmImport}
+                          loading={isCommitting}
+                          disabled={previewData.summary.errors > 0}
+                        >
+                          {isCommitting ? "Importing Batch..." : `Confirm & Import (${previewData.summary.ready} Students)`}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {importStep === "RESULT" && (
+                    <>
+                      <span />
+                      <Button
+                        type="button"
+                        onClick={() => setIsImportModalOpen(false)}
+                      >
+                        Done & Close
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </CardFooter>

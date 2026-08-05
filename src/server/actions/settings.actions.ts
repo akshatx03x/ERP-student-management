@@ -8,11 +8,17 @@ import {
   getUserPermissionOverrides,
   updateUserPermissions,
   toggleUserActive,
+  createUser,
+  resetUserPassword,
+  updateUserCredentials,
 } from "@/server/services/settings.service";
 import type { UpdateBrandingInput } from "@/server/validators/branding.validator";
 import type {
   ToggleUserActiveInput,
   UpdateUserPermissionsInput,
+  CreateUserInput,
+  ResetUserPasswordInput,
+  UpdateUserCredentialsInput,
 } from "@/server/validators/settings.validator";
 
 export async function getUsersAction(input?: Parameters<typeof listUsers>[0]) {
@@ -35,6 +41,24 @@ export async function updatePermissionsAction(input: UpdateUserPermissionsInput)
 
 export async function toggleUserActiveAction(input: ToggleUserActiveInput) {
   const result = await toggleUserActive(input);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function createUserAction(input: CreateUserInput) {
+  const result = await createUser(input);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function resetUserPasswordAction(input: ResetUserPasswordInput) {
+  const result = await resetUserPassword(input);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function updateUserCredentialsAction(input: UpdateUserCredentialsInput) {
+  const result = await updateUserCredentials(input);
   revalidatePath("/settings");
   return result;
 }
@@ -77,4 +101,3 @@ export async function createStaffLoginSettingsAction(input: any) {
   revalidatePath("/settings");
   return result;
 }
-

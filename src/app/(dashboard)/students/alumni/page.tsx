@@ -1,9 +1,13 @@
 import { listAlumniStudents } from "@/server/services/student.service";
+import { listSessions } from "@/server/services/session.service";
 import { AlumniStudentsClient } from "./alumni-students-client";
 import { PageHeader } from "@/components/shared/states";
 
 export default async function AlumniPage() {
-  const result = await listAlumniStudents({ pageSize: 200 });
+  const [alumniResult, sessionsResult] = await Promise.all([
+    listAlumniStudents({ pageSize: 500 }),
+    listSessions({ pageSize: 100 }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -11,7 +15,10 @@ export default async function AlumniPage() {
         title="School Alumni"
         description="Directory of graduated students and their complete academic history."
       />
-      <AlumniStudentsClient students={result.items} />
+      <AlumniStudentsClient
+        students={alumniResult.items}
+        sessions={sessionsResult.items}
+      />
     </div>
   );
 }
