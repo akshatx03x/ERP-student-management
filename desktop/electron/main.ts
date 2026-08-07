@@ -3,17 +3,43 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { registerIpcHandlers } from "./ipc";
-import { checkSqliteDatabaseIntegrity } from "./sqlite-manager";
+import { checkSqliteDatabaseIntegrity, acquireSingleInstanceLock, releaseSingleInstanceLock } from "./sqlite-manager";
 import { runPendingPrismaMigrations } from "./migration-runner";
 import { startNextServer, stopNextServer } from "./next-server-manager";
 import { ensureWritableDirectoriesExist, getOrCreateDesktopAuthSecret, getPortableBaseDirectory } from "./paths";
+
+// Set up Prisma engine paths for packaged runtime
+if (app.isPackaged) {
+  const resourcesDir = process.resourcesPath;
+  process.env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "@prisma",
+    "engines",
+    "query_engine-windows.dll.node"
+  );
+  process.env.PRISMA_SCHEMA_ENGINE_BINARY = path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "@prisma",
+    "engines",
+    "schema-engine-windows.exe"
+  );
+  process.env.PRISMA_MIGRATION_ENGINE_BINARY = process.env.PRISMA_SCHEMA_ENGINE_BINARY;
+}
 
 app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>,localhost,127.0.0.1");
 app.commandLine.appendSwitch("proxy-server", "direct://");
 app.commandLine.appendSwitch("no-proxy-server");
 
 let mainWindow: BrowserWindow | null = null;
+
 let splashWindow: BrowserWindow | null = null;
+
+// Stored during bootstrapDesktopApp so the will-quit handler can release the lock.
+let portableDbFilePath: string | null = null;
 
 function createSplashWindow(): BrowserWindow {
   console.log("[SplashWindow] Creating splash window instance...");
@@ -83,6 +109,9 @@ async function createMainWindow(serverUrl: string): Promise<BrowserWindow> {
     console.log("[MainWindow Event] ready-to-show fired!");
     window.show();
     window.focus();
+    if (!app.isPackaged) {
+      window.webContents.openDevTools();
+    }
     if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.close();
       splashWindow = null;
@@ -124,6 +153,38 @@ function findProjectRootDir(startDir: string): string {
   return path.resolve(startDir, "../../../..");
 }
 
+const writablePaths = ensureWritableDirectoriesExist();
+process.env.OFFLINE_DATA_DIR = writablePaths.baseDataDir;
+process.env.OFFLINE_UPLOAD_DIR = writablePaths.uploadsDir;
+process.env.OFFLINE_BACKUP_DIR = writablePaths.backupsDir;
+process.env.OFFLINE_STORAGE_DIR = writablePaths.storageDir;
+process.env.OFFLINE_LOG_DIR = writablePaths.logsDir;
+process.env.OFFLINE_TEMP_DIR = writablePaths.tempDir;
+
+function logMain(message: string, isError: boolean = false) {
+  const timestamp = new Date().toISOString();
+  const prefix = isError ? "[ERROR]" : "[INFO]";
+  const line = `[${timestamp}] ${prefix} ${message}\n`;
+  console.log(message);
+  try {
+    const logFile = path.join(writablePaths.logsDir, "main.log");
+    fs.appendFileSync(logFile, line, "utf8");
+  } catch (err) {
+    console.error("Failed to write to main.log:", err);
+  }
+}
+
+// Exception and Rejection Logging
+process.on("uncaughtException", (error) => {
+  const msg = `Uncaught Exception: ${error?.message || error}\nStack: ${error?.stack}`;
+  logMain(msg, true);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  const msg = `Unhandled Rejection at: ${promise}\nReason: ${reason instanceof Error ? reason.stack : reason}`;
+  logMain(msg, true);
+});
+
 let isBootstrapping = false;
 let isBootstrapped = false;
 
@@ -133,21 +194,22 @@ async function bootstrapDesktopApp(): Promise<void> {
   }
   isBootstrapping = true;
 
-  console.log("=========================================");
-  console.log(" Starting SchoolERP Portable Desktop ERP ");
-  console.log(" Mode: Single-User Portable SQLite      ");
-  console.log("=========================================");
+  logMain("=========================================");
+  logMain(" Starting SchoolERP Portable Desktop ERP ");
+  logMain(" Mode: Single-User Portable SQLite      ");
+  logMain("=========================================");
+
+  // Logging process info as requested
+  logMain(`[Environment Diagnostics]
+    process.cwd(): "${process.cwd()}"
+    process.resourcesPath: "${process.resourcesPath || "undefined"}"
+    __dirname: "${__dirname}"
+    app.getPath("userData"): "${app.getPath("userData")}"
+    app.getAppPath(): "${app.getAppPath()}"
+    app.isPackaged: ${app.isPackaged}`);
 
   splashWindow = createSplashWindow();
   updateSplashProgress("Initializing portable environment...", 10);
-
-  const writablePaths = ensureWritableDirectoriesExist();
-  process.env.OFFLINE_DATA_DIR = writablePaths.baseDataDir;
-  process.env.OFFLINE_UPLOAD_DIR = writablePaths.uploadsDir;
-  process.env.OFFLINE_BACKUP_DIR = writablePaths.backupsDir;
-  process.env.OFFLINE_STORAGE_DIR = writablePaths.storageDir;
-  process.env.OFFLINE_LOG_DIR = writablePaths.logsDir;
-  process.env.OFFLINE_TEMP_DIR = writablePaths.tempDir;
 
   const projectRootDir = findProjectRootDir(__dirname);
 
@@ -160,7 +222,7 @@ async function bootstrapDesktopApp(): Promise<void> {
   for (const envPath of candidateEnvPaths) {
     if (fs.existsSync(envPath)) {
       dotenv.config({ path: envPath });
-      console.log(`[Main] Loaded environment from: ${envPath}`);
+      logMain(`[Main] Loaded environment from: ${envPath}`);
       break;
     }
   }
@@ -174,17 +236,22 @@ async function bootstrapDesktopApp(): Promise<void> {
     process.env.BETTER_AUTH_SECRET = desktopSecret;
   }
 
+  logMain(`[Better Auth Env]
+    BETTER_AUTH_URL: "${process.env.BETTER_AUTH_URL}"
+    NEXT_PUBLIC_APP_URL: "${process.env.NEXT_PUBLIC_APP_URL}"
+    BETTER_AUTH_SECRET length: ${process.env.BETTER_AUTH_SECRET ? process.env.BETTER_AUTH_SECRET.length : 0}`);
+
   updateSplashProgress("Registering application IPC services...", 25);
   registerIpcHandlers();
 
   // If the database exists but has 0 bytes, it is corrupted or incomplete from a crashed startup.
   // We delete it to allow a fresh migration and seeding to occur.
   if (fs.existsSync(writablePaths.dbFilePath) && fs.statSync(writablePaths.dbFilePath).size === 0) {
-    console.log("[Main] Detected 0-byte database file. Deleting to trigger fresh migration and seeding.");
+    logMain("[Main] Detected 0-byte database file. Deleting to trigger fresh migration and seeding.");
     try {
       fs.unlinkSync(writablePaths.dbFilePath);
     } catch (err: any) {
-      console.warn("[Main] Failed to clean up 0-byte database file:", err.message);
+      logMain(`[Main Warning] Failed to clean up 0-byte database file: ${err.message}`);
     }
   }
 
@@ -205,14 +272,29 @@ async function bootstrapDesktopApp(): Promise<void> {
     return;
   }
 
+  // Acquire single-instance lock to prevent two ERP instances from opening
+  // the same SQLite database simultaneously (WAL-mode concurrent writes can corrupt the DB).
+  const lockResult = acquireSingleInstanceLock(writablePaths.dbFilePath);
+  if (!lockResult.acquired) {
+    updateSplashProgress("Another instance is running.", 40);
+    dialog.showErrorBox("School ERP Is Already Running", lockResult.message);
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+    }
+    app.quit();
+    return;
+  }
+  portableDbFilePath = writablePaths.dbFilePath;
+
   const sqliteUrl = `file:${writablePaths.dbFilePath}`;
   process.env.DATABASE_URL = sqliteUrl;
 
-  console.log(`[Main Environment Summary]
+  logMain(`[Main Environment Summary]
   APP_MODE: ${process.env.APP_MODE}
   Portable Base Directory: ${writablePaths.baseDataDir}
   SQLite DB File: ${writablePaths.dbFilePath}
-  Is First Run: ${isFirstRun}`);
+  Is First Run: ${isFirstRun}
+  DATABASE_URL: "${process.env.DATABASE_URL}"`);
 
   updateSplashProgress("Applying SQLite database migrations...", 60);
   const migrationResult = await runPendingPrismaMigrations(projectRootDir, sqliteUrl, {
@@ -276,4 +358,7 @@ app.on("activate", async () => {
 
 process.on("will-quit", () => {
   stopNextServer();
+  if (portableDbFilePath) {
+    releaseSingleInstanceLock(portableDbFilePath);
+  }
 });

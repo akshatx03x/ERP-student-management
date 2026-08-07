@@ -6,7 +6,6 @@ import { ImportPanel } from "@/components/shared/import-panel";
 import { BackupPanel } from "@/components/shared/backup-panel";
 import { SettingsClient } from "./settings-client";
 import { getCurrentUser, isPrincipal } from "@/server/auth/session";
-import { getBackupProvider } from "@/server/providers/backup.provider";
 import { PERMISSION_GROUPS, PERMISSION_PRESETS } from "@/config/permissions";
 
 export default async function SettingsPage() {
@@ -17,6 +16,7 @@ export default async function SettingsPage() {
   let lastBackup = null;
   if (isAdminView) {
     try {
+      const { getBackupProvider } = await import("@/server/providers/backup.provider");
       const provider = getBackupProvider();
       const backups = await provider.listBackups();
       if (backups.length > 0) {

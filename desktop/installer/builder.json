@@ -5,7 +5,7 @@
   "compression": "normal",
   "publish": null,
   "directories": {
-    "output": "C:/Users/Akshat/AppData/Local/SchoolERPBuild",
+    "output": "../dist/build",
     "buildResources": "assets",
     "app": "."
   },
@@ -20,6 +20,10 @@
     "!**/src/**",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
     "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  ],
+  "extraFiles": [
+    { "from": "Update.bat", "to": "Update.bat" },
+    { "from": "Update.ps1", "to": "Update.ps1" }
   ],
   "asar": true,
   "asarUnpack": [
@@ -47,6 +51,12 @@
   "win": {
     "target": [
       {
+        "target": "dir",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
         "target": "nsis",
         "arch": [
           "x64"
@@ -63,8 +73,5 @@
     "runAfterFinish": true,
     "artifactName": "SchoolERP_Setup.exe",
     "include": "installer/nsis-installer.nsh"
-  },
-  "portable": {
-    "artifactName": "SchoolERP_Portable.exe"
   }
 }

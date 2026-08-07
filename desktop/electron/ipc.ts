@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, app } from "electron";
 import { loadAppConfig } from "./config";
 import { getBackupProvider } from "./backup";
 import { checkDatabaseReady } from "./sqlite-manager";
@@ -13,7 +13,7 @@ export function registerIpcHandlers(): void {
       uploadProvider: config.uploadProvider,
       backupProvider: config.backupProvider,
       storagePaths: config.offlinePaths,
-      version: "1.0.0",
+      version: app.getVersion(),
     };
   });
 

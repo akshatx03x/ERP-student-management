@@ -26,11 +26,30 @@ export function getServerState(): ServerState {
   return serverState;
 }
 
+function logServerManager(message: string, isError: boolean = false) {
+  const timestamp = new Date().toISOString();
+  const prefix = isError ? "[ERROR]" : "[INFO]";
+  const line = `[${timestamp}] ${prefix} [NextServerManager] ${message}\n`;
+  if (isError) {
+    console.warn(`[NextServerManager] ${message}`);
+  } else {
+    console.log(`[NextServerManager] ${message}`);
+  }
+  try {
+    const logDir = process.env.OFFLINE_LOG_DIR || path.join(path.dirname(process.execPath), "logs");
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logFile = path.join(logDir, "main.log");
+    fs.appendFileSync(logFile, line, "utf8");
+  } catch {}
+}
+
 export function isServerReady(port: number, attempt: number = 1): Promise<boolean> {
   return new Promise((resolve) => {
     const targetUrl = `http://127.0.0.1:${port}/api/health`;
     if (attempt > 0) {
-      console.log(`[NextServerManager] Attempt #${attempt} - GET ${targetUrl}`);
+      logServerManager(`Attempt #${attempt} - GET ${targetUrl}`);
     }
 
     const req = http.get(targetUrl, { timeout: 3000 }, (res) => {
@@ -42,7 +61,7 @@ export function isServerReady(port: number, attempt: number = 1): Promise<boolea
       res.on("end", () => {
         const status = res.statusCode;
         if (attempt > 0) {
-          console.log(`[NextServerManager] Attempt #${attempt} - GET ${targetUrl} -> Status: ${status}, Body: ${body.trim()}`);
+          logServerManager(`Attempt #${attempt} - GET ${targetUrl} -> Status: ${status}, Body: ${body.trim()}`);
         }
 
         if (status === 200) {
@@ -50,13 +69,13 @@ export function isServerReady(port: number, attempt: number = 1): Promise<boolea
             const parsed = JSON.parse(body);
             if (parsed && parsed.status === "ok") {
               if (attempt > 0) {
-                console.log(`[NextServerManager] Health check PASSED on attempt #${attempt}`);
+                logServerManager(`Health check PASSED on attempt #${attempt}`);
               }
               return resolve(true);
             }
           } catch (e) {
             if (attempt > 0) {
-              console.log(`[NextServerManager] Attempt #${attempt} - JSON parse error for health check response`);
+              logServerManager(`Attempt #${attempt} - JSON parse error for health check response`);
             }
           }
         }
@@ -66,14 +85,14 @@ export function isServerReady(port: number, attempt: number = 1): Promise<boolea
 
     req.on("error", (err) => {
       if (attempt > 0) {
-        console.log(`[NextServerManager] Attempt #${attempt} - GET ${targetUrl} -> Error: ${err.message}`);
+        logServerManager(`Attempt #${attempt} - GET ${targetUrl} -> Error: ${err.message}`);
       }
       resolve(false);
     });
 
     req.on("timeout", () => {
       if (attempt > 0) {
-        console.log(`[NextServerManager] Attempt #${attempt} - GET ${targetUrl} -> Timed out`);
+        logServerManager(`Attempt #${attempt} - GET ${targetUrl} -> Timed out`);
       }
       req.destroy();
       resolve(false);
@@ -85,18 +104,18 @@ export function isServerReady(port: number, attempt: number = 1): Promise<boolea
 
 export function startNextServer(config: ServerManagerConfig): Promise<string> {
   const stack = new Error().stack;
-  console.log(`[NextServerManager] startNextServer() called. Current state: ${serverState}`);
-  console.log(`[NextServerManager] Call stack:\n${stack}`);
+  logServerManager(`startNextServer() called. Current state: ${serverState}`);
+  logServerManager(`Call stack:\n${stack}`);
 
   // Singleton Guard 1: Return URL immediately if already running
   if (serverState === "running") {
-    console.log(`[NextServerManager] Server is already running. Returning existing server URL.`);
+    logServerManager(`Server is already running. Returning existing server URL.`);
     return Promise.resolve(`http://127.0.0.1:${config.port}`);
   }
 
   // Singleton Guard 2: Return existing in-flight Promise if starting is already in progress
   if (serverState === "starting" && activeStartPromise) {
-    console.log(`[NextServerManager] Server startup is already in progress. Returning active startup promise.`);
+    logServerManager(`Server startup is already in progress. Returning active startup promise.`);
     return activeStartPromise;
   }
 
@@ -116,21 +135,21 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
       // If port is occupied by an external/orphaned process and we don't own it, attempt to kill or handle it
       const alreadyActive = await isServerReady(port, 0);
       if (alreadyActive && !serverProcess) {
-        console.warn(`[NextServerManager] Port ${port} is occupied by an orphaned process. Terminating orphaned process...`);
+        logServerManager(`Port ${port} is occupied by an orphaned process. Terminating orphaned process...`);
         try {
           const { execSync } = require("child_process");
           if (process.platform === "win32") {
             execSync(`for /f "tokens=5" %a in ('netstat -aon ^| findstr :${port} ^| findstr LISTENING') do taskkill /F /PID %a`, { stdio: "ignore" });
           }
         } catch (e: any) {
-          console.warn(`[NextServerManager] Failed to kill process on port ${port}:`, e.message);
+          logServerManager(`Failed to kill process on port ${port}: ${e.message}`, true);
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
 
       // Check if child process is already spawned and running
       if (serverProcess && !serverProcess.killed && serverProcess.exitCode === null) {
-        console.warn(`[NextServerManager] A child process is already attached and running. Awaiting server readiness...`);
+        logServerManager(`A child process is already attached and running. Awaiting server readiness...`);
       } else {
         const packagedCandidates = [
           path.join(process.resourcesPath, "app", "server.js"),
@@ -148,7 +167,7 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
             }
           }
           if (!standaloneServerJs) {
-            console.error(`[NextServerManager CRITICAL] Standalone server file NOT found in candidates: ${JSON.stringify(packagedCandidates)}`);
+            logServerManager(`[CRITICAL] Standalone server file NOT found in candidates: ${JSON.stringify(packagedCandidates)}`, true);
             throw new Error(`Packaged Next.js server entrypoint not found. Checked: ${JSON.stringify(packagedCandidates)}.`);
           }
         } else if (fs.existsSync(devStandaloneServer)) {
@@ -160,7 +179,7 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           ? `production standalone (${standaloneServerJs})`
           : "development (next dev --turbopack)";
 
-        console.log(`[NextServerManager] Launching Next.js server child process on port ${port} in ${modeName} mode...`);
+        logServerManager(`Launching Next.js server child process on port ${port} in ${modeName} mode...`);
 
         const env: NodeJS.ProcessEnv = {
           ...process.env,
@@ -174,7 +193,7 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           NODE_ENV: isProduction ? "production" : "development",
         };
 
-        console.log(`[NextServerManager] Child process env propagation verification:
+        logServerManager(`Child process env propagation verification:
           APP_MODE: ${env.APP_MODE}
           BETTER_AUTH_URL: ${env.BETTER_AUTH_URL}
           NEXT_PUBLIC_APP_URL: ${env.NEXT_PUBLIC_APP_URL}
@@ -185,11 +204,15 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
         let args: string[];
 
         if (isProduction && standaloneServerJs) {
-          // Use Electron executable with ELECTRON_RUN_AS_NODE=1 to act as Node.js runtime
-          env.ELECTRON_RUN_AS_NODE = "1";
-          cmd = process.execPath;
+          // Use Electron executable with ELECTRON_RUN_AS_NODE=1 only if packaged
+          if (app.isPackaged) {
+            env.ELECTRON_RUN_AS_NODE = "1";
+            cmd = process.execPath;
+          } else {
+            cmd = "node";
+          }
           args = [standaloneServerJs];
-          console.log(`[NextServerManager] Executing standalone Next server with ${cmd} using ELECTRON_RUN_AS_NODE=1`);
+          logServerManager(`Executing standalone Next server with ${cmd} (packaged: ${app.isPackaged})`);
         } else {
           const isWin = process.platform === "win32";
           cmd = isWin ? "npx.cmd" : "npx";
@@ -201,7 +224,7 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           fs.mkdirSync(cwd, { recursive: true });
         }
 
-        console.log(`[NextServerManager Spawn Inspection]
+        logServerManager(`[NextServerManager Spawn Inspection]
           cmd: "${cmd}" (exists: ${fs.existsSync(cmd)})
           args: ${JSON.stringify(args)}
           cwd: "${cwd}" (exists: ${fs.existsSync(cwd)})
@@ -215,7 +238,10 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
           stdio: ["pipe", "pipe", "pipe"],
         });
 
-        const logDir = path.join(app.getPath("userData"), "logs");
+        // Use the portable log directory set by main.ts (OFFLINE_LOG_DIR → <exeDir>\logs\).
+        // Fall back to path.dirname(process.execPath) so the log always stays beside the exe,
+        // never inside AppData or any other host-machine directory.
+        const logDir = process.env.OFFLINE_LOG_DIR || path.join(path.dirname(process.execPath), "logs");
         if (!fs.existsSync(logDir)) {
           fs.mkdirSync(logDir, { recursive: true });
         }

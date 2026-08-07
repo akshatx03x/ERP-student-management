@@ -1,0 +1,1052 @@
+[STDOUT] 2026-08-07T04:27:27.849Z ▲ Next.js 15.5.20
+[STDOUT] 2026-08-07T04:27:27.850Z - Local:        http://127.0.0.1:3000
+   - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+[STDOUT] 2026-08-07T04:27:32.858Z ✓ Ready in 5s
+[STDERR] 2026-08-07T04:27:42.075Z (node:2448) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[STDOUT] 2026-08-07T04:27:42.081Z [Middleware Diagnostic] Path: / | origin: "http://localhost:3000" | host header: "127.0.0.1:3000"
+[STDOUT] 2026-08-07T04:27:42.082Z [Middleware Redirect] Redirecting to: http://localhost:3000/login
+[STDOUT] 2026-08-07T04:27:42.126Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 4663ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.129Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.132Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.134Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.137Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.138Z ⚠️  [ANOMALY: N+1 Query Detected] 4 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.139Z ⚠️  [ANOMALY: N+1 Query Detected] 5 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.140Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.141Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.141Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.144Z ⚠️  [ANOMALY: N+1 Query Detected] 7 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.145Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.147Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.148Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.149Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.149Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.152Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 6923ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.153Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.155Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.155Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.157Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.157Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.159Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.160Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.162Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.163Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.165Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.166Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.167Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.168Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 17ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.168Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.170Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.171Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.172Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.173Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.175Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.176Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.177Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.178Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.179Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.180Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.181Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 13ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.182Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.184Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.185Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.186Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.187Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.189Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.190Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.191Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.192Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.193Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.194Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.199Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 4ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.199Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.201Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.202Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.204Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.204Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.206Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.206Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.208Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.209Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.210Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.211Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.212Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 32ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.212Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.214Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.214Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.215Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.216Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.218Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.219Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.220Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.220Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.223Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.223Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.224Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.225Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.226Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.227Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.228Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 17ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.228Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.229Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.243Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 15ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.243Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.245Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.246Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.248Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.249Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.250Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.251Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.252Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.253Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.254Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.255Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.256Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.257Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.258Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.259Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.259Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.260Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.261Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 31ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.261Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.262Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.263Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.264Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.264Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.265Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.265Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.267Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.267Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.269Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.269Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.270Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.271Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.272Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.273Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.274Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.274Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.275Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.276Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 11ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.277Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.277Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.279Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.279Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.280Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.281Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.282Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.283Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.284Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.285Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.287Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.287Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.289Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.289Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.290Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.291Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.292Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.293Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.295Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.295Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.297Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.298Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.299Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.299Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.301Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.302Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.303Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.304Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.305Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.306Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 32ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.308Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.309Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.310Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.311Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.312Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.313Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.314Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.315Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.316Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.317Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.318Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.319Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.320Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.321Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.337Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 32ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.338Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.339Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.340Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.342Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.343Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.345Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.345Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.347Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.348Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.349Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.350Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.352Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.352Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.354Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.355Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.356Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.357Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.358Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.360Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.361Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.362Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.363Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.364Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.365Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.366Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.367Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.368Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.369Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.369Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 48ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.370Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.371Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.372Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.373Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.374Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.375Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.376Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.384Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.385Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.386Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.387Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.389Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.390Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.392Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.392Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.394Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.395Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.396Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.397Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.398Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.399Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.400Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 30ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.401Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.401Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.402Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.433Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 31ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.434Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.435Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 33ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.436Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.437Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.438Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.439Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.440Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.440Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.441Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.442Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.443Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.444Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.444Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.445Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.446Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.447Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.448Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.449Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.450Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.451Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.451Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.453Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.453Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.454Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.455Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.456Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.457Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.458Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.458Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.460Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.460Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.462Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.463Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.463Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 30ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.464Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.465Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.466Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.467Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.467Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.469Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.470Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.471Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.471Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.474Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.475Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.475Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.476Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.477Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.478Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.478Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 16ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.479Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.480Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.480Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.482Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.483Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.484Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.484Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.495Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 11ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.496Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.498Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.499Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.500Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.501Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.503Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.504Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.506Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.506Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.508Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.509Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.510Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 32ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.511Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.512Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.513Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.516Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.517Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.518Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.519Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.520Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.521Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.522Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.523Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.525Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.526Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.527Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.528Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.530Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.530Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.532Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.533Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.534Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.535Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.536Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.537Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.538Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.539Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.540Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.541Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.543Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.544Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.545Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.546Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.547Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.548Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.549Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.550Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.551Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.552Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.554Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.554Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.556Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.557Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.559Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.559Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.560Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.561Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.562Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.563Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.564Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.565Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.567Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.567Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.569Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.570Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.571Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.571Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.572Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 63ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.573Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.586Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 15ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.587Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.589Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.590Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.592Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.592Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.594Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.595Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.596Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.597Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.598Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.599Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.600Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.601Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.603Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.603Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.605Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.605Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.607Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.608Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.610Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.610Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.612Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.612Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.614Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.614Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.616Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.617Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.619Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 46ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.620Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.621Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.622Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.623Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.624Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.626Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.626Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.628Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.628Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.629Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.630Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.631Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.632Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.633Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.634Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.635Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.636Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.637Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.638Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.640Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.641Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.642Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.642Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.644Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.645Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.646Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.646Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.647Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.648Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.649Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.649Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.650Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 33ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.665Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 16ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.666Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.667Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.668Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.671Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.671Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.674Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.675Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.676Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.677Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.678Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.679Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.680Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.680Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.682Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 32ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.682Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.683Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.684Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.685Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.686Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.687Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.688Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.689Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.690Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.691Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.692Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.694Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.695Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.696Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.697Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.697Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 17ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.698Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.699Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.699Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.700Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.701Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.701Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.703Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.704Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.705Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.705Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.707Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.708Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.709Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.710Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.711Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.711Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.713Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.713Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.715Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.716Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.717Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.718Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.719Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.720Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.722Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.723Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.724Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.724Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.726Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.726Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.729Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.730Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.737Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.737Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.741Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.742Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:42.745Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.746Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 47ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:42.747Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.748Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:42.749Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:42.750Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:43.043Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 294ms | Rows: 1
+[STDERR] 2026-08-07T04:27:43.044Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:43.046Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 300ms | Rows: 1
+[STDERR] 2026-08-07T04:27:43.063Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:43.065Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 12ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:43.067Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:43.069Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:43.070Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:43.071Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.122Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.122Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3078ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3052ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.123Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.124Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.125Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.126Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.127Z ⚠️  [ANOMALY: N+1 Query Detected] 4 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.128Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.129Z ⚠️  [ANOMALY: N+1 Query Detected] 5 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.129Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.130Z ⚠️  [ANOMALY: N+1 Query Detected] 7 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.131Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.131Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.133Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.133Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.134Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.135Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.136Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.137Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.138Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.139Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.140Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.141Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.142Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.143Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.144Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.144Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.146Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.146Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.148Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.148Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.149Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.150Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.151Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.152Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.153Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 23ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.153Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.154Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.155Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.156Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.157Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.158Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.159Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.160Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.161Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.162Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.162Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.164Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.164Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.165Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.165Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.167Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.168Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.168Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 13ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.169Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.170Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.171Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.172Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.173Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.174Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.174Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.175Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.176Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.177Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.177Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.179Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.179Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.180Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.181Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.182Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.183Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.184Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.185Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.186Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.187Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.189Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.190Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.191Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.192Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.193Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.194Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.196Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.197Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.198Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.199Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.200Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.201Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 33ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.202Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.203Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.204Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.205Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.206Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.207Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.207Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.208Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.209Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.210Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.212Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.213Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.214Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.214Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.216Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.217Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.218Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.219Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.221Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.222Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.223Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.224Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.226Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.227Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.228Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.229Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.230Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.231Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.232Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 33ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.233Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.234Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.235Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.236Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.237Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.239Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.240Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.241Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.242Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.244Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.245Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.246Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.247Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.248Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.249Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.250Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.251Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.252Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.253Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.254Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.256Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.257Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.258Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.259Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.260Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.261Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.262Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.279Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 18ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.280Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.282Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.283Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.284Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.286Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 3ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.288Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.289Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.290Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.291Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.292Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.293Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.295Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.295Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.311Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 81ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.312Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.312Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 17ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.314Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.314Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.316Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.316Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.318Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.319Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.320Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.321Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.322Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.323Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.325Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.325Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.343Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.343Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 18ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.345Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.345Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.347Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.347Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.351Z [PRISMA QUERY] Model: Permission | Op: findMany | Duration: 4ms | Rows: 182
+[STDERR] 2026-08-07T04:27:46.352Z ⚠️  [ANOMALY: Select *] Query on 'Permission.findMany' does not use explicit 'select', fetching full table columns.
+  ⚠️  [ANOMALY: Large Payload] 'Permission.findMany' returned 182 rows (36.4 KB).
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.360Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 47ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.360Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.368Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 14ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.374Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.391Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 31ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.392Z ⚠️  [ANOMALY: Repeated Query] Identical query on 'Permission.upsert' executed 2 times in request lifecycle.
+  ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: Sequential Query] Query 'Permission.upsert' executed sequentially after 'RolePermission.upsert'. Check if Promise.all() can parallelize.
+[STDOUT] 2026-08-07T04:27:46.412Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 38ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.419Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.419Z ⚠️  [ANOMALY: N+1 Query Detected] 4 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.425Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.426Z ⚠️  [ANOMALY: N+1 Query Detected] 5 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.434Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.435Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.443Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.443Z ⚠️  [ANOMALY: N+1 Query Detected] 7 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.450Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.450Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.457Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.458Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.465Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.465Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.473Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.474Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.479Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.480Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.486Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.486Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.494Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.494Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.501Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.501Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.502Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 111ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.502Z ⚠️  [ANOMALY: Sequential Query] Query 'Permission.upsert' executed sequentially after 'RolePermission.upsert'. Check if Promise.all() can parallelize.
+[STDOUT] 2026-08-07T04:27:46.503Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.504Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.505Z [PRISMA QUERY] Model: Permission | Op: upsert | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.506Z ⚠️  [ANOMALY: N+1 Query Detected] 4 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.508Z ⚠️  [ANOMALY: Select *] Query on 'Permission.findMany' does not use explicit 'select', fetching full table columns.
+  ⚠️  [ANOMALY: Large Payload] 'Permission.findMany' returned 182 rows (36.4 KB).
+  ⚠️  [ANOMALY: N+1 Query Detected] 5 rapid sequential queries executed on model 'Permission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.508Z [PRISMA QUERY] Model: Permission | Op: findMany | Duration: 2ms | Rows: 182
+[STDOUT] 2026-08-07T04:27:46.514Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.515Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: Sequential Query] Query 'RolePermission.upsert' executed sequentially after 'Permission.findMany'. Check if Promise.all() can parallelize.
+[STDOUT] 2026-08-07T04:27:46.521Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.521Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.526Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 5ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.526Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.532Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.533Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.538Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.538Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 36ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.544Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.544Z ⚠️  [ANOMALY: N+1 Query Detected] 6 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.550Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.551Z ⚠️  [ANOMALY: N+1 Query Detected] 7 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.556Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.557Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.561Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 5ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.562Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.567Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 5ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.567Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.572Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 5ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.572Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.577Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 5ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.578Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.584Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.585Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.591Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.591Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.598Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.598Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.605Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.605Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.612Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.613Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.618Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.619Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 85ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.625Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.625Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.631Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.631Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.638Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.639Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.645Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.646Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.650Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 38ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.651Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.656Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.657Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.664Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.665Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.671Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.672Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.678Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.679Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.685Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.685Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.693Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.694Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.701Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.701Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.708Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.710Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.716Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.717Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.723Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.724Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.730Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.731Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.738Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.738Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.760Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 114ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.761Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.767Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.768Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.775Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.775Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.782Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.782Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.806Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 24ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.806Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.814Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.815Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.821Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.821Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.827Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.828Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.834Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.835Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.840Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 5ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.840Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.848Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.848Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.855Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 117ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.855Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.863Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.864Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.871Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.872Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.878Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.879Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.899Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 51ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.900Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.908Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.908Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.915Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.915Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:46.923Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.924Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:46.930Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.930Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.937Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.938Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.945Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.946Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.954Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.954Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.960Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.960Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.967Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.968Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.973Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.974Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.980Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.981Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.987Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.988Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:46.995Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:46.996Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.002Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 6ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.003Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.026Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 23ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.027Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.035Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.036Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.046Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 168ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.048Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.056Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 9ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.057Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.064Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.065Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.074Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 9ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.076Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.083Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.083Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.092Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 9ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.093Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.101Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.101Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.109Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.110Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.119Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 9ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.120Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.129Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 10ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.130Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.151Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 115ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.152Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:47.159Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.160Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:47.166Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.167Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.174Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.174Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.196Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 22ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.197Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.204Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.205Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.214Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 84ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.215Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.222Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.223Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.231Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.232Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.239Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.240Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.248Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.249Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.256Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.257Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.264Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.265Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.267Z [PRISMA QUERY] Model: School | Op: findFirst | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.268Z ⚠️  [ANOMALY: Select *] Query on 'School.findFirst' does not use explicit 'select', fetching full table columns.
+  ⚠️  [ANOMALY: Sequential Query] Query 'School.findFirst' executed sequentially after 'RolePermission.upsert'. Check if Promise.all() can parallelize.
+[STDOUT] 2026-08-07T04:27:47.277Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 71ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.278Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+  ⚠️  [ANOMALY: Sequential Query] Query 'RolePermission.upsert' executed sequentially after 'School.findFirst'. Check if Promise.all() can parallelize.
+[STDOUT] 2026-08-07T04:27:47.285Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.286Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.288Z [PRISMA QUERY] Model: User | Op: findUnique | Duration: 19ms | Rows: 1
+[PRISMA QUERY] Model: User | Op: findUnique | Duration: 19ms | Rows: 1
+[seed] Developer account already exists — skipping
+[seed] Principal account already exists — skipping
+[seed] All system accounts already exist — nothing to do
+[STDERR] 2026-08-07T04:27:47.289Z ⚠️  [ANOMALY: Select *] Query on 'User.findUnique' does not use explicit 'select', fetching full table columns.
+  ⚠️  [ANOMALY: Sequential Query] Query 'User.findUnique' executed sequentially after 'RolePermission.upsert'. Check if Promise.all() can parallelize.
+  ⚠️  [ANOMALY: Select *] Query on 'User.findUnique' does not use explicit 'select', fetching full table columns.
+[STDOUT] 2026-08-07T04:27:47.294Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.295Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.303Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.304Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.312Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.313Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.320Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.321Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.330Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 9ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.330Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.338Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.339Z ⚠️  [ANOMALY: N+1 Query Detected] 8 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:47.345Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.346Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:47.353Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.354Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.361Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.362Z ⚠️  [ANOMALY: N+1 Query Detected] 9 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.370Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.371Z ⚠️  [ANOMALY: N+1 Query Detected] 10 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.379Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.379Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.386Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.387Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.395Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.395Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.403Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.404Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDERR] 2026-08-07T04:27:47.412Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.413Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 8ms | Rows: 1
+[STDOUT] 2026-08-07T04:27:47.419Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 7ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.420Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.429Z [PRISMA QUERY] Model: RolePermission | Op: upsert | Duration: 9ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.429Z ⚠️  [ANOMALY: N+1 Query Detected] 11 rapid sequential queries executed on model 'RolePermission'. Consider batching or using include/in.
+[STDOUT] 2026-08-07T04:27:47.431Z [PRISMA QUERY] Model: School | Op: findFirst | Duration: 1ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.431Z ⚠️  [ANOMALY: Select *] Query on 'School.findFirst' does not use explicit 'select', fetching full table columns.
+  ⚠️  [ANOMALY: Sequential Query] Query 'School.findFirst' executed sequentially after 'RolePermission.upsert'. Check if Promise.all() can parallelize.
+[STDOUT] 2026-08-07T04:27:47.433Z [PRISMA QUERY] Model: User | Op: findUnique | Duration: 2ms | Rows: 1
+[STDERR] 2026-08-07T04:27:47.434Z ⚠️  [ANOMALY: Select *] Query on 'User.findUnique' does not use explicit 'select', fetching full table columns.
+  ⚠️  [ANOMALY: Sequential Query] Query 'User.findUnique' executed sequentially after 'School.findFirst'. Check if Promise.all() can parallelize.
+  ⚠️  [ANOMALY: Select *] Query on 'User.findUnique' does not use explicit 'select', fetching full table columns.
+[STDOUT] 2026-08-07T04:27:47.434Z [PRISMA QUERY] Model: User | Op: findUnique | Duration: 2ms | Rows: 1
+[seed] Developer account already exists — skipping
+[seed] Principal account already exists — skipping
+[seed] All system accounts already exist — nothing to do

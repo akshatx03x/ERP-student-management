@@ -37,7 +37,7 @@ export function LoginForm() {
         if (code === "USER_NOT_FOUND" || msg.toLowerCase().includes("user not found") || msg.toLowerCase().includes("not exist")) {
           friendlyMessage = "User account does not exist.";
         } else if (code === "INVALID_PASSWORD" || msg.toLowerCase().includes("password")) {
-          friendlyMessage = "Incorrect password. Please try again.";
+          friendlyMessage = "Incorrect password or mail. Please try again.";
         } else if (msg.toLowerCase().includes("deactivated") || msg.toLowerCase().includes("inactive")) {
           friendlyMessage = "Your account has been deactivated. Please contact the Principal.";
         } else if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("server")) {

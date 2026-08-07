@@ -6,7 +6,6 @@ import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/states";
 import { BackupPanel } from "@/components/shared/backup-panel";
 import { unstable_cache } from "next/cache";
-import { getBackupProvider } from "@/server/providers/backup.provider";
 import { SessionFilter } from "./session-filter";
 
 import { LucideIcon, GraduationCap, CalendarCheck, Coins, AlertCircle, BookOpen } from "lucide-react";
@@ -195,6 +194,7 @@ export default async function DashboardPage({
   let lastBackup = null;
   if (principalView) {
     try {
+      const { getBackupProvider } = await import("@/server/providers/backup.provider");
       const provider = getBackupProvider();
       const backups = await provider.listBackups();
       if (backups.length > 0) {

@@ -56,9 +56,12 @@ async function checkPendingMigrationsExist(
   try {
     let stdout = "";
     if (prismaCliJs) {
-      const statusEnv = { ...env, ELECTRON_RUN_AS_NODE: "1" };
+      const statusEnv = { ...env };
+      if (app.isPackaged) {
+        statusEnv.ELECTRON_RUN_AS_NODE = "1";
+      }
       stdout = await runCommand(
-        process.execPath,
+        app.isPackaged ? process.execPath : "node.exe",
         [prismaCliJs, "migrate", "status", `--schema=${schemaPath}`],
         executionCwd,
         statusEnv
@@ -148,22 +151,32 @@ export async function runPendingPrismaMigrations(
     return { success: false, message: `schema.prisma not found at: ${schemaPath}` };
   }
 
-  const unpackedSchemaEnginePath = path.join(
-    process.resourcesPath,
-    "app.asar.unpacked",
-    "node_modules",
-    "@prisma",
-    "engines",
-    "schema-engine-windows.exe"
-  );
-
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: databaseUrl,
     APP_MODE: "offline",
-    PRISMA_SCHEMA_ENGINE_BINARY: unpackedSchemaEnginePath,
-    PRISMA_MIGRATION_ENGINE_BINARY: unpackedSchemaEnginePath,
   };
+
+  if (app.isPackaged) {
+    const unpackedSchemaEnginePath = path.join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "node_modules",
+      "@prisma",
+      "engines",
+      "schema-engine-windows.exe"
+    );
+    env.PRISMA_SCHEMA_ENGINE_BINARY = unpackedSchemaEnginePath;
+    env.PRISMA_MIGRATION_ENGINE_BINARY = unpackedSchemaEnginePath;
+    env.PRISMA_QUERY_ENGINE_LIBRARY = path.join(
+      process.resourcesPath,
+      "app.asar.unpacked",
+      "node_modules",
+      "@prisma",
+      "engines",
+      "query_engine-windows.dll.node"
+    );
+  }
 
   const candAsar = path.join(process.resourcesPath, "app.asar", "node_modules", "prisma", "build", "index.js");
   const candApp = path.join(process.resourcesPath, "app", "node_modules", "prisma", "build", "index.js");
@@ -210,9 +223,11 @@ export async function runPendingPrismaMigrations(
   try {
     let stdout: string;
     if (prismaCliJs) {
-      env.ELECTRON_RUN_AS_NODE = "1";
+      if (app.isPackaged) {
+        env.ELECTRON_RUN_AS_NODE = "1";
+      }
       stdout = await runCommand(
-        process.execPath,
+        app.isPackaged ? process.execPath : "node.exe",
         [prismaCliJs, "migrate", "deploy", `--schema=${schemaPath}`],
         executionCwd,
         env
@@ -265,8 +280,10 @@ export async function runPendingPrismaMigrations(
         env.ELECTRON_RUN_AS_NODE = "1";
         seedOut = await runCommand(process.execPath, [packagedSeedJs], executionCwd, env);
       } else if (fs.existsSync(devSeedJs)) {
-        env.ELECTRON_RUN_AS_NODE = "1";
-        seedOut = await runCommand(process.execPath, [devSeedJs], cwd, env);
+        if (app.isPackaged) {
+          env.ELECTRON_RUN_AS_NODE = "1";
+        }
+        seedOut = await runCommand(app.isPackaged ? process.execPath : "node.exe", [devSeedJs], cwd, env);
       } else if (fs.existsSync(seedTsPath)) {
         seedOut = await runCommand("npx", ["tsx", seedTsPath], cwd, env);
       } else {

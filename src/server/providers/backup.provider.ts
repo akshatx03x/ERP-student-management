@@ -2,8 +2,6 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import zlib from "zlib";
-// @ts-ignore
-import { DatabaseSync } from "node:sqlite";
 import { appConfig } from "../../config/app-config";
 import { prisma, ensureSqlitePragmas, recreatePrismaInstance } from "../lib/prisma";
 
@@ -43,8 +41,10 @@ export function getSchemaFingerprint(): string {
  * Verifies integrity and foreign keys.
  */
 export function verifyBackupDbSnapshot(dbFilePath: string): { sqliteVersion: string } {
-  let db: DatabaseSync | null = null;
+  let db: any = null;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { DatabaseSync } = require("node:sqlite");
     db = new DatabaseSync(dbFilePath);
     
     // 1. SQLite PRAGMA integrity_check
