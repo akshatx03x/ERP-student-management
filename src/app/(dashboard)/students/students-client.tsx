@@ -18,6 +18,7 @@ import {
   executeSingleRowImportAction,
   downloadImportSampleAction,
 } from "@/server/actions/student.actions";
+import { BulkIDCardModal } from "@/components/students/bulk-id-card-modal";
 
 type StudentRow = {
   id: string;
@@ -78,6 +79,7 @@ export function StudentsClient({
   const [pending, startTransition] = useTransition();
   const [showRecommendations, setShowRecommendations] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isBulkIDCardOpen, setIsBulkIDCardOpen] = useState(false);
 
   const [importResult, setImportResult] = useState<{
     successCount: number;
@@ -676,6 +678,14 @@ export function StudentsClient({
           >
             Export XLSX
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => setIsBulkIDCardOpen(true)}
+          >
+            Print ID Cards
+          </Button>
         </div>
       </div>
 
@@ -1180,6 +1190,15 @@ export function StudentsClient({
             </CardFooter>
           </Card>
         </div>
+      )}
+      {isBulkIDCardOpen && (
+        <BulkIDCardModal
+          isOpen={isBulkIDCardOpen}
+          onClose={() => setIsBulkIDCardOpen(false)}
+          classes={classes}
+          sessions={sessions}
+          initialSessionId={selectedSessionId}
+        />
       )}
     </div>
   );

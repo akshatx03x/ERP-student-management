@@ -9,6 +9,8 @@ import {
   Edit3, Eye, Users,
   Receipt, Tag, RotateCcw, AlertCircle, Printer, X
 } from "lucide-react";
+import { IdCardPrintButton } from "./id-card-print-button";
+import { IDCardModal } from "@/components/students/id-card-modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +80,7 @@ export function StudentFeePageClient({
   isStudentSelf,
   canDelete,
   userRole,
+  branding,
 }: {
   student: {
     id: string;
@@ -118,10 +121,12 @@ export function StudentFeePageClient({
   isStudentSelf: boolean;
   canDelete: boolean;
   userRole: string;
+  branding: any;
 }) {
   const [activityTab, setActivityTab] = useState<ActivityTab>("transactions");
   const [receiptSnapshot, setReceiptSnapshot] = useState<any | null>(null);
   const [printLoading, setPrintLoading] = useState<string | null>(null);
+  const [isIDCardModalOpen, setIsIDCardModalOpen] = useState(false);
 
   async function handlePrint(paymentId: string) {
     setPrintLoading(paymentId);
@@ -338,8 +343,68 @@ export function StudentFeePageClient({
               )}
             </div>
           </div>
+
+          {/* ID Card Card */}
+          <div className="bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5">
+              <span className="text-[11px] font-black text-stone-600 uppercase tracking-wider">ID Card</span>
+            </div>
+            <div className="p-4 flex flex-col items-center">
+              <div className="mx-auto max-w-sm rounded-lg border-2 border-stone-200 bg-card p-4 text-center w-full">
+                <p className="text-xs tracking-wide text-stone-500 uppercase font-bold">
+                  {branding?.schoolName || "School ID Card"}
+                </p>
+                <p className="mt-3 text-sm font-bold text-stone-850">{student.fullName}</p>
+                <p className="text-xs text-stone-500">
+                  Admission {student.admissionNo}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-stone-700">
+                  {currentEnrollment
+                    ? `${currentEnrollment.className}-${currentEnrollment.sectionName}`
+                    : "—"}
+                </p>
+                <p className="mt-1 text-[11px] text-stone-500">
+                  DOB {student.dateOfBirth}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 w-full mt-3">
+                <IdCardPrintButton />
+                <button
+                  type="button"
+                  onClick={() => setIsIDCardModalOpen(true)}
+                  className="text-xs font-bold text-indigo-650 hover:bg-stone-50 border border-stone-250 rounded-lg py-2 transition-colors w-full"
+                >
+                  Preview Digital ID Card
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* ── DIGITAL ID CARD MODAL ── */}
+      {isIDCardModalOpen && (
+        <IDCardModal
+          isOpen={isIDCardModalOpen}
+          onClose={() => setIsIDCardModalOpen(false)}
+          student={{
+            ...student,
+            family: {
+              fatherName: family.fatherName,
+              motherName: "",
+              primaryPhone: family.primaryPhone,
+            },
+            enrollments: enrollments.map(e => ({
+              class: { name: e.className },
+              section: { name: e.sectionName },
+              session: { name: e.sessionName },
+              rollNo: e.rollNo,
+            })),
+          } as any}
+          branding={branding}
+          selectedSessionId={currentEnrollment?.sessionName || ""}
+        />
+      )}
 
       {/* ── RECEIPT PREVIEW MODAL ── */}
       {receiptSnapshot && (

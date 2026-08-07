@@ -4,6 +4,8 @@ import { getStudentFeeLedger, getStudentPortalFees } from "@/server/services/fee
 import { requirePermission, resolveEffectivePermissions } from "@/server/permissions/guard";
 import { StudentFeePageClient } from "./student-fee-page-client";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { prisma } from "@/server/lib/prisma";
+import { schoolIdFromUser } from "@/server/lib/helpers";
 
 export default async function StudentDetailPage({
   params,
@@ -13,6 +15,7 @@ export default async function StudentDetailPage({
   const { id } = await params;
 
   const { user } = await requirePermission("student.view");
+  const schoolId = schoolIdFromUser(user);
   const isStudentSelf = user.role === "STUDENT" && user.studentId === id;
   const perms = await resolveEffectivePermissions(user.id, user.role);
   const canDelete = perms.has("student.delete") && !isStudentSelf;
@@ -27,6 +30,8 @@ export default async function StudentDetailPage({
 
   const student = studentResult.value;
   const ledger = ledgerResult.status === "fulfilled" ? ledgerResult.value : null;
+
+  const branding = await prisma.schoolBranding.findUnique({ where: { schoolId } }).catch(() => null);
 
   const family = student.family;
   const addressParts = [
@@ -192,6 +197,7 @@ export default async function StudentDetailPage({
       isStudentSelf={isStudentSelf}
       canDelete={canDelete}
       userRole={user.role}
+      branding={branding}
     />
   );
 }
