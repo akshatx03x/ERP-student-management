@@ -16,6 +16,8 @@ import {
   getStudentPortalFees,
   getFamilyFeeDues,
   generateStudentMonthlyLedger,
+  checkFeeStructureRevisionImpact,
+  applyFeeStructureRevision,
 } from "@/server/services/fee.service";
 import type {
   CreateFeeHeadInput,
@@ -23,6 +25,7 @@ import type {
   GenerateMonthlyLedgerInput,
   RecordPaymentInput,
   UpdateFeeStructureInput,
+  ApplyFeeRevisionInput,
 } from "@/server/validators/fee.validator";
 
 export async function listFeeHeadsAction(activeOnly = false) {
@@ -97,4 +100,33 @@ export async function generateStudentMonthlyLedgerAction(input: GenerateMonthlyL
   revalidatePath("/fees");
   revalidatePath("/students");
   return { success: true, generated: r.generated };
+}
+
+/**
+ * Read-only preview: returns breakdown of how many StudentFee records exist
+ * for the class+session, categorised by payment state.
+ * Called BEFORE the confirmation dialog to show the administrator the impact.
+ */
+export async function checkFeeStructureRevisionImpactAction(structureId: string) {
+  return checkFeeStructureRevisionImpact({ structureId });
+}
+
+/**
+ * Applies a fee structure revision with the admin-chosen mode.
+ * - FUTURE_ONLY: Updates only the fee structure template. No existing StudentFee rows touched.
+ * - UPDATE_UNPAID: Updates the template AND updates only completely unpaid StudentFee rows.
+ *   Paid and partially paid records are NEVER modified.
+ *
+ * Runs inside a single database transaction. On failure, everything is rolled back.
+ */
+export async function applyFeeStructureRevisionAction(input: ApplyFeeRevisionInput) {
+  const r = await applyFeeStructureRevision(input);
+  revalidatePath("/fees");
+  revalidatePath("/fees/setup");
+  revalidatePath("/students");
+  return {
+    success: true,
+    revisionMode: r.revisionMode,
+    stats: r.stats,
+  };
 }

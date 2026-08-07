@@ -12,12 +12,27 @@ import {
   createFeeHeadAction,
   updateFeeHeadAction,
   createFeeStructureAction,
-  updateFeeStructureAction,
+  checkFeeStructureRevisionImpactAction,
+  applyFeeStructureRevisionAction,
 } from "@/server/actions/fee.actions";
 import { createFeeLateRuleAction } from "@/server/actions/fine.actions";
-import { Plus, Trash, Pencil, Settings, Layers, Clock, CheckSquare, MinusSquare, Copy } from "lucide-react";
+import { Plus, Trash, Pencil, Settings, Layers, Clock, CheckSquare, MinusSquare, Copy, AlertTriangle, ShieldCheck, Clock3, X } from "lucide-react";
 
 import { FeeMonth } from "@prisma/client";
+import type { FeeRevisionMode } from "@/server/validators/fee.validator";
+
+type RevisionImpact = {
+  structureId: string;
+  className: string;
+  sessionName: string;
+  studentsAffected: number;
+  totalRecords: number;
+  fullyPaid: number;
+  partiallyPaid: number;
+  completelyUnpaid: number;
+  hasExistingLedger: boolean;
+  currentItems: Array<{ feeHeadId: string; feeHeadName: string; amount: number; months: FeeMonth[] }>;
+};
 
 type Session = { id: string; name: string };
 type ClassRow = { id: string; name: string };
@@ -117,6 +132,14 @@ export function FeeSetupClient({
   const [ruleGrace, setRuleGrace] = useState("5");
   const [ruleValue, setRuleValue] = useState("");
 
+  // REVISION DIALOG STATE
+  const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
+  const [revisionImpact, setRevisionImpact] = useState<RevisionImpact | null>(null);
+  const [revisionMode, setRevisionMode] = useState<FeeRevisionMode>("FUTURE_ONLY");
+  // Pending save payload — held until the admin confirms or cancels
+  const [pendingRevisionItems, setPendingRevisionItems] = useState<Array<{ feeHeadId: string; amount: number; months: FeeMonth[] }>>([]);
+  const [checkingImpact, setCheckingImpact] = useState(false);
+
   // Heads actions
   function handleAddHead() {
     if (!headName.trim()) { toast.error("Enter a name"); return; }
@@ -159,7 +182,14 @@ export function FeeSetupClient({
     setStructItems(prev => [...prev, { feeHeadId: nextHead.id, amount: "", months: MONTH_ORDER.map(m => m.value) }]);
   }
 
-  function handleSaveStructure() {
+  /**
+   * Two-phase save:
+   * Phase 1 — Check if any StudentFee (monthly ledger) records already exist.
+   *   - If NO records: save immediately, done.
+   *   - If records exist: show the confirmation dialog with a preview.
+   * Phase 2 — Admin picks FUTURE_ONLY or UPDATE_UNPAID and confirms.
+   */
+  async function handleSaveStructure() {
     if (structItems.length === 0) { toast.error("Add at least one fee head row"); return; }
 
     const selectedHeads = structItems.map(i => i.feeHeadId);
@@ -176,36 +206,22 @@ export function FeeSetupClient({
       }
     }
 
-    startTransition(async () => {
-      try {
-        const payload = {
-          sessionId: selectedSessionId,
-          classId: selectedClassId,
-          name: `${classes.find(c => c.id === selectedClassId)?.name} Structure`,
-          items: structItems.map(i => ({
-            feeHeadId: i.feeHeadId,
-            amount: Number(i.amount),
-            months: i.months,
-          })),
-        };
+    const items = structItems.map(i => ({
+      feeHeadId: i.feeHeadId,
+      amount: Number(i.amount),
+      months: i.months,
+    }));
 
-        if (currentStructure) {
-          const res = await updateFeeStructureAction({ id: currentStructure.id, items: payload.items });
-          if (res?.stats) {
-            toast.success(
-              `Fee structure saved. Sync complete: ${res.stats.studentsUpdated} students updated, ${res.stats.ledgerEntriesUpdated} unpaid entries rewritten, ${res.stats.paidEntriesSkipped} paid entries preserved.`
-            );
-          } else {
-            toast.success("Fee structure saved successfully");
-          }
-          setStructures(prev => prev.map(s => s.id === currentStructure.id ? { ...s, items: structItems.map((item, idx) => ({
-            id: s.items[idx]?.id ?? Math.random().toString(),
-            feeHeadId: item.feeHeadId,
-            amount: Number(item.amount),
-            feeHead: { name: heads.find(h => h.id === item.feeHeadId)?.name ?? "" },
-            months: item.months,
-          }))} : s));
-        } else {
+    // ── Case A: New fee structure (no existing structure) ───────────────────
+    if (!currentStructure) {
+      startTransition(async () => {
+        try {
+          const payload = {
+            sessionId: selectedSessionId,
+            classId: selectedClassId,
+            name: `${classes.find(c => c.id === selectedClassId)?.name} Structure`,
+            items,
+          };
           const r = await createFeeStructureAction(payload);
           toast.success("Fee structure created successfully");
           const ns: Structure = {
@@ -222,9 +238,97 @@ export function FeeSetupClient({
             })),
           };
           setStructures(prev => [...prev, ns]);
+        } catch (e) {
+          toast.error("Failed to save structure");
         }
+      });
+      return;
+    }
+
+    // ── Case B: Existing structure — check ledger impact first ──────────────
+    setCheckingImpact(true);
+    try {
+      const impact = await checkFeeStructureRevisionImpactAction(currentStructure.id);
+
+      if (!impact.hasExistingLedger) {
+        // Case A behaviour: no ledger records, save immediately
+        startTransition(async () => {
+          try {
+            const r = await applyFeeStructureRevisionAction({
+              structureId: currentStructure.id,
+              items,
+              revisionMode: "FUTURE_ONLY",
+            });
+            toast.success("Fee structure saved successfully");
+            setStructures(prev => prev.map(s => s.id === currentStructure.id ? {
+              ...s,
+              items: structItems.map((item, idx) => ({
+                id: s.items[idx]?.id ?? Math.random().toString(),
+                feeHeadId: item.feeHeadId,
+                amount: Number(item.amount),
+                feeHead: { name: heads.find(h => h.id === item.feeHeadId)?.name ?? "" },
+                months: item.months,
+              }))
+            } : s));
+          } catch (e) {
+            toast.error("Failed to save structure");
+          }
+        });
+      } else {
+        // Ledger exists — show confirmation dialog
+        setRevisionImpact(impact as RevisionImpact);
+        setPendingRevisionItems(items);
+        setRevisionMode("FUTURE_ONLY");
+        setRevisionDialogOpen(true);
+      }
+    } catch (e) {
+      toast.error("Failed to check fee structure impact. Please try again.");
+    } finally {
+      setCheckingImpact(false);
+    }
+  }
+
+  /** Phase 2: Admin has chosen a mode in the dialog and clicked Apply. */
+  function handleConfirmRevision() {
+    if (!currentStructure || !revisionImpact) return;
+
+    if (revisionMode === "UPDATE_UNPAID" && revisionImpact.completelyUnpaid === 0) {
+      toast.info("No completely unpaid monthly records were eligible for update.");
+      setRevisionDialogOpen(false);
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const r = await applyFeeStructureRevisionAction({
+          structureId: currentStructure.id,
+          items: pendingRevisionItems,
+          revisionMode,
+        });
+
+        const modeLabel = revisionMode === "FUTURE_ONLY" ? "Future months" : "Unpaid months";
+        const msg =
+          revisionMode === "FUTURE_ONLY"
+            ? `Fee structure saved. ${modeLabel} will use the new fee amounts. All existing ledger records are preserved.`
+            : `Fee structure saved. ${r.stats.updatedLedgerRecords} unpaid record(s) updated. ${r.stats.totalSkipped} paid/partial record(s) preserved.`;
+        toast.success(msg);
+
+        setStructures(prev => prev.map(s => s.id === currentStructure.id ? {
+          ...s,
+          items: pendingRevisionItems.map((item, idx) => ({
+            id: s.items[idx]?.id ?? Math.random().toString(),
+            feeHeadId: item.feeHeadId,
+            amount: item.amount,
+            feeHead: { name: heads.find(h => h.id === item.feeHeadId)?.name ?? "" },
+            months: item.months,
+          }))
+        } : s));
+
+        setRevisionDialogOpen(false);
+        setRevisionImpact(null);
+        setPendingRevisionItems([]);
       } catch (e) {
-        toast.error("Failed to save structure");
+        toast.error("Failed to apply fee structure revision. No data was changed.");
       }
     });
   }
@@ -269,6 +373,177 @@ export function FeeSetupClient({
 
   return (
     <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm flex flex-col h-[calc(100vh-220px)] max-w-[1440px] mx-auto text-sm">
+
+      {/* ── REVISION CONFIRMATION DIALOG ─────────────────────────────────── */}
+      {revisionDialogOpen && revisionImpact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => !pending && setRevisionDialogOpen(false)}
+          />
+
+          {/* Dialog panel */}
+          <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-xl mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-stone-100">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-stone-900 text-base leading-tight">Fee Structure Updated</h3>
+                  <p className="text-xs text-stone-500 mt-1 leading-snug">
+                    This fee structure already has generated monthly fee records.
+                    Choose how you want to apply the new fee structure.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => !pending && setRevisionDialogOpen(false)}
+                className="text-stone-400 hover:text-stone-700 transition-colors ml-4 shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Preview panel */}
+            <div className="px-6 py-4 bg-stone-50/50 border-b border-stone-100">
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">
+                Impact Preview — {revisionImpact.className} · {revisionImpact.sessionName}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Students Affected", value: revisionImpact.studentsAffected, color: "text-stone-800" },
+                  { label: "Existing Monthly Records", value: revisionImpact.totalRecords, color: "text-stone-800" },
+                  { label: "Fully Paid", value: revisionImpact.fullyPaid, sub: "Will NOT change", color: "text-emerald-700" },
+                  { label: "Partially Paid", value: revisionImpact.partiallyPaid, sub: "Will NOT change", color: "text-amber-700" },
+                  { label: "Completely Unpaid", value: revisionImpact.completelyUnpaid, sub: "Eligible for update", color: "text-blue-700" },
+                ].map(({ label, value, sub, color }) => (
+                  <div key={label} className="bg-white border border-stone-200 rounded-xl px-3.5 py-3">
+                    <p className="text-[10px] text-stone-500 font-semibold">{label}</p>
+                    <p className={`text-lg font-extrabold mt-0.5 ${color}`}>{value.toLocaleString()}</p>
+                    {sub && <p className="text-[9px] text-stone-400 font-semibold mt-0.5">{sub}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Mode selector */}
+            <div className="px-6 py-4 space-y-2.5">
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">Choose Revision Mode</p>
+
+              {/* Option 1: Future Only */}
+              <button
+                onClick={() => setRevisionMode("FUTURE_ONLY")}
+                className={cn(
+                  "w-full text-left rounded-xl border p-4 transition-all",
+                  revisionMode === "FUTURE_ONLY"
+                    ? "border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500"
+                    : "border-stone-200 hover:border-stone-300 bg-white"
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
+                    revisionMode === "FUTURE_ONLY" ? "border-indigo-500" : "border-stone-300"
+                  )}>
+                    {revisionMode === "FUTURE_ONLY" && (
+                      <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Clock3 className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="font-bold text-stone-900 text-xs">Apply only to Future Months</span>
+                      <Badge className="bg-indigo-100 text-indigo-700 border-none text-[9px] px-1.5 rounded-md">Recommended</Badge>
+                    </div>
+                    <p className="text-xs text-stone-500 mt-1 leading-snug">
+                      Updates the fee structure template only. All existing monthly records stay exactly as they are.
+                      New records generated in future will use the new fee amounts.
+                    </p>
+                    <p className="text-[10px] text-emerald-600 font-semibold mt-1.5 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" /> Preserves all accounting history
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: Update Unpaid */}
+              <button
+                onClick={() => setRevisionMode("UPDATE_UNPAID")}
+                className={cn(
+                  "w-full text-left rounded-xl border p-4 transition-all",
+                  revisionMode === "UPDATE_UNPAID"
+                    ? "border-blue-500 bg-blue-50/40 ring-1 ring-blue-500"
+                    : "border-stone-200 hover:border-stone-300 bg-white"
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
+                    revisionMode === "UPDATE_UNPAID" ? "border-blue-500" : "border-stone-300"
+                  )}>
+                    {revisionMode === "UPDATE_UNPAID" && (
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="font-bold text-stone-900 text-xs">Update All Completely Unpaid Months</span>
+                    </div>
+                    <p className="text-xs text-stone-500 mt-1 leading-snug">
+                      Also updates {revisionImpact.completelyUnpaid.toLocaleString()} completely unpaid record(s)
+                      (paid=₹0, no receipts, no transactions). Paid and partially paid records are permanently protected.
+                    </p>
+                    {revisionImpact.completelyUnpaid === 0 && (
+                      <p className="text-[10px] text-amber-600 font-semibold mt-1.5">
+                        No eligible unpaid records found — this mode will have no effect.
+                      </p>
+                    )}
+                    <div className="flex gap-3 mt-2">
+                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
+                        <ShieldCheck className="w-3 h-3" /> {revisionImpact.fullyPaid + revisionImpact.partiallyPaid} record(s) protected
+                      </span>
+                      <span className="text-[10px] text-blue-600 font-semibold">
+                        {revisionImpact.completelyUnpaid} record(s) will update
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Action buttons */}
+            <div className="px-6 pb-5 flex gap-2.5 justify-end border-t border-stone-100 pt-4">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => !pending && setRevisionDialogOpen(false)}
+                disabled={pending}
+                className="h-9 text-xs font-semibold text-stone-500 rounded-lg"
+              >
+                Cancel — No Changes
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmRevision}
+                disabled={pending}
+                className={cn(
+                  "h-9 text-xs font-bold text-white rounded-lg min-w-[140px]",
+                  revisionMode === "FUTURE_ONLY"
+                    ? "bg-indigo-600 hover:bg-indigo-500"
+                    : "bg-blue-600 hover:bg-blue-500"
+                )}
+              >
+                {pending ? "Applying…" : "Apply Changes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TABS SELECTOR */}
       <div className="bg-stone-50 border-b border-stone-200 px-5 py-3 flex gap-2 shrink-0">
         {[
@@ -402,8 +677,13 @@ export function FeeSetupClient({
                   <Button size="sm" onClick={handleAddStructRow} variant="outline" className="h-9 text-xs font-semibold border-stone-300 rounded-lg">
                     <Plus className="w-3.5 h-3.5 mr-1 text-indigo-650" /> Add Row
                   </Button>
-                  <Button size="sm" onClick={handleSaveStructure} disabled={pending} className="h-9 text-xs font-bold bg-indigo-600 text-white rounded-lg">
-                    Save Structure
+                  <Button
+                    size="sm"
+                    onClick={handleSaveStructure}
+                    disabled={pending || checkingImpact}
+                    className="h-9 text-xs font-bold bg-indigo-600 text-white rounded-lg min-w-[110px]"
+                  >
+                    {checkingImpact ? "Checking…" : pending ? "Saving…" : "Save Structure"}
                   </Button>
                 </div>
               </div>

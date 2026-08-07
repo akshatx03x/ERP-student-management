@@ -14,6 +14,8 @@ import {
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { parseOrThrow } from "@/server/validators/common";
 import {
+  applyFeeRevisionSchema,
+  checkRevisionImpactSchema,
   createFeeHeadSchema,
   createFeeStructureSchema,
   generateMonthlyLedgerSchema,
@@ -22,8 +24,11 @@ import {
   recordPaymentSchema,
   updateFeeHeadSchema,
   updateFeeStructureSchema,
+  type ApplyFeeRevisionInput,
+  type CheckRevisionImpactInput,
   type CreateFeeHeadInput,
   type CreateFeeStructureInput,
+  type FeeRevisionMode,
   type GenerateMonthlyLedgerInput,
   type RecordPaymentInput,
   type UpdateFeeStructureInput,
@@ -661,7 +666,7 @@ export async function updateFeeStructure(input: UpdateFeeStructureInput) {
 
   const existing = await prisma.feeStructure.findFirst({
     where: { id: data.id, session: { schoolId } },
-    include: { items: true, class: true, session: true },
+    include: { items: { include: { months: true } }, class: true, session: true },
   });
   if (!existing) throw new Error("Fee structure not found");
 
@@ -671,26 +676,82 @@ export async function updateFeeStructure(input: UpdateFeeStructureInput) {
   }
 
   return prisma.$transaction(async (tx) => {
-    await tx.feeStructureItem.deleteMany({ where: { feeStructureId: data.id } });
+    // ── Safe reconciliation of FeeStructureItems ─────────────────────────────
+    // IMPORTANT: We never blindly deleteMany all items. That would cascade-delete
+    // FeeStructureItemMonth rows and cause the Monthly Split to disappear.
+    // Instead we: update existing items, create new ones, delete only removed ones.
 
-    const updated = await tx.feeStructure.update({
-      where: { id: data.id },
-      data: {
-        ...(data.name ? { name: data.name } : {}),
-        items: {
-          create: data.items.map((item) => ({
-            feeHeadId: item.feeHeadId,
-            amount: toDecimal(item.amount),
-            ...(item.months && item.months.length > 0
+    const existingItemMap = new Map(existing.items.map((i) => [i.feeHeadId, i]));
+    const incomingHeadIds = new Set(data.items.map((i) => i.feeHeadId));
+
+    // 1. Delete items that were removed from the structure
+    const headIdsToDelete = existing.items
+      .filter((i) => !incomingHeadIds.has(i.feeHeadId))
+      .map((i) => i.id);
+    if (headIdsToDelete.length > 0) {
+      await tx.feeStructureItem.deleteMany({ where: { id: { in: headIdsToDelete } } });
+    }
+
+    // 2. Update existing items and reconcile their month mappings
+    for (const incoming of data.items) {
+      const existingItem = existingItemMap.get(incoming.feeHeadId);
+      if (existingItem) {
+        // Update the amount on the existing item (preserves its ID)
+        await tx.feeStructureItem.update({
+          where: { id: existingItem.id },
+          data: { amount: toDecimal(incoming.amount) },
+        });
+
+        // Reconcile month mappings: delete old, create new
+        if (incoming.months && incoming.months.length > 0) {
+          await tx.feeStructureItemMonth.deleteMany({
+            where: { feeStructureItemId: existingItem.id },
+          });
+          await tx.feeStructureItemMonth.createMany({
+            data: incoming.months.map((m) => ({
+              feeStructureItemId: existingItem.id,
+              month: m,
+            })),
+          });
+        }
+        // If months is empty or undefined, leave existing month rows untouched
+        // (preserves months when the UI omits the field)
+      } else {
+        // 3. Create brand-new items (new fee head added to the structure)
+        await tx.feeStructureItem.create({
+          data: {
+            feeStructureId: data.id,
+            feeHeadId: incoming.feeHeadId,
+            amount: toDecimal(incoming.amount),
+            ...(incoming.months && incoming.months.length > 0
               ? {
                   months: {
-                    create: item.months.map((m) => ({ month: m })),
+                    create: incoming.months.map((m) => ({ month: m })),
                   },
                 }
               : {}),
-          })),
-        },
-      },
+          },
+        });
+      }
+    }
+
+    // 4. Update the structure name if provided
+    if (data.name) {
+      await tx.feeStructure.update({
+        where: { id: data.id },
+        data: { name: data.name },
+      });
+    } else {
+      // Touch updatedAt so callers can detect the change
+      await tx.feeStructure.update({
+        where: { id: data.id },
+        data: { updatedAt: new Date() },
+      });
+    }
+
+    // 5. Fetch the fully-updated structure to return
+    const updated = await tx.feeStructure.findUniqueOrThrow({
+      where: { id: data.id },
       include: {
         items: { include: { feeHead: true, months: true } },
         class: true,
@@ -706,122 +767,372 @@ export async function updateFeeStructure(input: UpdateFeeStructureInput) {
         module: "fee",
         entityType: "FeeStructure",
         entityId: updated.id,
-        oldValue: existing,
-        newValue: updated,
+        oldValue: {
+          id: existing.id,
+          name: existing.name,
+          items: existing.items.map((i) => ({
+            feeHeadId: i.feeHeadId,
+            amount: decimalToNumber(i.amount),
+          })),
+        },
+        newValue: {
+          id: updated.id,
+          name: updated.name,
+          items: updated.items.map((i) => ({
+            feeHeadId: i.feeHeadId,
+            amount: decimalToNumber(i.amount),
+          })),
+        },
       },
       tx,
     );
 
-    // Sync student ledgers automatically
-    const enrollments = await tx.studentEnrollment.findMany({
-      where: { classId: existing.classId, sessionId: existing.sessionId, student: { schoolId } },
-      select: { studentId: true }
-    });
-    const studentIds = enrollments.map(e => e.studentId);
-
-    let studentsUpdated = 0;
-    let ledgerEntriesUpdated = 0;
-    let paidEntriesSkipped = 0;
-
-    if (studentIds.length > 0) {
-      const studentFees = await tx.studentFee.findMany({
-        where: { studentId: { in: studentIds }, sessionId: existing.sessionId },
-        include: { allocations: true }
-      });
-
-      const feeGroup = new Map<string, Map<string, typeof studentFees>>();
-      for (const f of studentFees) {
-        if (!feeGroup.has(f.studentId)) {
-          feeGroup.set(f.studentId, new Map());
-        }
-        const studentMap = feeGroup.get(f.studentId)!;
-        const monthKey = f.month || "OTHER";
-        if (!studentMap.has(monthKey)) {
-          studentMap.set(monthKey, []);
-        }
-        studentMap.get(monthKey)!.push(f);
-      }
-
-      for (const studentId of studentIds) {
-        const studentMap = feeGroup.get(studentId) || new Map();
-        let studentWasUpdated = false;
-
-        const student = await tx.student.findUnique({
-          where: { id: studentId },
-          select: { admissionDate: true }
-        });
-        if (!student) continue;
-
-        let startAcademicIdx = 0;
-        if (student.admissionDate && student.admissionDate > existing.session.startDate) {
-          const admissionMonth = dateToFeeMonth(student.admissionDate);
-          const admIdx = getAcademicMonthIndex(admissionMonth);
-          if (admIdx > 0 && student.admissionDate <= existing.session.endDate) {
-            startAcademicIdx = admIdx;
-          }
-        }
-
-        for (const month of ALL_FEE_MONTHS) {
-          const monthIdx = getAcademicMonthIndex(month);
-          if (monthIdx < startAcademicIdx) continue;
-
-          const monthFees = studentMap.get(month) || [];
-          const isPaid = monthFees.some((f: any) => 
-            f.status === "PAID" || 
-            f.status === "PARTIAL" || 
-            (f.allocations && f.allocations.length > 0)
-          );
-
-          if (isPaid) {
-            paidEntriesSkipped += monthFees.length;
-            continue;
-          }
-
-          if (monthFees.length > 0) {
-            await tx.studentFee.deleteMany({
-              where: { id: { in: monthFees.map((f: any) => f.id) } }
-            });
-            studentWasUpdated = true;
-          }
-
-          for (const item of updated.items) {
-            const applicableMonths = getApplicableMonthsForItem(item);
-            if (applicableMonths.includes(month)) {
-              const { dueDate, dueYear } = computeMonthDueDate(existing.session.startDate, month);
-              await tx.studentFee.create({
-                data: {
-                  studentId,
-                  feeHeadId: item.feeHeadId,
-                  sessionId: existing.sessionId,
-                  amount: item.amount,
-                  month,
-                  dueYear,
-                  dueDate,
-                  status: StudentFeeStatus.PENDING,
-                  remarks: "Regenerated from updated fee structure template"
-                }
-              });
-              ledgerEntriesUpdated++;
-              studentWasUpdated = true;
-            }
-          }
-        }
-
-        if (studentWasUpdated) {
-          studentsUpdated++;
-        }
-      }
-    }
-
     return {
       structure: updated,
       stats: {
-        studentsUpdated,
-        ledgerEntriesUpdated,
-        paidEntriesSkipped,
-      }
+        studentsUpdated: 0,
+        ledgerEntriesUpdated: 0,
+        paidEntriesSkipped: 0,
+      },
     };
   });
+}
+
+// ── Fee Structure Revision Impact Check ──────────────────────────────────────
+
+/**
+ * Read-only preview: counts how many StudentFee records exist for the class+session
+ * covered by this fee structure, broken down by payment state.
+ * Called BEFORE the admin chooses a revision mode so they can see the impact.
+ */
+export async function checkFeeStructureRevisionImpact(input: CheckRevisionImpactInput) {
+  const { user } = await requirePermission("fee.update");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(checkRevisionImpactSchema, input);
+
+  const structure = await prisma.feeStructure.findFirst({
+    where: { id: data.structureId, session: { schoolId } },
+    include: {
+      items: { include: { feeHead: true, months: true } },
+      class: true,
+      session: true,
+    },
+  });
+  if (!structure) throw new Error("Fee structure not found");
+
+  // All students enrolled in this class+session
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: {
+      classId: structure.classId,
+      sessionId: structure.sessionId,
+      student: { schoolId },
+    },
+    select: { studentId: true },
+  });
+  const studentIds = enrollments.map((e) => e.studentId);
+
+  if (studentIds.length === 0) {
+    return {
+      structureId: structure.id,
+      className: structure.class.name,
+      sessionName: structure.session.name,
+      studentsAffected: 0,
+      totalRecords: 0,
+      fullyPaid: 0,
+      partiallyPaid: 0,
+      completelyUnpaid: 0,
+      hasExistingLedger: false,
+      currentItems: structure.items.map((i) => ({
+        feeHeadId: i.feeHeadId,
+        feeHeadName: i.feeHead.name,
+        amount: decimalToNumber(i.amount),
+        months: i.months.map((m) => m.month),
+      })),
+    };
+  }
+
+  // Fetch all StudentFee rows for these students in this session, with payment data
+  const allFees = await prisma.studentFee.findMany({
+    where: {
+      studentId: { in: studentIds },
+      sessionId: structure.sessionId,
+    },
+    include: {
+      allocations: { select: { id: true, amount: true } },
+      advanceTransactions: { select: { id: true } },
+    },
+  });
+
+  let fullyPaid = 0;
+  let partiallyPaid = 0;
+  let completelyUnpaid = 0;
+
+  for (const fee of allFees) {
+    const hasAllocations = fee.allocations.length > 0;
+    const hasAdvance = fee.advanceTransactions.length > 0;
+    const paidAmount = sumDecimals(fee.allocations.map((a) => a.amount));
+    const isPaid = paidAmount.greaterThan(0);
+
+    if (hasAllocations || hasAdvance || isPaid) {
+      const netBilled = toDecimal(fee.amount).sub(toDecimal(fee.discountAmount ?? 0));
+      if (paidAmount.greaterThanOrEqualTo(netBilled)) {
+        fullyPaid++;
+      } else {
+        partiallyPaid++;
+      }
+    } else {
+      completelyUnpaid++;
+    }
+  }
+
+  return {
+    structureId: structure.id,
+    className: structure.class.name,
+    sessionName: structure.session.name,
+    studentsAffected: studentIds.length,
+    totalRecords: allFees.length,
+    fullyPaid,
+    partiallyPaid,
+    completelyUnpaid,
+    hasExistingLedger: allFees.length > 0,
+    currentItems: structure.items.map((i) => ({
+      feeHeadId: i.feeHeadId,
+      feeHeadName: i.feeHead.name,
+      amount: decimalToNumber(i.amount),
+      months: i.months.map((m) => m.month),
+    })),
+  };
+}
+
+// ── Fee Structure Revision Apply ─────────────────────────────────────────────
+
+/**
+ * Applies a fee structure revision with an explicit admin-chosen mode.
+ *
+ * FUTURE_ONLY: Updates only the fee structure template. No existing StudentFee
+ *              records are touched. Future ledger generation will use the new amounts.
+ *
+ * UPDATE_UNPAID: Updates the template AND updates eligible StudentFee rows that
+ *                are 100% unpaid (paid=0, no allocations, no advance transactions).
+ *                Paid and partially paid records are NEVER modified.
+ *
+ * The entire operation runs inside a single database transaction.
+ */
+export async function applyFeeStructureRevision(input: ApplyFeeRevisionInput) {
+  const { user } = await requirePermission("fee.update");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(applyFeeRevisionSchema, input);
+
+  const headIds = data.items.map((i) => i.feeHeadId);
+  if (new Set(headIds).size !== headIds.length) {
+    throw new Error("Each fee head can only appear once in a fee structure");
+  }
+
+  const existing = await prisma.feeStructure.findFirst({
+    where: { id: data.structureId, session: { schoolId } },
+    include: {
+      items: { include: { feeHead: true, months: true } },
+      class: true,
+      session: true,
+    },
+  });
+  if (!existing) throw new Error("Fee structure not found");
+
+  return prisma.$transaction(
+    async (tx) => {
+      // ── Step 1: Safe reconciliation of FeeStructureItems ────────────────
+      // Never deleteMany all items — that cascade-deletes FeeStructureItemMonth
+      // rows and makes the Monthly Split disappear. Use reconcile instead.
+
+      const existingItemMap = new Map(existing.items.map((i) => [i.feeHeadId, i]));
+      const incomingHeadIds = new Set(data.items.map((i) => i.feeHeadId));
+
+      // a) Delete items that were removed from the structure
+      const headIdsToDelete = existing.items
+        .filter((i) => !incomingHeadIds.has(i.feeHeadId))
+        .map((i) => i.id);
+      if (headIdsToDelete.length > 0) {
+        await tx.feeStructureItem.deleteMany({ where: { id: { in: headIdsToDelete } } });
+      }
+
+      // b) Update existing items and reconcile their month mappings
+      for (const incoming of data.items) {
+        const existingItem = existingItemMap.get(incoming.feeHeadId);
+        if (existingItem) {
+          await tx.feeStructureItem.update({
+            where: { id: existingItem.id },
+            data: { amount: toDecimal(incoming.amount) },
+          });
+
+          if (incoming.months && incoming.months.length > 0) {
+            await tx.feeStructureItemMonth.deleteMany({
+              where: { feeStructureItemId: existingItem.id },
+            });
+            await tx.feeStructureItemMonth.createMany({
+              data: incoming.months.map((m) => ({
+                feeStructureItemId: existingItem.id,
+                month: m,
+              })),
+            });
+          }
+        } else {
+          // c) Create brand-new items
+          await tx.feeStructureItem.create({
+            data: {
+              feeStructureId: data.structureId,
+              feeHeadId: incoming.feeHeadId,
+              amount: toDecimal(incoming.amount),
+              ...(incoming.months && incoming.months.length > 0
+                ? { months: { create: incoming.months.map((m) => ({ month: m })) } }
+                : {}),
+            },
+          });
+        }
+      }
+
+      // d) Touch the structure updatedAt
+      await tx.feeStructure.update({
+        where: { id: data.structureId },
+        data: { updatedAt: new Date() },
+      });
+
+      // ── Step 2: Update eligible StudentFee records (UPDATE_UNPAID only) ──
+      let updatedLedgerCount = 0;
+      let skippedPaid = 0;
+      let skippedPartial = 0;
+
+      if (data.revisionMode === "UPDATE_UNPAID") {
+        const enrollments = await tx.studentEnrollment.findMany({
+          where: {
+            classId: existing.classId,
+            sessionId: existing.sessionId,
+            student: { schoolId },
+          },
+          select: { studentId: true },
+        });
+        const studentIds = enrollments.map((e) => e.studentId);
+
+        if (studentIds.length > 0) {
+          // Fetch all StudentFee rows for these students with full payment data
+          const allFees = await tx.studentFee.findMany({
+            where: {
+              studentId: { in: studentIds },
+              sessionId: existing.sessionId,
+            },
+            include: {
+              allocations: { select: { id: true, amount: true } },
+              advanceTransactions: { select: { id: true } },
+            },
+          });
+
+          // Build a map: feeHeadId -> new amount from the revision items
+          const newAmountByHead = new Map(
+            data.items.map((i) => [i.feeHeadId, toDecimal(i.amount)]),
+          );
+
+          for (const fee of allFees) {
+            // ── MANDATORY ACCOUNTING RULE: Never touch paid or partially paid records ──
+            const hasAllocations = fee.allocations.length > 0;
+            const hasAdvance = fee.advanceTransactions.length > 0;
+            const paidAmount = sumDecimals(fee.allocations.map((a) => a.amount));
+            const isPaid = paidAmount.greaterThan(0);
+
+            if (hasAllocations || hasAdvance || isPaid) {
+              // This record has payment history — it is IMMUTABLE.
+              const netBilled = toDecimal(fee.amount).sub(toDecimal(fee.discountAmount ?? 0));
+              if (paidAmount.greaterThanOrEqualTo(netBilled)) {
+                skippedPaid++;
+              } else {
+                skippedPartial++;
+              }
+              continue;
+            }
+
+            // This record is completely unpaid — safe to update.
+            const newAmount = newAmountByHead.get(fee.feeHeadId);
+            if (!newAmount) continue; // This fee head was removed from structure
+
+            // UPDATE only — never DELETE + INSERT.
+            // Preserve: id, studentId, feeHeadId, sessionId, month, dueYear,
+            //           dueDate, discountAmount, allocations, fine, receipts.
+            await tx.studentFee.update({
+              where: { id: fee.id },
+              data: {
+                amount: newAmount,
+                // Recalculate status since amount changed but paid is still 0
+                status: StudentFeeStatus.PENDING,
+                remarks: fee.remarks ?? `Updated from fee structure revision`,
+                updatedAt: new Date(),
+              },
+            });
+            updatedLedgerCount++;
+          }
+        }
+      }
+
+      // ── Step 3: Fetch the final updated structure ────────────────────────
+      const updated = await tx.feeStructure.findUniqueOrThrow({
+        where: { id: data.structureId },
+        include: {
+          items: { include: { feeHead: true, months: true } },
+          class: true,
+          session: true,
+        },
+      });
+
+      // ── Step 4: Write structured audit log ───────────────────────────────
+      const oldAmountSummary = existing.items.map((i) => ({
+        feeHead: i.feeHead.name,
+        amount: decimalToNumber(i.amount),
+      }));
+      const newAmountSummary = data.items.map((i) => ({
+        feeHeadId: i.feeHeadId,
+        amount: Number(i.amount),
+      }));
+
+      await writeAuditLog(
+        {
+          schoolId,
+          userId: user.id,
+          action: "fee_structure_revision",
+          module: "fee_revision",
+          entityType: "FeeStructureRevision",
+          entityId: data.structureId,
+          oldValue: {
+            structureId: existing.id,
+            className: existing.class.name,
+            sessionName: existing.session.name,
+            items: oldAmountSummary,
+          },
+          newValue: {
+            structureId: data.structureId,
+            className: existing.class.name,
+            sessionName: existing.session.name,
+            revisionMode: data.revisionMode,
+            items: newAmountSummary,
+            updatedLedgerRecords: updatedLedgerCount,
+            skippedPaidRecords: skippedPaid,
+            skippedPartialRecords: skippedPartial,
+            appliedAt: new Date().toISOString(),
+            appliedByUserId: user.id,
+          },
+        },
+        tx,
+      );
+
+      return {
+        structure: updated,
+        revisionMode: data.revisionMode as FeeRevisionMode,
+        stats: {
+          updatedLedgerRecords: updatedLedgerCount,
+          skippedPaidRecords: skippedPaid,
+          skippedPartialRecords: skippedPartial,
+          totalSkipped: skippedPaid + skippedPartial,
+        },
+      };
+    },
+    { timeout: 60000 },
+  );
 }
 
 // ── Student Fees / Ledger ──

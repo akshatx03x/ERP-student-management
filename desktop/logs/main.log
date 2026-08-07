@@ -1,0 +1,49 @@
+[2026-08-07T07:52:00.642Z] [INFO] =========================================
+[2026-08-07T07:52:00.651Z] [INFO]  Starting SchoolERP Portable Desktop ERP 
+[2026-08-07T07:52:00.652Z] [INFO]  Mode: Single-User Portable SQLite      
+[2026-08-07T07:52:00.653Z] [INFO] =========================================
+[2026-08-07T07:52:00.653Z] [INFO] [Environment Diagnostics]
+    process.cwd(): "C:\Users\Akshat\Downloads\Projects\ERP\desktop"
+    process.resourcesPath: "C:\Users\Akshat\Downloads\Projects\ERP\desktop\node_modules\electron\dist\resources"
+    __dirname: "C:\Users\Akshat\Downloads\Projects\ERP\desktop\dist\desktop\electron"
+    app.getPath("userData"): "C:\Users\Akshat\AppData\Roaming\school-erp-desktop"
+    app.getAppPath(): "C:\Users\Akshat\Downloads\Projects\ERP\desktop"
+    app.isPackaged: false
+[2026-08-07T07:52:00.824Z] [INFO] [Main] Loaded environment from: C:\Users\Akshat\Downloads\Projects\ERP\.env
+[2026-08-07T07:52:00.825Z] [INFO] [Better Auth Env]
+    BETTER_AUTH_URL: "http://127.0.0.1:3000"
+    NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000"
+    BETTER_AUTH_SECRET length: 42
+[2026-08-07T07:52:00.891Z] [INFO] [Main Environment Summary]
+  APP_MODE: offline
+  Portable Base Directory: C:\Users\Akshat\Downloads\Projects\ERP\desktop
+  SQLite DB File: C:\Users\Akshat\Downloads\Projects\ERP\desktop\data\school.db
+  Is First Run: false
+  DATABASE_URL: "file:C:\Users\Akshat\Downloads\Projects\ERP\desktop\data\school.db"
+[2026-08-07T07:52:06.431Z] [INFO] [NextServerManager] startNextServer() called. Current state: stopped
+[2026-08-07T07:52:06.433Z] [INFO] [NextServerManager] Call stack:
+Error
+    at startNextServer (C:\Users\Akshat\Downloads\Projects\ERP\desktop\dist\desktop\electron\next-server-manager.js:97:19)
+    at App.bootstrapDesktopApp (C:\Users\Akshat\Downloads\Projects\ERP\desktop\dist\desktop\electron\main.js:266:75)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+[2026-08-07T07:52:06.445Z] [INFO] [NextServerManager] Launching Next.js server child process on port 3000 in production standalone (C:\Users\Akshat\Downloads\Projects\ERP\.next\standalone\server.js) mode...
+[2026-08-07T07:52:06.447Z] [INFO] [NextServerManager] Child process env propagation verification:
+          APP_MODE: offline
+          BETTER_AUTH_URL: http://127.0.0.1:3000
+          NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+          BETTER_AUTH_SECRET present: true (length: 42)
+          DATABASE_URL: file:C:\Users\Akshat\Downloads\Projects\ERP\desktop\data\school.db
+[2026-08-07T07:52:06.448Z] [INFO] [NextServerManager] Executing standalone Next server with node (packaged: false)
+[2026-08-07T07:52:06.450Z] [INFO] [NextServerManager] [NextServerManager Spawn Inspection]
+          cmd: "node" (exists: false)
+          args: ["C:\\Users\\Akshat\\Downloads\\Projects\\ERP\\.next\\standalone\\server.js"]
+          cwd: "C:\Users\Akshat\Downloads\Projects\ERP\.next\standalone" (exists: true)
+          standaloneServerJs: "C:\Users\Akshat\Downloads\Projects\ERP\.next\standalone\server.js" (exists: true)
+          ELECTRON_RUN_AS_NODE: ""
+[2026-08-07T07:52:06.460Z] [INFO] [NextServerManager] Attempt #1 - GET http://127.0.0.1:3000/api/health
+[2026-08-07T07:52:06.462Z] [INFO] [NextServerManager] Attempt #1 - GET http://127.0.0.1:3000/api/health -> Error: connect ECONNREFUSED 127.0.0.1:3000
+[2026-08-07T07:52:07.465Z] [INFO] [NextServerManager] Attempt #2 - GET http://127.0.0.1:3000/api/health
+[2026-08-07T07:52:07.467Z] [INFO] [NextServerManager] Attempt #2 - GET http://127.0.0.1:3000/api/health -> Error: connect ECONNREFUSED 127.0.0.1:3000
+[2026-08-07T07:52:08.476Z] [INFO] [NextServerManager] Attempt #3 - GET http://127.0.0.1:3000/api/health
+[2026-08-07T07:52:10.472Z] [INFO] [NextServerManager] Attempt #3 - GET http://127.0.0.1:3000/api/health -> Status: 200, Body: {"status":"ok"}
+[2026-08-07T07:52:10.473Z] [INFO] [NextServerManager] Health check PASSED on attempt #3

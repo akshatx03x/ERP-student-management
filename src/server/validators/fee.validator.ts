@@ -72,6 +72,27 @@ export const updateFeeStructureSchema = z.object({
     ),
 });
 
+/** Used by the UI to get a preview of how many records will be affected before committing. */
+export const checkRevisionImpactSchema = z.object({
+  structureId: idSchema,
+});
+
+/** Applies a fee structure revision with explicit mode chosen by the administrator. */
+export const applyFeeRevisionSchema = z.object({
+  structureId: idSchema,
+  name: z.string().trim().min(1).optional(),
+  items: z
+    .array(
+      z.object({
+        feeHeadId: idSchema,
+        amount: positiveDecimalSchema,
+        months: z.array(z.nativeEnum(FeeMonth)).optional(),
+      }),
+    )
+    .min(1, "Add at least one fee head"),
+  revisionMode: z.enum(["FUTURE_ONLY", "UPDATE_UNPAID"]),
+});
+
 export const createStudentFeeSchema = z.object({
   studentId: idSchema,
   feeHeadId: idSchema,
@@ -135,3 +156,6 @@ export type UpdateFeeStructureInput = z.infer<typeof updateFeeStructureSchema>;
 export type CreateStudentFeeInput = z.infer<typeof createStudentFeeSchema>;
 export type GenerateMonthlyLedgerInput = z.infer<typeof generateMonthlyLedgerSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
+export type CheckRevisionImpactInput = z.infer<typeof checkRevisionImpactSchema>;
+export type ApplyFeeRevisionInput = z.infer<typeof applyFeeRevisionSchema>;
+export type FeeRevisionMode = "FUTURE_ONLY" | "UPDATE_UNPAID";

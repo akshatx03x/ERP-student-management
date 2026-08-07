@@ -8,7 +8,7 @@
     "build:electron": "node -e \"const f=require('fs'); if(f.existsSync('../node_modules/.prisma')) f.cpSync('../node_modules/.prisma', './node_modules/.prisma', {recursive:true,dereference:true}); if(f.existsSync('../node_modules/@prisma')) f.cpSync('../node_modules/@prisma', './node_modules/@prisma', {recursive:true,dereference:true});\" && tsc -p tsconfig.electron.json && node -e \"require('fs').copyFileSync('electron/splash.html', 'dist/desktop/electron/splash.html')\"",
     "build:seed": "tsc ../prisma/seed.ts --outDir ../dist/seed --module commonjs --target es2022 --moduleResolution node --skipLibCheck",
     "start": "npm run build:electron && electron .",
-    "predist": "npm run clean",
+    "predist": "echo Skipping clean...",
     "dist": "npm run build:electron && npm run build:seed && electron-builder --config installer/builder.json",
     "postdist": "node -e \"const f=require('fs'),p=require('path'),s=p.resolve(__dirname,'../dist/build'),d=p.resolve(__dirname,'../dist/installer');f.mkdirSync(d,{recursive:true});['SchoolERP_Setup.exe','SchoolERP_Setup.exe.blockmap','builder-debug.yml'].forEach(n=>{const sf=p.join(s,n);if(f.existsSync(sf))f.copyFileSync(sf,p.join(d,n));});console.log('Artifacts copied to dist/installer')\""
   },

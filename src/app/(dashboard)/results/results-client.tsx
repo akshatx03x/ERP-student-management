@@ -1628,7 +1628,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                       }
                     }}
                     disabled={publishLoading}
-                    className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold h-8 text-xs"
+                    className="bg-indigo-650 hover:bg-indigo-600 text-grey-500 font-bold h-8 text-xs"
                   >
                     Publish Result
                   </Button>
