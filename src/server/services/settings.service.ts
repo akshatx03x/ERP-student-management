@@ -114,6 +114,7 @@ export async function listUsers(input?: {
       loginIdentifier: item.loginIdentifier,
       mustChangePassword: item.mustChangePassword,
       staffProfile: item.staffProfile,
+      staffProfileId: item.staffProfileId,
       student: item.student,
       createdBy: creator,
       lastLogin: lastSession ? lastSession.createdAt : null,
