@@ -1665,6 +1665,8 @@ export async function recordFamilyPaymentInTx(
     referenceNo?: string | null;
     paidAt?: Date;
     notes?: string | null;
+    useWallet?: boolean;
+    selectedStudentFeeIds?: string[];
     allocations: Array<{ studentId: string; amount: Prisma.Decimal | number; studentFeeId?: string | null }>;
   },
 ) {
@@ -1691,13 +1693,72 @@ export async function recordFamilyPaymentInTx(
   const paymentAmount = toDecimal(opts.amount);
   const allocationTotal = sumDecimals(opts.allocations.map((a) => a.amount));
 
-  if (allocationTotal.greaterThan(paymentAmount)) {
-    throw new Error(
-      `Allocation total (${decimalToNumber(allocationTotal)}) cannot exceed payment amount (${decimalToNumber(paymentAmount)})`,
-    );
+  // Get available wallet balance
+  const wallet = await tx.familyAdvanceWallet.findUnique({
+    where: { familyId: opts.familyId },
+  });
+  const walletBalance = wallet ? toDecimal(wallet.balance) : toDecimal(0);
+
+  if (opts.useWallet) {
+    const walletNeeded = allocationTotal.sub(paymentAmount);
+    if (walletNeeded.greaterThan(0)) {
+      if (walletBalance.lessThan(walletNeeded)) {
+        throw new Error(
+          `Insufficient wallet balance. Total amount needed: ${decimalToNumber(allocationTotal)}, Cash amount provides: ${decimalToNumber(paymentAmount)}, Wallet contribution needed: ${decimalToNumber(walletNeeded)} but wallet contains only: ${decimalToNumber(walletBalance)}`,
+        );
+      }
+    }
+  } else {
+    if (allocationTotal.greaterThan(paymentAmount)) {
+      throw new Error(
+        `Allocation total (${decimalToNumber(allocationTotal)}) cannot exceed payment amount (${decimalToNumber(paymentAmount)})`,
+      );
+    }
   }
 
-  const excessAmount = paymentAmount.sub(allocationTotal);
+  const excessAmount = opts.useWallet ? toDecimal(0) : paymentAmount.sub(allocationTotal);
+
+  // Validate selected fee IDs if provided
+  if (opts.selectedStudentFeeIds && opts.selectedStudentFeeIds.length > 0) {
+    const selectedFees = await tx.studentFee.findMany({
+      where: {
+        id: { in: opts.selectedStudentFeeIds },
+      },
+      include: {
+        student: true,
+      },
+    });
+
+    const selectedFeesMap = new Map(selectedFees.map((f) => [f.id, f]));
+
+    // Validate context for every selected fee ID
+    for (const feeId of opts.selectedStudentFeeIds) {
+      const fee = selectedFeesMap.get(feeId);
+      if (!fee) {
+        throw new Error(`Fee ID ${feeId} not found in database`);
+      }
+      if (fee.student.schoolId !== opts.schoolId) {
+        throw new Error(`Fee ID ${feeId} does not belong to the correct school context`);
+      }
+      if (fee.student.familyId !== opts.familyId) {
+        throw new Error(`Fee ID ${feeId} does not belong to the correct family context`);
+      }
+      if (fee.student.status !== "ACTIVE") {
+        throw new Error(`Fee ID ${feeId} belongs to an exited or inactive student`);
+      }
+      if (fee.status === "PAID") {
+        throw new Error(`Fee ID ${feeId} is already paid`);
+      }
+    }
+
+    // Also validate that every allocation targets one of the selected fee IDs
+    const selectedFeeSet = new Set(opts.selectedStudentFeeIds);
+    for (const alloc of opts.allocations) {
+      if (!alloc.studentFeeId || !selectedFeeSet.has(alloc.studentFeeId)) {
+        throw new Error(`Allocation for studentFeeId ${alloc.studentFeeId ?? "null"} was not explicitly selected for payment`);
+      }
+    }
+  }
 
   const familyStudentIds = new Set(family.students.map((s) => s.id));
   const allocFeeIds = opts.allocations
@@ -1783,6 +1844,31 @@ export async function recordFamilyPaymentInTx(
     },
   });
 
+  const walletNeeded = allocationTotal.sub(paymentAmount);
+  if (opts.useWallet && walletNeeded.greaterThan(0)) {
+    const { recordWalletTransactionInTx } = await import("@/server/services/wallet.service");
+    let remainingWalletDebit = walletNeeded;
+    for (const a of expanded) {
+      if (remainingWalletDebit.lessThanOrEqualTo(0)) break;
+      if (!a.studentFeeId) continue;
+      
+      const allocWallet = remainingWalletDebit.lessThanOrEqualTo(a.amount) ? remainingWalletDebit : a.amount;
+      if (allocWallet.greaterThan(0)) {
+        await recordWalletTransactionInTx(tx, {
+          familyId: opts.familyId,
+          type: AdvanceTransactionType.DEBIT_FEE_SETTLEMENT,
+          amount: allocWallet,
+          paymentId: payment.id,
+          targetStudentId: a.studentId,
+          targetStudentFeeId: a.studentFeeId,
+          reason: `Advance wallet payment allocation`,
+          userId: opts.userId,
+        });
+        remainingWalletDebit = remainingWalletDebit.sub(allocWallet);
+      }
+    }
+  }
+
   const feeIds = [
     ...new Set(
       expanded.map((a) => a.studentFeeId).filter((id): id is string => !!id),
@@ -1793,7 +1879,7 @@ export async function recordFamilyPaymentInTx(
     feeIds.map((feeId) => recalcStudentFeeStatus(tx, feeId))
   );
 
-  // Part 1: Credit excess payment to FamilyAdvanceWallet
+  // Part 1: Credit excess payment to FamilyAdvanceWallet (if useWallet is false)
   if (excessAmount.greaterThan(0)) {
     const { recordWalletTransactionInTx } = await import("@/server/services/wallet.service");
     await recordWalletTransactionInTx(tx, {
@@ -1806,13 +1892,16 @@ export async function recordFamilyPaymentInTx(
     });
   }
 
-  // Part 4: Auto-reconciliation trigger
-  const { reconcileFamilyAdvanceInTx } = await import("@/server/services/wallet.service");
-  await reconcileFamilyAdvanceInTx(tx, {
-    schoolId: opts.schoolId,
-    familyId: opts.familyId,
-    userId: opts.userId,
-  });
+  // Part 4: Auto-reconciliation trigger (ONLY for global, non-targeted payments)
+  const isTargeted = (opts.useWallet) || (opts.selectedStudentFeeIds && opts.selectedStudentFeeIds.length > 0);
+  if (!isTargeted) {
+    const { reconcileFamilyAdvanceInTx } = await import("@/server/services/wallet.service");
+    await reconcileFamilyAdvanceInTx(tx, {
+      schoolId: opts.schoolId,
+      familyId: opts.familyId,
+      userId: opts.userId,
+    });
+  }
 
   const snapshot = {
     receiptNo: payment.receiptNo,

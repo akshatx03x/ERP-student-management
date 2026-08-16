@@ -39,6 +39,7 @@ import {
   FileText,
   Trash2,
   PenLine,
+  Check,
 } from "lucide-react";
 
 type StudentItem = {
@@ -98,10 +99,12 @@ export function FeeCollectionClient({
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showFineModal, setShowFineModal] = useState(false);
-  const [showWalletModal, setShowWalletModal] = useState(false);
-  const [receiptSnapshot, setReceiptSnapshot] = useState<any | null>(null);
+  const [isEditingWalletInline, setIsEditingWalletInline] = useState(false);
+  const [inlineWalletAmount, setInlineWalletAmount] = useState("");
 
   const [payForm, setPayForm] = useState({ amount: "", method: "CASH", referenceNo: "", notes: "" });
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [receiptSnapshot, setReceiptSnapshot] = useState<any | null>(null);
   const [discountForm, setDiscountForm] = useState({ feeHeadId: "", category: "CUSTOM", discountType: "FIXED_AMOUNT", value: "", reason: "", scope: "RECURRING" as "RECURRING" | "ONE_TIME" });
   const [fineForm, setFineForm] = useState({ fineId: "", waiveAmount: "", fullWaiver: true, reason: "" });
   const [walletForm, setWalletForm] = useState({ actionType: "CREDIT", amount: "", reason: "" });
@@ -186,13 +189,10 @@ export function FeeCollectionClient({
 
   // Final Net payable inside collection form after wallet logic
   const netDueAfterWallet = useMemo(() => {
-    const rawDue = allocationMode === "MANUAL"
+    return allocationMode === "MANUAL"
       ? Object.values(manualMonthAmounts).reduce((acc, curr) => acc + (Number(curr) || 0), 0)
       : currentDueAmount;
-    
-    if (!useWalletApplied) return rawDue;
-    return Math.max(0, rawDue - walletBalance);
-  }, [currentDueAmount, useWalletApplied, walletBalance, allocationMode, manualMonthAmounts]);
+  }, [currentDueAmount, allocationMode, manualMonthAmounts]);
 
   function openPaymentModal() {
     // Pre-initialize manual month amounts if manual mode selected
@@ -225,27 +225,24 @@ export function FeeCollectionClient({
     const nextManual = { ...manualMonthAmounts, [month]: val };
     setManualMonthAmounts(nextManual);
     const totalManual = Object.values(nextManual).reduce((acc, curr) => acc + (Number(curr) || 0), 0);
-    const finalAmount = useWalletApplied ? Math.max(0, totalManual - walletBalance) : totalManual;
-    setPayForm(f => ({ ...f, amount: String(finalAmount) }));
+    setPayForm(f => ({ ...f, amount: String(totalManual) }));
   }
 
   function handlePayment() {
     if (!profile) return;
     const amt = Number(payForm.amount) || 0;
 
-    // Handle Wallet Settlement without Cash
-    if (amt === 0 && useWalletApplied) {
-      runAction(async () => {
-        await reconcileFamilyAdvanceAction(profile.student.family.id);
-        setShowPaymentModal(false);
-      }, "Wallet reconciliation settled dues successfully");
-      return;
-    }
-
-    if (amt <= 0) { toast.error("Payment amount must be greater than zero"); return; }
-
     // Map allocations based on mode
     let payloadAllocations: Array<{ studentId: string; studentFeeId: string | null; amount: number }> = [];
+    const selectedStudentFeeIds: string[] = [];
+
+    const targetMonths = selectedMonths.length > 0 
+      ? selectedMonths 
+      : (profile.monthlyMatrix?.filter((x: any) => x.remaining > 0).map((x: any) => x.month) || []);
+
+    const totalTargetDues = allocationMode === "MANUAL"
+      ? Object.values(manualMonthAmounts).reduce((acc, curr) => acc + (Number(curr) || 0), 0)
+      : (selectedMonths.length > 0 ? selectedMonthsSummary.remaining : totalOutstanding);
 
     if (allocationMode === "MANUAL") {
       // Loop over the manual month amounts entered by the user
@@ -256,7 +253,6 @@ export function FeeCollectionClient({
         const matrixMonth = profile.monthlyMatrix?.find((x: any) => x.month === mName);
         if (!matrixMonth) return;
 
-        // Distribute the monthly amount across the individual head items of that month (client-side FIFO)
         let remainingAllocation = monthAmt;
         matrixMonth.items.forEach((item: any) => {
           if (remainingAllocation <= 0) return;
@@ -269,21 +265,64 @@ export function FeeCollectionClient({
             studentFeeId: item.studentFeeId,
             amount: allocToThisItem,
           });
+          if (item.studentFeeId) {
+            selectedStudentFeeIds.push(item.studentFeeId);
+          }
           remainingAllocation -= allocToThisItem;
         });
 
         // If there's leftover for the month (e.g. overpayment), add it as a general allocation to the first fee item
-        if (remainingAllocation > 0 && matrixMonth.items[0]) {
+        if (remainingAllocation > 0 && matrixMonth.items[0] && matrixMonth.items[0].studentFeeId) {
           payloadAllocations.push({
             studentId: profile.student.id,
             studentFeeId: matrixMonth.items[0].studentFeeId,
             amount: remainingAllocation,
           });
+          selectedStudentFeeIds.push(matrixMonth.items[0].studentFeeId);
         }
       });
     } else {
-      // FIFO mode auto-allocation
-      payloadAllocations = [{ studentId: profile.student.id, studentFeeId: null, amount: amt }];
+      // FIFO mode - target selected months or all outstanding months if none selected
+      let remainingToAllocate = amt;
+      
+      profile.monthlyMatrix?.forEach((m: any) => {
+        if (!targetMonths.includes(m.month)) return;
+        m.items.forEach((item: any) => {
+          if (remainingToAllocate <= 0) return;
+          if (item.remaining <= 0) return;
+
+          const allocToThisItem = Math.min(remainingToAllocate, item.remaining);
+          payloadAllocations.push({
+            studentId: profile.student.id,
+            studentFeeId: item.studentFeeId,
+            amount: allocToThisItem,
+          });
+          if (item.studentFeeId) {
+            selectedStudentFeeIds.push(item.studentFeeId);
+          }
+          remainingToAllocate -= allocToThisItem;
+        });
+      });
+
+      // If there's leftover cash (overpayment), allocate it to the first fee item of target months
+      if (remainingToAllocate > 0) {
+        const firstFee = profile.monthlyMatrix
+          ?.find((m: any) => targetMonths.includes(m.month))
+          ?.items?.[0];
+        if (firstFee && firstFee.studentFeeId) {
+          const existing = payloadAllocations.find(a => a.studentFeeId === firstFee.studentFeeId);
+          if (existing) {
+            existing.amount += remainingToAllocate;
+          } else {
+            payloadAllocations.push({
+              studentId: profile.student.id,
+              studentFeeId: firstFee.studentFeeId,
+              amount: remainingToAllocate,
+            });
+            selectedStudentFeeIds.push(firstFee.studentFeeId);
+          }
+        }
+      }
     }
 
     if (payloadAllocations.length === 0) {
@@ -291,13 +330,17 @@ export function FeeCollectionClient({
       return;
     }
 
+    const cashAmountToSend = useWalletApplied ? 0 : amt;
+
     runAction(async () => {
       const result = await recordPaymentAction({
         familyId: profile.student.family.id,
-        amount: amt,
+        amount: cashAmountToSend,
         method: payForm.method as any,
         referenceNo: payForm.referenceNo || null,
         notes: payForm.notes || null,
+        useWallet: useWalletApplied,
+        selectedStudentFeeIds: selectedStudentFeeIds.length > 0 ? selectedStudentFeeIds : undefined,
         allocations: payloadAllocations,
       });
       setShowPaymentModal(false);
@@ -373,6 +416,38 @@ export function FeeCollectionClient({
       setShowWalletModal(false);
       setWalletForm({ actionType: "CREDIT", amount: "", reason: "" });
     }, "Wallet transaction successful");
+  }
+
+  function handleInlineWalletSave() {
+    if (!profile) return;
+    const targetBalance = Number(inlineWalletAmount);
+    if (isNaN(targetBalance) || targetBalance < 0) {
+      toast.error("Please enter a valid balance amount");
+      return;
+    }
+    const diff = targetBalance - walletBalance;
+    if (diff === 0) {
+      setIsEditingWalletInline(false);
+      return;
+    }
+
+    runAction(async () => {
+      if (diff > 0) {
+        await recordWalletTransactionAction({
+          familyId: profile.student.family.id,
+          type: "CREDIT_NOTE_ADJUSTMENT" as any,
+          amount: diff,
+          reason: "Inline wallet balance correction"
+        });
+      } else {
+        await refundFamilyAdvanceAction({
+          familyId: profile.student.family.id,
+          amount: Math.abs(diff),
+          reason: "Inline wallet balance correction"
+        });
+      }
+      setIsEditingWalletInline(false);
+    }, "Wallet balance updated successfully");
   }
 
   const toggleMonth = (m: string) => setExpandedMonths(prev => ({ ...prev, [m]: !prev[m] }));
@@ -551,11 +626,46 @@ export function FeeCollectionClient({
                 </div>
 
                 <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/40 flex justify-between items-center">
-                  <div>
-                    <p className="text-xs font-bold text-indigo-800">Extra Balance (Family Wallet)</p>
-                    <p className="text-[10px] text-stone-550">Advance deposits available to settle dues</p>
-                  </div>
-                  <p className="text-lg font-black font-mono text-indigo-700">{formatCurrency(walletBalance)}</p>
+                  {isEditingWalletInline ? (
+                    <div className="flex items-center justify-between w-full gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1.5 text-indigo-700 text-xs font-bold">₹</span>
+                        <Input
+                          type="number"
+                          value={inlineWalletAmount}
+                          onChange={e => setInlineWalletAmount(e.target.value)}
+                          className="pl-6 h-8 text-xs font-bold rounded-md bg-white border-indigo-300 w-full"
+                          placeholder="New Wallet Balance"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === "Enter") handleInlineWalletSave();
+                            if (e.key === "Escape") setIsEditingWalletInline(false);
+                          }}
+                        />
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={handleInlineWalletSave} className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500 transition-colors" title="Save">
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => setIsEditingWalletInline(false)} className="p-1 rounded bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors" title="Cancel">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-indigo-800">Extra Balance (Family Wallet)</p>
+                          <button onClick={() => { setInlineWalletAmount(String(walletBalance)); setIsEditingWalletInline(true); }} className="p-0.5 rounded hover:bg-indigo-100 text-indigo-650 transition-colors" title="Edit Wallet Balance Inline">
+                            <PenLine className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-stone-550">Advance deposits available to settle dues</p>
+                      </div>
+                      <p className="text-lg font-black font-mono text-indigo-700">{formatCurrency(walletBalance)}</p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -903,7 +1013,7 @@ export function FeeCollectionClient({
                 <p className="text-[11px] text-indigo-700">Deduct payment amount from available advance wallet balance?</p>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => { setUseWalletApplied(true); }}
-                    className={cn("h-7 text-[11px] bg-indigo-600 text-white font-bold", useWalletApplied && "bg-indigo-850")}>
+                    className={cn("h-7 text-[11px] bg-indigo-600 text-grey-600 font-bold", useWalletApplied && "bg-indigo-850")}>
                     {useWalletApplied ? "Wallet Deductions Active" : "Apply Wallet"}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => { setUseWalletApplied(false); }}
@@ -916,7 +1026,7 @@ export function FeeCollectionClient({
 
             {/* Allocation Mode Tabs */}
             <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-lg text-xs">
-              <button onClick={() => { setAllocationMode("FIFO"); setPayForm(f => ({ ...f, amount: String(useWalletApplied ? Math.max(0, currentDueAmount - walletBalance) : currentDueAmount) })); }}
+              <button onClick={() => { setAllocationMode("FIFO"); setPayForm(f => ({ ...f, amount: String(currentDueAmount) })); }}
                 className={cn("py-1.5 text-center font-bold rounded-md transition-all",
                   allocationMode === "FIFO" ? "bg-white text-stone-900 shadow-xs" : "text-stone-500")}>
                 Oldest First (FIFO Auto)

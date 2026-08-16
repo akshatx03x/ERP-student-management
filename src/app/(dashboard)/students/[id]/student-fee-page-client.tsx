@@ -248,11 +248,10 @@ export function StudentFeePageClient({
                 <button
                   key={t.key}
                   onClick={() => setActivityTab(t.key)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-t-lg border-b-2 transition-all ${
-                    activityTab === t.key
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded-t-lg border-b-2 transition-all ${activityTab === t.key
                       ? "border-stone-900 text-stone-900 bg-stone-50"
                       : "border-transparent text-stone-400 hover:text-stone-600 hover:bg-stone-50/50"
-                  }`}
+                    }`}
                 >
                   {t.icon}
                   {t.label}
@@ -266,7 +265,7 @@ export function StudentFeePageClient({
             </div>
 
             {/* Tab content — fills remaining card height */}
-            <div className="p-4 flex-1 overflow-y-auto
+            <div className="p-4 flex-1 overflow-y-auto max-h-[210px]
               [&::-webkit-scrollbar]:w-1.5
               [&::-webkit-scrollbar-track]:bg-stone-50
               [&::-webkit-scrollbar-thumb]:bg-stone-300
@@ -349,34 +348,14 @@ export function StudentFeePageClient({
             <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5">
               <span className="text-[11px] font-black text-stone-600 uppercase tracking-wider">ID Card</span>
             </div>
-            <div className="p-4 flex flex-col items-center">
-              <div className="mx-auto max-w-sm rounded-lg border-2 border-stone-200 bg-card p-4 text-center w-full">
-                <p className="text-xs tracking-wide text-stone-500 uppercase font-bold">
-                  {branding?.schoolName || "School ID Card"}
-                </p>
-                <p className="mt-3 text-sm font-bold text-stone-850">{student.fullName}</p>
-                <p className="text-xs text-stone-500">
-                  Admission {student.admissionNo}
-                </p>
-                <p className="mt-2 text-xs font-semibold text-stone-700">
-                  {currentEnrollment
-                    ? `${currentEnrollment.className}-${currentEnrollment.sectionName}`
-                    : "—"}
-                </p>
-                <p className="mt-1 text-[11px] text-stone-500">
-                  DOB {student.dateOfBirth}
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 w-full mt-3">
-                <IdCardPrintButton />
-                <button
-                  type="button"
-                  onClick={() => setIsIDCardModalOpen(true)}
-                  className="text-xs font-bold text-indigo-650 hover:bg-stone-50 border border-stone-250 rounded-lg py-2 transition-colors w-full"
-                >
-                  Preview Digital ID Card
-                </button>
-              </div>
+            <div className="p-4">
+              <button
+                type="button"
+                onClick={() => setIsIDCardModalOpen(true)}
+                className="text-xs font-bold text-indigo-650 hover:bg-indigo-50/50 border border-indigo-200 rounded-lg py-2.5 transition-colors w-full text-center block"
+              >
+                Preview Digital ID Card
+              </button>
             </div>
           </div>
         </div>
@@ -466,7 +445,7 @@ export function StudentFeePageClient({
       {/* ── BOTTOM 1: FEE STATUS TABLE (unchanged design) ── */}
       <div className="bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden">
         <div className="bg-stone-50 border-b border-stone-200 px-4 py-2.5 flex items-center gap-3">
-          <span className="text-[11px] font-black text-stone-600 uppercase tracking-wider">School Fee Status</span> 
+          <span className="text-[11px] font-black text-stone-600 uppercase tracking-wider">School Fee Status</span>
         </div>
 
         {feeHeadRows.length === 0 ? (
@@ -561,7 +540,7 @@ export function StudentFeePageClient({
                         <td key={m} className="py-2 px-2 text-center">
                           {amt === 0 ? <span className="text-stone-300">—</span>
                             : rem === 0 ? <span className="text-emerald-700 font-bold">Paid</span>
-                            : <span className="text-rose-600 font-black">{rem.toLocaleString()}</span>}
+                              : <span className="text-rose-600 font-black">{rem.toLocaleString()}</span>}
                         </td>
                       );
                     })}
@@ -607,11 +586,10 @@ export function StudentFeePageClient({
                   return (
                     <div key={e.id} className="relative flex items-start gap-3">
                       <div
-                        className={`absolute -left-6 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[10px] font-bold ${
-                          isLatest && e.status === "ACTIVE"
+                        className={`absolute -left-6 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[10px] font-bold ${isLatest && e.status === "ACTIVE"
                             ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                             : "border-stone-300 bg-white text-stone-500"
-                        }`}
+                          }`}
                       >
                         {index + 1}
                       </div>
@@ -621,9 +599,9 @@ export function StudentFeePageClient({
                           <Badge
                             variant={
                               e.status === "ACTIVE" ? "success"
-                              : e.status === "PROMOTED" ? "secondary"
-                              : e.status === "RETAINED" ? "warning"
-                              : "outline"
+                                : e.status === "PROMOTED" ? "secondary"
+                                  : e.status === "RETAINED" ? "warning"
+                                    : "outline"
                             }
                             className="text-[9px] h-5 px-2 font-bold rounded"
                           >

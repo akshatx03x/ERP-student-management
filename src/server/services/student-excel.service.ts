@@ -314,12 +314,12 @@ export async function validateStudentsImport(
   // Locate Header Row (up to first 10 rows)
   let headerRowIndex = 1;
   let headerMap: Record<string, number> = {};
-  
+
   for (let r = 1; r <= 10; r++) {
     const row = sheet.getRow(r);
     let matchedCols = 0;
     const tempMap: Record<string, number> = {};
-    
+
     row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
       const cellVal = String(cell.value || "");
       const mappedKey = matchHeader(cellVal);
@@ -359,9 +359,9 @@ export async function validateStudentsImport(
 
   const sessionFeeStructures = currentSession
     ? await prisma.feeStructure.findMany({
-        where: { sessionId: currentSession.id },
-        select: { classId: true }
-      })
+      where: { sessionId: currentSession.id },
+      select: { classId: true }
+    })
     : [];
 
   const admBase = await getNextAdmissionNoBase(schoolId);
@@ -445,7 +445,7 @@ export async function validateStudentsImport(
       const { matchedClass, suggestion } = findClassMatch(rawClass, dbClasses);
       if (matchedClass) {
         classId = matchedClass.id;
-        
+
         // Fee Structure check
         const feeStructureExists = sessionFeeStructures.some(fs => fs.classId === classId);
         if (!feeStructureExists) {
@@ -882,12 +882,12 @@ export async function exportStudents(
   const enrollmentFilter =
     filters.classId || filters.sectionId
       ? {
-          some: {
-            ...(currentSession?.id ? { sessionId: currentSession.id } : {}),
-            ...(filters.classId ? { classId: filters.classId } : {}),
-            ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
-          },
-        }
+        some: {
+          ...(currentSession?.id ? { sessionId: currentSession.id } : {}),
+          ...(filters.classId ? { classId: filters.classId } : {}),
+          ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+        },
+      }
       : undefined;
 
   const where = {
@@ -895,12 +895,12 @@ export async function exportStudents(
     ...(enrollmentFilter ? { enrollments: enrollmentFilter } : {}),
     ...(filters.search
       ? {
-          OR: [
-            { fullName: { contains: filters.search } },
-            { admissionNo: { contains: filters.search } },
-            { aadhaar: { contains: filters.search } },
-          ],
-        }
+        OR: [
+          { fullName: { contains: filters.search } },
+          { admissionNo: { contains: filters.search } },
+          { aadhaar: { contains: filters.search } },
+        ],
+      }
       : {}),
   };
 

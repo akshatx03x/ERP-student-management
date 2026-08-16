@@ -70,7 +70,8 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
 
   // Other filter states
   const [search, setSearch] = useState("");
-  const [month, setMonth] = useState("");
+  const [fromMonth, setFromMonth] = useState("APRIL");
+  const [toMonth, setToMonth] = useState("MARCH");
   const [feeHeadId, setFeeHeadId] = useState("");
   const [status, setStatus] = useState("");
   const [minPending, setMinPending] = useState("");
@@ -96,7 +97,8 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
           sessionId,
           classId,
           sectionId: sectionId || undefined,
-          month: month || undefined,
+          fromMonth: fromMonth || undefined,
+          toMonth: toMonth || undefined,
           feeHeadId: feeHeadId || undefined,
           minPending: minPending ? parseFloat(minPending) : undefined,
           maxPending: maxPending ? parseFloat(maxPending) : undefined,
@@ -278,31 +280,61 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
               />
             </div>
 
-            <Select
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="bg-white border-stone-300 text-stone-900 h-9 w-32 rounded-lg"
-            >
-              <option value="">All Months</option>
-              {[
-                "APRIL",
-                "MAY",
-                "JUNE",
-                "JULY",
-                "AUGUST",
-                "SEPTEMBER",
-                "OCTOBER",
-                "NOVEMBER",
-                "DECEMBER",
-                "JANUARY",
-                "FEBRUARY",
-                "MARCH",
-              ].map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </Select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-stone-500 uppercase">From:</span>
+              <Select
+                value={fromMonth}
+                onChange={(e) => setFromMonth(e.target.value)}
+                className="bg-white border-stone-300 text-stone-900 h-9 w-28 rounded-lg"
+              >
+                {[
+                  "APRIL",
+                  "MAY",
+                  "JUNE",
+                  "JULY",
+                  "AUGUST",
+                  "SEPTEMBER",
+                  "OCTOBER",
+                  "NOVEMBER",
+                  "DECEMBER",
+                  "JANUARY",
+                  "FEBRUARY",
+                  "MARCH",
+                ].map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-stone-500 uppercase">To:</span>
+              <Select
+                value={toMonth}
+                onChange={(e) => setToMonth(e.target.value)}
+                className="bg-white border-stone-300 text-stone-900 h-9 w-28 rounded-lg"
+              >
+                {[
+                  "APRIL",
+                  "MAY",
+                  "JUNE",
+                  "JULY",
+                  "AUGUST",
+                  "SEPTEMBER",
+                  "OCTOBER",
+                  "NOVEMBER",
+                  "DECEMBER",
+                  "JANUARY",
+                  "FEBRUARY",
+                  "MARCH",
+                ].map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
             <Select
               value={feeHeadId}
@@ -360,7 +392,8 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
               <Button
                 onClick={() => {
                   setSearch("");
-                  setMonth("");
+                  setFromMonth("APRIL");
+                  setToMonth("MARCH");
                   setFeeHeadId("");
                   setStatus("");
                   setMinPending("");
@@ -458,7 +491,7 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
                         </td>
                         <td className="p-3 text-right">
                           <Link
-                            href={`/fees?studentId=${row.studentId}`}
+                            href={`/students/${row.studentId}`}
                             className="text-xs text-indigo-600 hover:text-indigo-850 font-bold flex items-center justify-end gap-1"
                           >
                             Profile <ExternalLink className="w-3 h-3" />

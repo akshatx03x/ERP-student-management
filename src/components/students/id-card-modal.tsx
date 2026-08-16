@@ -99,15 +99,15 @@ export function IDCardModal({ isOpen, onClose, student, branding, selectedSessio
             body {
               margin: 0;
               padding: 0;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              height: 100vh;
+              display: block;
               background-color: white;
             }
             @media print {
               body {
                 height: auto;
+                display: block;
+                margin: 0;
+                padding: 0;
               }
               .no-print {
                 display: none;
@@ -513,7 +513,7 @@ export function IDCardModal({ isOpen, onClose, student, branding, selectedSessio
             <div className="flex gap-1.5 shrink-0 bg-stone-100 p-1 rounded-lg mr-2">
               <Button
                 variant={zoom === 1 ? "secondary" : "ghost"}
-                size="xs"
+                size="sm"
                 className="text-[10px] px-2 h-6"
                 onClick={() => setZoom(1)}
               >
@@ -521,7 +521,7 @@ export function IDCardModal({ isOpen, onClose, student, branding, selectedSessio
               </Button>
               <Button
                 variant={zoom === 1.5 ? "secondary" : "ghost"}
-                size="xs"
+                size="sm"
                 className="text-[10px] px-2 h-6"
                 onClick={() => setZoom(1.5)}
               >
@@ -529,7 +529,7 @@ export function IDCardModal({ isOpen, onClose, student, branding, selectedSessio
               </Button>
               <Button
                 variant={zoom === 2 ? "secondary" : "ghost"}
-                size="xs"
+                size="sm"
                 className="text-[10px] px-2 h-6"
                 onClick={() => setZoom(2)}
               >

@@ -1223,6 +1223,8 @@ export async function getPrincipalFinanceDashboardDynamic(filters: FinanceDashbo
 export interface ClasswisePendingListFilters {
   sessionId?: string;
   month?: string;
+  fromMonth?: string;
+  toMonth?: string;
   classId?: string;
   sectionId?: string;
   feeHeadId?: string;
@@ -1303,7 +1305,18 @@ export async function getClasswisePendingList(filters: ClasswisePendingListFilte
     },
     ...(activeSessionId ? { sessionId: activeSessionId } : {}),
     ...(filters.feeHeadId ? { feeHeadId: filters.feeHeadId } : {}),
-    ...(filters.month ? { month: filters.month as any } : {}),
+    ...(() => {
+      const ACADEMIC_MONTH_ORDER = ["APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER", "JANUARY", "FEBRUARY", "MARCH"];
+      if (filters.fromMonth && filters.toMonth) {
+        const fromIdx = ACADEMIC_MONTH_ORDER.indexOf(filters.fromMonth.toUpperCase());
+        const toIdx = ACADEMIC_MONTH_ORDER.indexOf(filters.toMonth.toUpperCase());
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const allowedMonths = ACADEMIC_MONTH_ORDER.slice(fromIdx, toIdx + 1);
+          return { month: { in: allowedMonths as any } };
+        }
+      }
+      return filters.month ? { month: filters.month as any } : {};
+    })(),
     ...(Object.keys(dateClause).length > 0 ? { dueDate: dateClause } : {}),
   };
 

@@ -119,6 +119,8 @@ export const recordPaymentSchema = z
     referenceNo: z.string().trim().optional().nullable(),
     paidAt: z.coerce.date().optional(),
     notes: z.string().trim().optional().nullable(),
+    useWallet: z.boolean().optional(),
+    selectedStudentFeeIds: z.array(z.string()).optional(),
     allocations: z
       .array(
         z.object({
@@ -129,7 +131,12 @@ export const recordPaymentSchema = z
       )
       .min(1),
   })
-  .refine((d) => Number(d.amount) > 0, {
+  .refine((d) => {
+    if (d.useWallet) {
+      return Number(d.amount) >= 0;
+    }
+    return Number(d.amount) > 0;
+  }, {
     message: "Payment amount must be greater than zero",
     path: ["amount"],
   })

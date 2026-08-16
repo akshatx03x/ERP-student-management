@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { listStudentsAction, getStudentIdCardDataAction } from "@/server/actions/student.actions";
+
+type IdCardData = Awaited<ReturnType<typeof getStudentIdCardDataAction>>;
+type PreviewStudent = IdCardData["students"][number];
+type PreviewBranding = IdCardData["branding"];
 import { IDCard } from "./id-card";
 import { jsPDF } from "jspdf";
 import { Loader2, Search, CheckSquare, Square, Printer, Download, X } from "lucide-react";
@@ -49,15 +53,15 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
 
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
-  
+
   const [isPending, startTransition] = useTransition();
   const [isDownloading, setIsDownloading] = useState(false);
   const [isGeneratingPrint, setIsGeneratingPrint] = useState(false);
 
   const [zoom, setZoom] = useState<number>(1);
   const [previewMode, setPreviewMode] = useState(false);
-  const [previewBranding, setPreviewBranding] = useState<unknown | null>(null);
-  const [previewStudents, setPreviewStudents] = useState<unknown[]>([]);
+  const [previewBranding, setPreviewBranding] = useState<PreviewBranding | null>(null);
+  const [previewStudents, setPreviewStudents] = useState<PreviewStudent[]>([]);
 
   // Find active sections
   const activeClass = classes.find((c) => c.id === selectedClassId);
@@ -178,10 +182,10 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
 
           const dob = student.dateOfBirth
             ? new Date(student.dateOfBirth).toLocaleDateString("en-US", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
             : "—";
 
           const addressParts = [];
@@ -203,11 +207,10 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
               <!-- Header -->
               <div class="relative z-10 bg-slate-900 text-white flex flex-col justify-center px-2 py-1.5 border-b border-amber-500 h-[18mm] shrink-0 text-center">
                 <div class="flex items-center gap-1.5 justify-center">
-                  ${
-                    logoUrl
-                      ? `<img src="${logoUrl}" alt="Logo" class="w-[8mm] h-[8mm] object-contain rounded-xs" />`
-                      : `<div class="w-[8mm] h-[8mm] bg-amber-500 text-slate-900 rounded-xs flex items-center justify-center font-bold text-[10px]">${(res.branding?.schoolName || "S").charAt(0).toUpperCase()}</div>`
-                  }
+                  ${logoUrl
+              ? `<img src="${logoUrl}" alt="Logo" class="w-[8mm] h-[8mm] object-contain rounded-xs" />`
+              : `<div class="w-[8mm] h-[8mm] bg-amber-500 text-slate-900 rounded-xs flex items-center justify-center font-bold text-[10px]">${(res.branding?.schoolName || "S").charAt(0).toUpperCase()}</div>`
+            }
                   <div class="flex flex-col text-left overflow-hidden">
                     <h1 class="font-extrabold text-[8.5px] leading-tight uppercase truncate max-w-[36mm]">${res.branding?.schoolName || "ERP SCHOOL"}</h1>
                     <p class="text-[5.5px] leading-normal opacity-90 truncate max-w-[36mm]">${res.branding?.address || "School Campus Address"}</p>
@@ -220,11 +223,10 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
               <div class="relative z-10 flex flex-col flex-1 p-2 bg-gradient-to-b from-stone-50 to-white text-[7px] leading-tight">
                 <div class="flex gap-2 mb-2 items-start">
                   <div class="w-[18mm] h-[22mm] bg-stone-100 border border-stone-300 rounded-[1mm] overflow-hidden shrink-0 flex items-center justify-center relative shadow-2xs">
-                    ${
-                      photoUrl
-                        ? `<img src="${photoUrl}" alt="${student.fullName}" class="w-full h-full object-cover" />`
-                        : `<div class="flex flex-col items-center justify-center text-stone-400 h-full w-full"><span class="text-[12px] font-bold">📷</span><span class="text-[5px] uppercase font-semibold mt-0.5">No Photo</span></div>`
-                    }
+                    ${photoUrl
+              ? `<img src="${photoUrl}" alt="${student.fullName}" class="w-full h-full object-cover" />`
+              : `<div class="flex flex-col items-center justify-center text-stone-400 h-full w-full"><span class="text-[12px] font-bold">📷</span><span class="text-[5px] uppercase font-semibold mt-0.5">No Photo</span></div>`
+            }
                   </div>
                   <div class="flex flex-col flex-1 gap-1">
                     <span class="bg-amber-100 text-amber-800 font-bold px-1 py-0.5 rounded-xs inline-block text-[5.5px] max-w-fit uppercase border border-amber-200">${sessionName}</span>
@@ -277,11 +279,10 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
               <!-- Footer -->
               <div class="relative z-10 bg-stone-50 border-t border-stone-200 px-2 py-1.5 h-[14mm] shrink-0 flex items-center justify-center text-[6px]">
                 <div class="flex flex-col items-center justify-end h-full text-[5px] text-stone-500 font-semibold relative text-center min-w-[28mm]">
-                  ${
-                    signatureUrl
-                      ? `<img src="${signatureUrl}" alt="Signature" class="absolute bottom-[6px] max-h-[8mm] max-w-[28mm] object-contain select-none" />`
-                      : `<div class="h-[8mm] w-full"></div>`
-                  }
+                  ${signatureUrl
+              ? `<img src="${signatureUrl}" alt="Signature" class="absolute bottom-[6px] max-h-[8mm] max-w-[28mm] object-contain select-none" />`
+              : `<div class="h-[8mm] w-full"></div>`
+            }
                   <span class="border-t border-stone-300 w-full pt-0.5 uppercase tracking-wide font-bold">Principal Signature</span>
                 </div>
               </div>
@@ -375,7 +376,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
       if (logoUrl) {
         try {
           logoImg = await loadImage(logoUrl);
-        } catch {}
+        } catch { }
       }
 
       const sigUrl = res.branding?.principalSignatureDocumentId
@@ -385,7 +386,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
       if (sigUrl) {
         try {
           sigImg = await loadImage(sigUrl);
-        } catch {}
+        } catch { }
       }
 
       const cardsPerPage = 9;
@@ -464,7 +465,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
         if (student.photoUrl) {
           try {
             photoImg = await loadImage(student.photoUrl);
-          } catch {}
+          } catch { }
         }
 
         const photoX = 4 * scale;
@@ -556,10 +557,10 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
 
         const dobStr = student.dateOfBirth
           ? new Date(student.dateOfBirth).toLocaleDateString("en-US", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
           : "—";
         ctx.fillStyle = "#78716c";
         ctx.font = `${1.8 * scale}px sans-serif`;
@@ -644,7 +645,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
               <div className="flex gap-1.5 bg-stone-100 p-1 rounded-lg">
                 <Button
                   variant={zoom === 1 ? "secondary" : "ghost"}
-                  size="xs"
+                  size="sm"
                   className="text-[10px] px-2 h-6"
                   onClick={() => setZoom(1)}
                 >
@@ -652,7 +653,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
                 </Button>
                 <Button
                   variant={zoom === 1.5 ? "secondary" : "ghost"}
-                  size="xs"
+                  size="sm"
                   className="text-[10px] px-2 h-6"
                   onClick={() => setZoom(1.5)}
                 >
@@ -660,7 +661,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
                 </Button>
                 <Button
                   variant={zoom === 2 ? "secondary" : "ghost"}
-                  size="xs"
+                  size="sm"
                   className="text-[10px] px-2 h-6"
                   onClick={() => setZoom(2)}
                 >
@@ -737,7 +738,7 @@ export function BulkIDCardModal({ isOpen, onClose, classes, sessions, initialSes
                       className="text-stone-600 font-semibold text-xs flex items-center gap-2 h-8 px-2"
                     >
                       {filteredStudents.length > 0 &&
-                      filteredStudents.every((s) => selectedStudentIds.has(s.id)) ? (
+                        filteredStudents.every((s) => selectedStudentIds.has(s.id)) ? (
                         <CheckSquare className="w-4 h-4 text-primary" />
                       ) : (
                         <Square className="w-4 h-4" />

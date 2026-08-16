@@ -34,7 +34,7 @@ export async function recordWalletTransactionAction(input: RecordWalletTransacti
   revalidatePath("/fees");
   revalidatePath("/families");
   revalidatePath(`/families/${input.familyId}`);
-  return { success: true, transactionId: r.transaction.id, newBalance: r.wallet.balance };
+  return { success: true, transactionId: r.transaction.id, newBalance: r.wallet.balance.toString() };
 }
 
 export async function reconcileFamilyAdvanceAction(familyId: string) {
@@ -42,7 +42,7 @@ export async function reconcileFamilyAdvanceAction(familyId: string) {
   revalidatePath("/fees");
   revalidatePath("/families");
   revalidatePath(`/families/${familyId}`);
-  return { success: true, settledCount: res.settledCount, amountSettled: res.amountSettled };
+  return { success: true, settledCount: res.settledCount, amountSettled: res.amountSettled.toString() };
 }
 
 export async function refundFamilyAdvanceAction(input: RefundWalletInput) {
@@ -50,7 +50,7 @@ export async function refundFamilyAdvanceAction(input: RefundWalletInput) {
   revalidatePath("/fees");
   revalidatePath("/families");
   revalidatePath(`/families/${input.familyId}`);
-  return { success: true, transactionId: res.transaction.id, newBalance: res.wallet.balance };
+  return { success: true, transactionId: res.transaction.id, newBalance: res.wallet.balance.toString() };
 }
 
 export async function manualWalletAdjustmentAction(input: ManualAdjustmentInput) {
@@ -58,5 +58,5 @@ export async function manualWalletAdjustmentAction(input: ManualAdjustmentInput)
   revalidatePath("/fees");
   revalidatePath("/families");
   revalidatePath(`/families/${input.familyId}`);
-  return { success: true, transactionId: res.transaction.id, newBalance: res.wallet.balance };
+  return { success: true, transactionId: res.transaction.id, newBalance: res.wallet.balance.toString() };
 }
