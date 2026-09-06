@@ -15,23 +15,33 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { parseOrThrow } from "@/server/validators/common";
 import {
   applyFeeRevisionSchema,
+  assignStudentOptionalFeeSchema,
+  bulkAssignOptionalFeeSchema,
   checkRevisionImpactSchema,
   createFeeHeadSchema,
   createFeeStructureSchema,
+  deactivateStudentOptionalFeeSchema,
   generateMonthlyLedgerSchema,
   listPaymentsSchema,
   listStudentFeesSchema,
+  listStudentOptionalFeesSchema,
   recordPaymentSchema,
   updateFeeHeadSchema,
   updateFeeStructureSchema,
+  updateStudentOptionalFeeSchema,
   type ApplyFeeRevisionInput,
+  type AssignStudentOptionalFeeInput,
+  type BulkAssignOptionalFeeInput,
   type CheckRevisionImpactInput,
   type CreateFeeHeadInput,
   type CreateFeeStructureInput,
+  type DeactivateStudentOptionalFeeInput,
   type FeeRevisionMode,
   type GenerateMonthlyLedgerInput,
+  type ListStudentOptionalFeesInput,
   type RecordPaymentInput,
   type UpdateFeeStructureInput,
+  type UpdateStudentOptionalFeeInput,
 } from "@/server/validators/fee.validator";
 
 export const ALL_FEE_MONTHS: FeeMonth[] = [
@@ -245,9 +255,20 @@ export async function generateStudentMonthlyLedgerInTx(
     throw new Error("Invalid academic session");
   }
 
-  // 3. Find fee structure
+  // 3. Find class fee structure
   const structure = await findFeeStructureForClass(tx, opts.sessionId, opts.classId);
-  if (!structure) {
+
+  // 4. Find active student optional fee assignments
+  const optionalFees = await tx.studentOptionalFee.findMany({
+    where: {
+      studentId: opts.studentId,
+      sessionId: opts.sessionId,
+      isActive: true,
+    },
+    include: { feeHead: true },
+  });
+
+  if (!structure && optionalFees.length === 0) {
     if (opts.requireStructure) {
       throw new Error(
         "No fee structure exists for this class in the selected academic session. Create a fee structure before generating fees.",
@@ -277,13 +298,51 @@ export async function generateStudentMonthlyLedgerInTx(
     dueDate: Date;
     status: StudentFeeStatus;
     remarks: string;
+    isOptional: boolean;
+    optionalFeeId?: string | null;
   }> = [];
 
-  for (const item of structure.items) {
-    const applicableMonths = getApplicableMonthsForItem(item);
-    for (const month of applicableMonths) {
+  // A. Process Class Fixed Fee Structure (isOptional: false)
+  if (structure) {
+    for (const item of structure.items) {
+      const applicableMonths = getApplicableMonthsForItem(item);
+      for (const month of applicableMonths) {
+        const key = `${item.feeHeadId}:${month}`;
+        if (existingSet.has(key)) {
+          continue; // Idempotency: skip already generated rows
+        }
 
-      const key = `${item.feeHeadId}:${month}`;
+        const { dueDate, dueYear } = computeMonthDueDate(session.startDate, month);
+
+        newItems.push({
+          studentId: opts.studentId,
+          feeHeadId: item.feeHeadId,
+          sessionId: opts.sessionId,
+          amount: item.amount,
+          month,
+          dueYear,
+          dueDate,
+          status: StudentFeeStatus.PENDING,
+          remarks: `Auto-generated for ${month} from ${structure.name}`,
+          isOptional: false,
+          optionalFeeId: null,
+        });
+        existingSet.add(key);
+      }
+    }
+  }
+
+  // B. Process Student Optional Fee Assignments (isOptional: true)
+  for (const optFee of optionalFees) {
+    let assignedMonths: FeeMonth[] = [];
+    try {
+      assignedMonths = JSON.parse(optFee.months);
+    } catch {
+      assignedMonths = ALL_FEE_MONTHS;
+    }
+
+    for (const month of assignedMonths) {
+      const key = `${optFee.feeHeadId}:${month}`;
       if (existingSet.has(key)) {
         continue; // Idempotency: skip already generated rows
       }
@@ -292,14 +351,16 @@ export async function generateStudentMonthlyLedgerInTx(
 
       newItems.push({
         studentId: opts.studentId,
-        feeHeadId: item.feeHeadId,
+        feeHeadId: optFee.feeHeadId,
         sessionId: opts.sessionId,
-        amount: item.amount,
+        amount: optFee.amount,
         month,
         dueYear,
         dueDate,
         status: StudentFeeStatus.PENDING,
-        remarks: `Auto-generated for ${month} from ${structure.name}`,
+        remarks: optFee.remarks || `Additional/Optional fee: ${optFee.feeHead.name}`,
+        isOptional: true,
+        optionalFeeId: optFee.id,
       });
       existingSet.add(key);
     }
@@ -317,7 +378,7 @@ export async function generateStudentMonthlyLedgerInTx(
         entityType: "StudentFee",
         entityId: opts.studentId,
         newValue: {
-          structureId: structure.id,
+          structureId: structure?.id ?? null,
           generated: newItems.length,
           sessionId: opts.sessionId,
           classId: opts.classId,
@@ -327,7 +388,7 @@ export async function generateStudentMonthlyLedgerInTx(
     );
   }
 
-  return { generated: newItems.length, structureId: structure.id };
+  return { generated: newItems.length, structureId: structure?.id ?? null };
 }
 
 /**
@@ -400,6 +461,7 @@ function ledgerFromFees(
     status: StudentFeeStatus;
     remarks: string | null;
     dueDate: Date | null;
+    isOptional?: boolean;
     feeHead: { id: string; name: string };
     session: { id: string; name: string };
     allocations: Array<{ amount: Prisma.Decimal | number; studentFeeFineId?: string | null }>;
@@ -440,6 +502,7 @@ function ledgerFromFees(
       status: f.status,
       dueDate: f.dueDate,
       remarks: f.remarks,
+      isOptional: !!f.isOptional,
     };
   });
 
@@ -1274,6 +1337,23 @@ export async function getStudentFeeLedger(studentId: string) {
   const enrollment = student.enrollments[0] ?? null;
   const sessionId = enrollment?.sessionId;
 
+  // Auto-sync ledger check: ensure student's ledger contains class structure & active optional fees
+  if (enrollment && sessionId) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await generateStudentMonthlyLedgerInTx(tx, {
+          schoolId,
+          studentId,
+          sessionId,
+          classId: enrollment.classId,
+          userId: user.id || null,
+        });
+      });
+    } catch (e) {
+      console.error("Auto-sync ledger check in getStudentFeeLedger failed:", e);
+    }
+  }
+
   // ── Parallel: fees + allocations are independent of each other ────────────
   const [fees, allocations] = await Promise.all([
     prisma.studentFee.findMany({
@@ -2035,3 +2115,393 @@ export async function generateStudentMonthlyLedger(input: GenerateMonthlyLedgerI
     });
   });
 }
+
+// ── Student-Specific Additional / Optional Fees Service ─────────────────────
+
+export async function assignStudentOptionalFeeInTx(
+  tx: Prisma.TransactionClient,
+  opts: {
+    schoolId: string;
+    studentId: string;
+    sessionId: string;
+    feeHeadId: string;
+    amount: Prisma.Decimal | number;
+    months: FeeMonth[];
+    remarks?: string | null;
+    userId?: string | null;
+  },
+) {
+  const student = await tx.student.findFirst({
+    where: { id: opts.studentId, schoolId: opts.schoolId },
+    select: {
+      id: true,
+      status: true,
+      enrollments: {
+        where: { sessionId: opts.sessionId },
+        select: { classId: true },
+        take: 1,
+      },
+    },
+  });
+  if (!student) throw new Error("Student not found");
+  if (student.status !== "ACTIVE") throw new Error("Cannot assign optional fee to inactive student");
+
+  const classId = student.enrollments[0]?.classId;
+  if (!classId) throw new Error("Student is not enrolled in the selected session");
+
+  const feeHead = await tx.feeHead.findFirst({
+    where: { id: opts.feeHeadId, schoolId: opts.schoolId },
+  });
+  if (!feeHead) throw new Error("Fee head not found");
+
+  const monthsJson = JSON.stringify(opts.months);
+  const decAmount = toDecimal(opts.amount);
+
+  // Upsert StudentOptionalFee
+  const existing = await tx.studentOptionalFee.findUnique({
+    where: {
+      studentId_sessionId_feeHeadId: {
+        studentId: opts.studentId,
+        sessionId: opts.sessionId,
+        feeHeadId: opts.feeHeadId,
+      },
+    },
+  });
+
+  let optRecord;
+  if (existing) {
+    optRecord = await tx.studentOptionalFee.update({
+      where: { id: existing.id },
+      data: {
+        amount: decAmount,
+        months: monthsJson,
+        isActive: true,
+        remarks: opts.remarks?.trim() ?? existing.remarks,
+      },
+    });
+  } else {
+    optRecord = await tx.studentOptionalFee.create({
+      data: {
+        schoolId: opts.schoolId,
+        studentId: opts.studentId,
+        sessionId: opts.sessionId,
+        feeHeadId: opts.feeHeadId,
+        amount: decAmount,
+        months: monthsJson,
+        isActive: true,
+        remarks: opts.remarks?.trim() ?? null,
+      },
+    });
+  }
+
+  // Spool student fees ledger immediately
+  await generateStudentMonthlyLedgerInTx(tx, {
+    schoolId: opts.schoolId,
+    studentId: opts.studentId,
+    sessionId: opts.sessionId,
+    classId,
+    userId: opts.userId,
+  });
+
+  if (opts.userId) {
+    await writeAuditLog(
+      {
+        schoolId: opts.schoolId,
+        userId: opts.userId,
+        action: existing ? "update" : "create",
+        module: "fee",
+        entityType: "StudentOptionalFee",
+        entityId: optRecord.id,
+        newValue: optRecord,
+      },
+      tx,
+    );
+  }
+
+  return optRecord;
+}
+
+export async function assignStudentOptionalFee(input: AssignStudentOptionalFeeInput) {
+  const { user } = await requirePermission("fee.create");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(assignStudentOptionalFeeSchema, input);
+
+  return prisma.$transaction(async (tx) => {
+    return assignStudentOptionalFeeInTx(tx, {
+      ...data,
+      schoolId,
+      userId: user.id,
+    });
+  });
+}
+
+export async function bulkAssignOptionalFeeToStudents(input: BulkAssignOptionalFeeInput) {
+  const { user } = await requirePermission("fee.create");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(bulkAssignOptionalFeeSchema, input);
+
+  return prisma.$transaction(async (tx) => {
+    const results = [];
+    for (const studentId of data.studentIds) {
+      const res = await assignStudentOptionalFeeInTx(tx, {
+        schoolId,
+        studentId,
+        sessionId: data.sessionId,
+        feeHeadId: data.feeHeadId,
+        amount: data.amount,
+        months: data.months,
+        remarks: data.remarks,
+        userId: user.id,
+      });
+      results.push(res);
+    }
+    return { count: results.length, assignments: results };
+  });
+}
+
+export async function updateStudentOptionalFee(input: UpdateStudentOptionalFeeInput) {
+  const { user } = await requirePermission("fee.update");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(updateStudentOptionalFeeSchema, input);
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.studentOptionalFee.findFirst({
+      where: { id: data.id, schoolId },
+    });
+    if (!existing) throw new Error("Optional fee assignment not found");
+
+    const newAmount = data.amount !== undefined ? toDecimal(data.amount) : existing.amount;
+    const newMonths = data.months ? JSON.stringify(data.months) : existing.months;
+
+    const updated = await tx.studentOptionalFee.update({
+      where: { id: data.id },
+      data: {
+        ...(data.amount !== undefined ? { amount: newAmount } : {}),
+        ...(data.months ? { months: newMonths } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        ...(data.remarks !== undefined ? { remarks: data.remarks } : {}),
+      },
+    });
+
+    // If amount changed, update completely unpaid StudentFee rows linked to this assignment
+    if (data.amount !== undefined) {
+      const unpaidFees = await tx.studentFee.findMany({
+        where: {
+          optionalFeeId: data.id,
+          status: StudentFeeStatus.PENDING,
+        },
+        include: { allocations: true },
+      });
+
+      for (const fee of unpaidFees) {
+        if (fee.allocations.length === 0) {
+          await tx.studentFee.update({
+            where: { id: fee.id },
+            data: { amount: newAmount },
+          });
+        }
+      }
+    }
+
+    // Re-spool ledger if new months were added
+    const enrollment = await tx.studentEnrollment.findFirst({
+      where: { studentId: existing.studentId, sessionId: existing.sessionId },
+      select: { classId: true },
+    });
+
+    if (enrollment) {
+      await generateStudentMonthlyLedgerInTx(tx, {
+        schoolId,
+        studentId: existing.studentId,
+        sessionId: existing.sessionId,
+        classId: enrollment.classId,
+        userId: user.id,
+      });
+    }
+
+    await writeAuditLog(
+      {
+        schoolId,
+        userId: user.id,
+        action: "update",
+        module: "fee",
+        entityType: "StudentOptionalFee",
+        entityId: updated.id,
+        newValue: updated,
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+export async function deactivateStudentOptionalFee(input: DeactivateStudentOptionalFeeInput) {
+  const { user } = await requirePermission("fee.update");
+  const schoolId = schoolIdFromUser(user);
+  const data = parseOrThrow(deactivateStudentOptionalFeeSchema, input);
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.studentOptionalFee.findFirst({
+      where: { id: data.id, schoolId },
+    });
+    if (!existing) throw new Error("Optional fee assignment not found");
+
+    const updated = await tx.studentOptionalFee.update({
+      where: { id: data.id },
+      data: { isActive: false },
+    });
+
+    // If effectiveMonth is specified (e.g. stops transport from July onward):
+    // Delete ONLY completely unpaid StudentFee rows for effectiveMonth and future months.
+    // Paid/partially-paid rows and receipts are PERMANENTLY PROTECTED.
+    if (data.effectiveMonth) {
+      const effIdx = getAcademicMonthIndex(data.effectiveMonth);
+      const targetMonths = ALL_FEE_MONTHS.slice(effIdx);
+
+      const feesToDelete = await tx.studentFee.findMany({
+        where: {
+          studentId: existing.studentId,
+          sessionId: existing.sessionId,
+          feeHeadId: existing.feeHeadId,
+          month: { in: targetMonths },
+          status: StudentFeeStatus.PENDING,
+        },
+        include: { allocations: true, advanceTransactions: true },
+      });
+
+      const safeIdsToDelete = feesToDelete
+        .filter((f) => f.allocations.length === 0 && f.advanceTransactions.length === 0)
+        .map((f) => f.id);
+
+      if (safeIdsToDelete.length > 0) {
+        await tx.studentFee.deleteMany({
+          where: { id: { in: safeIdsToDelete } },
+        });
+      }
+    }
+
+    await writeAuditLog(
+      {
+        schoolId,
+        userId: user.id,
+        action: "deactivate",
+        module: "fee",
+        entityType: "StudentOptionalFee",
+        entityId: updated.id,
+        newValue: { isActive: false, effectiveMonth: data.effectiveMonth },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+export async function reactivateStudentOptionalFee(assignmentId: string) {
+  const { user } = await requirePermission("fee.update");
+  const schoolId = schoolIdFromUser(user);
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.studentOptionalFee.findFirst({
+      where: { id: assignmentId, schoolId },
+    });
+    if (!existing) throw new Error("Optional fee assignment not found");
+
+    const updated = await tx.studentOptionalFee.update({
+      where: { id: assignmentId },
+      data: { isActive: true },
+    });
+
+    const enrollment = await tx.studentEnrollment.findFirst({
+      where: { studentId: existing.studentId, sessionId: existing.sessionId },
+      select: { classId: true },
+    });
+
+    if (enrollment) {
+      await generateStudentMonthlyLedgerInTx(tx, {
+        schoolId,
+        studentId: existing.studentId,
+        sessionId: existing.sessionId,
+        classId: enrollment.classId,
+        userId: user.id,
+      });
+    }
+
+    await writeAuditLog(
+      {
+        schoolId,
+        userId: user.id,
+        action: "update",
+        module: "fee",
+        entityType: "StudentOptionalFee",
+        entityId: updated.id,
+        newValue: { isActive: true },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+export async function listStudentOptionalFees(input?: ListStudentOptionalFeesInput) {
+  const { user } = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user);
+  const params = parseOrThrow(listStudentOptionalFeesSchema, input ?? {});
+
+  const where = {
+    schoolId,
+    ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+    ...(params.studentId ? { studentId: params.studentId } : {}),
+    ...(params.feeHeadId ? { feeHeadId: params.feeHeadId } : {}),
+    ...(params.isActive !== undefined ? { isActive: params.isActive } : {}),
+    ...(params.classId
+      ? {
+          student: {
+            enrollments: {
+              some: {
+                classId: params.classId,
+                ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+              },
+            },
+          },
+        }
+      : {}),
+  };
+
+  const items = await prisma.studentOptionalFee.findMany({
+    where,
+    include: {
+      student: { select: { id: true, fullName: true, admissionNo: true } },
+      feeHead: { select: { id: true, name: true, frequency: true } },
+      session: { select: { id: true, name: true } },
+    },
+    orderBy: [{ student: { fullName: "asc" } }, { feeHead: { name: "asc" } }],
+  });
+
+  return items.map((i) => {
+    let parsedMonths: FeeMonth[] = [];
+    try {
+      parsedMonths = JSON.parse(i.months);
+    } catch {
+      parsedMonths = ALL_FEE_MONTHS;
+    }
+    return {
+      id: i.id,
+      createdAt: i.createdAt,
+      updatedAt: i.updatedAt,
+      studentId: i.studentId,
+      sessionId: i.sessionId,
+      feeHeadId: i.feeHeadId,
+      amount: decimalToNumber(i.amount),
+      months: parsedMonths,
+      isActive: i.isActive,
+      remarks: i.remarks,
+      student: i.student,
+      feeHead: i.feeHead,
+      session: i.session,
+    };
+  });
+}
+

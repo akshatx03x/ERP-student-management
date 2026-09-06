@@ -157,6 +157,45 @@ export const listPaymentsSchema = paginationSchema.extend({
   familyId: idSchema.optional(),
 });
 
+export const assignStudentOptionalFeeSchema = z.object({
+  studentId: idSchema,
+  sessionId: idSchema,
+  feeHeadId: idSchema,
+  amount: positiveDecimalSchema,
+  months: z.array(z.nativeEnum(FeeMonth)).min(1, "Select at least one applicable month"),
+  remarks: z.string().trim().optional().nullable(),
+});
+
+export const bulkAssignOptionalFeeSchema = z.object({
+  studentIds: z.array(idSchema).min(1, "Select at least one student"),
+  sessionId: idSchema,
+  feeHeadId: idSchema,
+  amount: positiveDecimalSchema,
+  months: z.array(z.nativeEnum(FeeMonth)).min(1, "Select at least one applicable month"),
+  remarks: z.string().trim().optional().nullable(),
+});
+
+export const updateStudentOptionalFeeSchema = z.object({
+  id: idSchema,
+  amount: positiveDecimalSchema.optional(),
+  months: z.array(z.nativeEnum(FeeMonth)).min(1).optional(),
+  isActive: z.boolean().optional(),
+  remarks: z.string().trim().optional().nullable(),
+});
+
+export const deactivateStudentOptionalFeeSchema = z.object({
+  id: idSchema,
+  effectiveMonth: z.nativeEnum(FeeMonth).optional().nullable(),
+});
+
+export const listStudentOptionalFeesSchema = z.object({
+  sessionId: idSchema.optional(),
+  classId: idSchema.optional(),
+  studentId: idSchema.optional(),
+  feeHeadId: idSchema.optional(),
+  isActive: z.boolean().optional(),
+});
+
 export type CreateFeeHeadInput = z.infer<typeof createFeeHeadSchema>;
 export type CreateFeeStructureInput = z.infer<typeof createFeeStructureSchema>;
 export type UpdateFeeStructureInput = z.infer<typeof updateFeeStructureSchema>;
@@ -166,3 +205,10 @@ export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export type CheckRevisionImpactInput = z.infer<typeof checkRevisionImpactSchema>;
 export type ApplyFeeRevisionInput = z.infer<typeof applyFeeRevisionSchema>;
 export type FeeRevisionMode = "FUTURE_ONLY" | "UPDATE_UNPAID";
+
+export type AssignStudentOptionalFeeInput = z.infer<typeof assignStudentOptionalFeeSchema>;
+export type BulkAssignOptionalFeeInput = z.infer<typeof bulkAssignOptionalFeeSchema>;
+export type UpdateStudentOptionalFeeInput = z.infer<typeof updateStudentOptionalFeeSchema>;
+export type DeactivateStudentOptionalFeeInput = z.infer<typeof deactivateStudentOptionalFeeSchema>;
+export type ListStudentOptionalFeesInput = z.infer<typeof listStudentOptionalFeesSchema>;
+

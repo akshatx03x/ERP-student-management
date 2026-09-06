@@ -68,6 +68,7 @@ export default async function StudentDetailPage({
 
   type FeeHeadRow = {
     feeHead: string;
+    isOptional?: boolean;
     months: Record<MonthKey, { amount: number; paid: number; remaining: number }>;
     total: number;
     totalPaid: number;
@@ -90,6 +91,7 @@ export default async function StudentDetailPage({
     if (!feeHeadMap[head]) {
       feeHeadMap[head] = {
         feeHead: head,
+        isOptional: (line as any).isOptional ?? false,
         months: {} as Record<MonthKey, { amount: number; paid: number; remaining: number }>,
         total: 0,
         totalPaid: 0,

@@ -914,7 +914,14 @@ export function FeeCollectionClient({
                                       <tbody className="divide-y divide-stone-100">
                                         {m.items.map((item: any, idx: number) => (
                                           <tr key={idx}>
-                                            <td className="py-2 px-3 font-semibold text-stone-700 truncate">{item.feeHeadName}</td>
+                                            <td className="py-2 px-3 font-semibold text-stone-700 truncate flex items-center justify-between gap-1">
+                                              <span className="truncate">{item.feeHeadName}</span>
+                                              {item.isOptional ? (
+                                                <Badge variant="outline" className="text-[8px] px-1 py-0 rounded shrink-0 bg-purple-50 text-purple-700 border-purple-200">Optional</Badge>
+                                              ) : (
+                                                <Badge variant="secondary" className="text-[8px] px-1 py-0 rounded shrink-0">Fixed</Badge>
+                                              )}
+                                            </td>
                                             <td className="py-2 px-3 text-right font-mono whitespace-nowrap">{formatCurrency(item.originalAmount)}</td>
                                             <td className="py-2 px-3 text-right font-mono text-emerald-700 whitespace-nowrap">
                                               {item.discountAmount > 0 ? `-${formatCurrency(item.discountAmount)}` : "—"}

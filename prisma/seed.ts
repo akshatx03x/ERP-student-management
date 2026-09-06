@@ -129,7 +129,9 @@ async function main() {
     });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findFirst({
+    where: { OR: [{ email }, { staffProfileId: staff.id }] },
+  });
   if (!existing) {
     const hashed = await hashPasswordSecurely(password);
     const user = await prisma.user.create({

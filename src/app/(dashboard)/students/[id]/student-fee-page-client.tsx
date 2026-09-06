@@ -43,6 +43,7 @@ type PendingDue = {
 
 type FeeHeadRow = {
   feeHead: string;
+  isOptional?: boolean;
   months: Record<string, { amount: number; paid: number; remaining: number }>;
   total: number;
   totalPaid: number;
@@ -481,7 +482,14 @@ export function StudentFeePageClient({
                   {/* Per fee head */}
                   {feeHeadRows.map((row) => (
                     <tr key={row.feeHead}>
-                      <td className="py-2 px-3 font-medium text-stone-700">{row.feeHead}</td>
+                      <td className="py-2 px-3 font-medium text-stone-700 flex items-center justify-between gap-1.5">
+                        <span>{row.feeHead}</span>
+                        {row.isOptional ? (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 rounded bg-purple-50 text-purple-700 border-purple-200">Optional</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[9px] px-1 py-0 rounded">Fixed</Badge>
+                        )}
+                      </td>
                       {allMonths.map((m) => {
                         const cell = row.months[m];
                         return (

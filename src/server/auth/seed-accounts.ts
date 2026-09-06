@@ -16,7 +16,7 @@ import { Role } from "@prisma/client";
 import { seedRoleDefaults } from "@/server/permissions/guard";
 
 const DEVELOPER_EMAIL = "developer@vidyanjali.edu.in";
-const PRINCIPAL_EMAIL = "principal@vidyanjali.edu.in";
+const PRINCIPAL_EMAIL = "principal@vidyanjali.edu";
 const SEED_PASSWORD = "vidyanjalierp@890";
 
 async function createSystemUser(params: {
@@ -81,8 +81,8 @@ export async function seedSystemAccounts() {
 
     // Check existence of both accounts
     const [developerUser, principalUser] = await Promise.all([
-      prisma.user.findUnique({ where: { email: DEVELOPER_EMAIL } }),
-      prisma.user.findUnique({ where: { email: PRINCIPAL_EMAIL } }),
+      prisma.user.findFirst({ where: { OR: [{ email: DEVELOPER_EMAIL }, { role: Role.DEVELOPER }] } }),
+      prisma.user.findFirst({ where: { OR: [{ email: PRINCIPAL_EMAIL }, { role: Role.PRINCIPAL }] } }),
     ]);
 
     const tasks: Promise<unknown>[] = [];
@@ -98,8 +98,6 @@ export async function seedSystemAccounts() {
           schoolId: school.id,
         }).then(() => console.log("[seed] Developer account created ✓")),
       );
-    } else {
-      console.log("[seed] Developer account already exists — skipping");
     }
 
     if (!principalUser) {
@@ -113,8 +111,6 @@ export async function seedSystemAccounts() {
           schoolId: school.id,
         }).then(() => console.log("[seed] Principal account created ✓")),
       );
-    } else {
-      console.log("[seed] Principal account already exists — skipping");
     }
 
     if (tasks.length > 0) {
@@ -127,3 +123,4 @@ export async function seedSystemAccounts() {
     console.error("[seed] System account seeding failed:", err);
   }
 }
+

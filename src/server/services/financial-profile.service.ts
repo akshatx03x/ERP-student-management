@@ -29,6 +29,7 @@ export interface MonthlyFeeRow {
     paidAmount: number;
     remaining: number;
     status: string;
+    isOptional: boolean;
   }>;
 }
 
@@ -238,6 +239,7 @@ export async function getStudentFinancialProfile(
       paidAmount: paidFeeAmt,
       remaining: remainingLineDue,
       status: fee.status,
+      isOptional: fee.isOptional,
     };
 
     if (!monthMap.has(monthKey)) {

@@ -34,6 +34,7 @@ model School {
   users                User[]
   cashBookEntries      CashBookEntry[]
   transferCertificates TransferCertificate[]
+  studentOptionalFees  StudentOptionalFee[]
 }
 
 model SchoolBranding {
@@ -240,6 +241,7 @@ model AcademicSession {
   timetableSlots          TimetableSlot[]
   termResults             StudentTermResult[]
   transferCertificates    TransferCertificate[]
+  optionalFees            StudentOptionalFee[]
 
   @@unique([schoolId, name])
   @@index([schoolId, isCurrent])
@@ -490,6 +492,7 @@ model Student {
   user                 User?
   termResults          StudentTermResult[]
   transferCertificates TransferCertificate[]
+  optionalFees         StudentOptionalFee[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, fullName])
@@ -907,6 +910,7 @@ model FeeHead {
   school         School             @relation(fields: [schoolId], references: [id])
   structureItems FeeStructureItem[]
   studentFees    StudentFee[]
+  optionalFees   StudentOptionalFee[]
 
   @@unique([schoolId, name])
 }
@@ -965,17 +969,43 @@ model StudentFee {
   dueDate             DateTime?
   status              StudentFeeStatus       @default(PENDING)
   remarks             String?
+  isOptional          Boolean                @default(false)
+  optionalFeeId       String?
   advanceTransactions AdvanceTransaction[]
   allocations         FeePaymentAllocation[]
   student             Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
   session             AcademicSession        @relation(fields: [sessionId], references: [id])
   feeHead             FeeHead                @relation(fields: [feeHeadId], references: [id])
+  optionalFee         StudentOptionalFee?    @relation(fields: [optionalFeeId], references: [id], onDelete: SetNull)
   fine                StudentFeeFine?
 
   @@unique([studentId, sessionId, feeHeadId, month])
   @@index([studentId, sessionId, status])
   @@index([sessionId, status])
   @@index([studentId, month])
+}
+
+model StudentOptionalFee {
+  id          String          @id @default(cuid())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  schoolId    String
+  studentId   String
+  sessionId   String
+  feeHeadId   String
+  amount      Decimal
+  months      String          // JSON array string of FeeMonth enum values e.g. '["APRIL","MAY"]'
+  isActive    Boolean         @default(true)
+  remarks     String?
+  studentFees StudentFee[]
+  student     Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session     AcademicSession @relation(fields: [sessionId], references: [id])
+  feeHead     FeeHead         @relation(fields: [feeHeadId], references: [id])
+  school      School          @relation(fields: [schoolId], references: [id])
+
+  @@unique([studentId, sessionId, feeHeadId])
+  @@index([studentId, sessionId, isActive])
+  @@index([schoolId])
 }
 
 model FamilyPayment {

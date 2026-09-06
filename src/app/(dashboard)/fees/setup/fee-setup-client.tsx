@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +14,18 @@ import {
   createFeeStructureAction,
   checkFeeStructureRevisionImpactAction,
   applyFeeStructureRevisionAction,
+  assignStudentOptionalFeeAction,
+  bulkAssignOptionalFeeToStudentsAction,
+  updateStudentOptionalFeeAction,
+  deactivateStudentOptionalFeeAction,
+  reactivateStudentOptionalFeeAction,
+  listStudentOptionalFeesAction,
 } from "@/server/actions/fee.actions";
+import { listStudentsAction } from "@/server/actions/student.actions";
 import { createFeeLateRuleAction } from "@/server/actions/fine.actions";
-import { Plus, Trash, Pencil, Settings, Layers, Clock, CheckSquare, MinusSquare, Copy, AlertTriangle, ShieldCheck, Clock3, X } from "lucide-react";
+import {
+  Plus, Trash, Pencil, Settings, Layers, Clock, CheckSquare, MinusSquare, Copy, AlertTriangle, ShieldCheck, Clock3, X, UserPlus, Search, CheckCircle2, UserCheck, ShieldAlert, Sparkles, Filter, PowerOff
+} from "lucide-react";
 
 import { FeeMonth } from "@prisma/client";
 import type { FeeRevisionMode } from "@/server/validators/fee.validator";
@@ -36,7 +45,7 @@ type RevisionImpact = {
 
 type Session = { id: string; name: string };
 type ClassRow = { id: string; name: string };
-type Head = { id: string; name: string; description: string | null; isActive: boolean };
+type Head = { id: string; name: string; description: string | null; isActive: boolean; frequency?: string };
 type Structure = {
   id: string;
   sessionId: string;
@@ -54,6 +63,25 @@ type Rule = {
   id: string; name: string; calculationType: string; graceDays: number;
   fixedAmount: number | null; percentage: number | null;
   applyPerDay: number | null; isActive: boolean;
+};
+
+type OptionalAssignment = {
+  id: string;
+  studentId: string;
+  sessionId: string;
+  feeHeadId: string;
+  amount: number;
+  months: FeeMonth[];
+  isActive: boolean;
+  remarks: string | null;
+  student: { id: string; fullName: string; admissionNo: string };
+  feeHead: { id: string; name: string; frequency: string };
+};
+
+type ClassStudent = {
+  id: string;
+  fullName: string;
+  admissionNo: string;
 };
 
 const MONTH_ORDER: Array<{ label: string; value: FeeMonth }> = [
@@ -87,7 +115,7 @@ export function FeeSetupClient({
   rules: Rule[];
 }) {
   const [pending, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<"heads" | "structures" | "rules">("structures");
+  const [activeTab, setActiveTab] = useState<"structures" | "optional" | "heads" | "rules">("structures");
 
   // HEADS CRUD
   const [heads, setHeads] = useState<Head[]>(initialHeads);
@@ -136,9 +164,58 @@ export function FeeSetupClient({
   const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
   const [revisionImpact, setRevisionImpact] = useState<RevisionImpact | null>(null);
   const [revisionMode, setRevisionMode] = useState<FeeRevisionMode>("FUTURE_ONLY");
-  // Pending save payload — held until the admin confirms or cancels
   const [pendingRevisionItems, setPendingRevisionItems] = useState<Array<{ feeHeadId: string; amount: number; months: FeeMonth[] }>>([]);
   const [checkingImpact, setCheckingImpact] = useState(false);
+
+  // ── OPTIONAL FEES STATE ───────────────────────────────────────────────────
+  const [optionalSessionId, setOptionalSessionId] = useState<string>(currentSessionId ?? sessions[0]?.id ?? "");
+  const [optionalClassId, setOptionalClassId] = useState<string>(classes[0]?.id ?? "");
+  const [optionalAssignments, setOptionalAssignments] = useState<OptionalAssignment[]>([]);
+  const [classStudents, setClassStudents] = useState<ClassStudent[]>([]);
+  const [loadingOptional, setLoadingOptional] = useState(false);
+  const [studentSearch, setStudentSearch] = useState("");
+
+  // ASSIGN OPTIONAL FEE MODAL STATE
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [optFeeHeadId, setOptFeeHeadId] = useState<string>(heads[0]?.id ?? "");
+  const [optAmount, setOptAmount] = useState<string>("");
+  const [optMonths, setOptMonths] = useState<FeeMonth[]>(MONTH_ORDER.map(m => m.value));
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [optRemarks, setOptRemarks] = useState<string>("");
+  const [studentModalSearch, setStudentModalSearch] = useState("");
+
+  // DEACTIVATE OPTIONAL FEE MODAL STATE
+  const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
+  const [targetDeactivateAssignment, setTargetDeactivateAssignment] = useState<OptionalAssignment | null>(null);
+  const [effectiveStopMonth, setEffectiveStopMonth] = useState<FeeMonth>(FeeMonth.JULY);
+
+  // Load Optional Assignments & Class Students when Session/Class changes
+  useEffect(() => {
+    if (activeTab !== "optional") return;
+    let isMounted = true;
+    setLoadingOptional(true);
+
+    Promise.all([
+      listStudentOptionalFeesAction({ sessionId: optionalSessionId, classId: optionalClassId }),
+      listStudentsAction({ classId: optionalClassId, sessionId: optionalSessionId, pageSize: 200 }),
+    ]).then(([assignments, studentsRes]) => {
+      if (!isMounted) return;
+      setOptionalAssignments(assignments as any);
+      const mappedStudents = (studentsRes.items || []).map((s: any) => ({
+        id: s.id,
+        fullName: s.fullName,
+        admissionNo: s.admissionNo,
+      }));
+      setClassStudents(mappedStudents);
+      setLoadingOptional(false);
+    }).catch(() => {
+      if (!isMounted) return;
+      toast.error("Failed to load class students and optional fees");
+      setLoadingOptional(false);
+    });
+
+    return () => { isMounted = false; };
+  }, [activeTab, optionalSessionId, optionalClassId]);
 
   // Heads actions
   function handleAddHead() {
@@ -182,13 +259,6 @@ export function FeeSetupClient({
     setStructItems(prev => [...prev, { feeHeadId: nextHead.id, amount: "", months: MONTH_ORDER.map(m => m.value) }]);
   }
 
-  /**
-   * Two-phase save:
-   * Phase 1 — Check if any StudentFee (monthly ledger) records already exist.
-   *   - If NO records: save immediately, done.
-   *   - If records exist: show the confirmation dialog with a preview.
-   * Phase 2 — Admin picks FUTURE_ONLY or UPDATE_UNPAID and confirms.
-   */
   async function handleSaveStructure() {
     if (structItems.length === 0) { toast.error("Add at least one fee head row"); return; }
 
@@ -212,7 +282,6 @@ export function FeeSetupClient({
       months: i.months,
     }));
 
-    // ── Case A: New fee structure (no existing structure) ───────────────────
     if (!currentStructure) {
       startTransition(async () => {
         try {
@@ -245,16 +314,14 @@ export function FeeSetupClient({
       return;
     }
 
-    // ── Case B: Existing structure — check ledger impact first ──────────────
     setCheckingImpact(true);
     try {
       const impact = await checkFeeStructureRevisionImpactAction(currentStructure.id);
 
       if (!impact.hasExistingLedger) {
-        // Case A behaviour: no ledger records, save immediately
         startTransition(async () => {
           try {
-            const r = await applyFeeStructureRevisionAction({
+            await applyFeeStructureRevisionAction({
               structureId: currentStructure.id,
               items,
               revisionMode: "FUTURE_ONLY",
@@ -275,7 +342,6 @@ export function FeeSetupClient({
           }
         });
       } else {
-        // Ledger exists — show confirmation dialog
         setRevisionImpact(impact as RevisionImpact);
         setPendingRevisionItems(items);
         setRevisionMode("FUTURE_ONLY");
@@ -288,7 +354,6 @@ export function FeeSetupClient({
     }
   }
 
-  /** Phase 2: Admin has chosen a mode in the dialog and clicked Apply. */
   function handleConfirmRevision() {
     if (!currentStructure || !revisionImpact) return;
 
@@ -371,21 +436,109 @@ export function FeeSetupClient({
     });
   }
 
+  // ── OPTIONAL FEE ACTIONS ─────────────────────────────────────────────────
+
+  function openAssignModalForStudents(studentIds: string[]) {
+    setSelectedStudentIds(studentIds);
+    setOptFeeHeadId(heads[0]?.id ?? "");
+    setOptAmount("");
+    setOptMonths(MONTH_ORDER.map(m => m.value));
+    setOptRemarks("");
+    setStudentModalSearch("");
+    setAssignModalOpen(true);
+  }
+
+  function handleAssignOptionalFeeSubmit() {
+    if (!optFeeHeadId) { toast.error("Please select a Fee Head"); return; }
+    if (!optAmount || Number(optAmount) <= 0) { toast.error("Enter a valid amount greater than zero"); return; }
+    if (optMonths.length === 0) { toast.error("Select at least one applicable month"); return; }
+    if (selectedStudentIds.length === 0) { toast.error("Select at least one student"); return; }
+
+    startTransition(async () => {
+      try {
+        const res = await bulkAssignOptionalFeeToStudentsAction({
+          studentIds: selectedStudentIds,
+          sessionId: optionalSessionId,
+          feeHeadId: optFeeHeadId,
+          amount: Number(optAmount),
+          months: optMonths,
+          remarks: optRemarks || null,
+        });
+
+        toast.success(`Successfully assigned optional fee to ${res.count} student(s)! Monthly ledger spooled.`);
+        setAssignModalOpen(false);
+
+        // Refresh optional assignments list
+        const updated = await listStudentOptionalFeesAction({ sessionId: optionalSessionId, classId: optionalClassId });
+        setOptionalAssignments(updated as any);
+      } catch (e) {
+        toast.error("Failed to assign optional fee. Please try again.");
+      }
+    });
+  }
+
+  function handleDeactivateOptionalFeeSubmit() {
+    if (!targetDeactivateAssignment) return;
+
+    startTransition(async () => {
+      try {
+        await deactivateStudentOptionalFeeAction({
+          id: targetDeactivateAssignment.id,
+          effectiveMonth: effectiveStopMonth,
+        });
+
+        const selectedMonthLabel = MONTH_ORDER.find(m => m.value === effectiveStopMonth)?.label ?? effectiveStopMonth;
+        toast.success(`Optional fee stopped from ${selectedMonthLabel} onward. Historical paid records preserved.`);
+        setDeactivateModalOpen(false);
+        setTargetDeactivateAssignment(null);
+
+        // Refresh optional assignments list
+        const updated = await listStudentOptionalFeesAction({ sessionId: optionalSessionId, classId: optionalClassId });
+        setOptionalAssignments(updated as any);
+      } catch (e) {
+        toast.error("Failed to deactivate optional fee.");
+      }
+    });
+  }
+
+  function handleReactivateOptionalFee(assignmentId: string) {
+    startTransition(async () => {
+      try {
+        await reactivateStudentOptionalFeeAction(assignmentId);
+        toast.success("Optional fee reactivated! Future monthly fees spooled to student ledger.");
+        const updated = await listStudentOptionalFeesAction({ sessionId: optionalSessionId, classId: optionalClassId });
+        setOptionalAssignments(updated as any);
+      } catch (e) {
+        toast.error("Failed to reactivate optional fee.");
+      }
+    });
+  }
+
+  // Filtered class students for main table search
+  const filteredClassStudents = useMemo(() => {
+    if (!studentSearch.trim()) return classStudents;
+    const q = studentSearch.toLowerCase();
+    return classStudents.filter(s => s.fullName.toLowerCase().includes(q) || s.admissionNo.toLowerCase().includes(q));
+  }, [classStudents, studentSearch]);
+
+  // Map studentId -> list of assignments
+  const studentAssignmentMap = useMemo(() => {
+    const map = new Map<string, OptionalAssignment[]>();
+    for (const a of optionalAssignments) {
+      if (!map.has(a.studentId)) map.set(a.studentId, []);
+      map.get(a.studentId)!.push(a);
+    }
+    return map;
+  }, [optionalAssignments]);
+
   return (
     <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm flex flex-col h-[calc(100vh-220px)] max-w-[1440px] mx-auto text-sm">
 
       {/* ── REVISION CONFIRMATION DIALOG ─────────────────────────────────── */}
       {revisionDialogOpen && revisionImpact && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => !pending && setRevisionDialogOpen(false)}
-          />
-
-          {/* Dialog panel */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !pending && setRevisionDialogOpen(false)} />
           <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-xl mx-4 overflow-hidden">
-            {/* Header */}
             <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-stone-100">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 mt-0.5">
@@ -399,15 +552,11 @@ export function FeeSetupClient({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => !pending && setRevisionDialogOpen(false)}
-                className="text-stone-400 hover:text-stone-700 transition-colors ml-4 shrink-0"
-              >
+              <button onClick={() => !pending && setRevisionDialogOpen(false)} className="text-stone-400 hover:text-stone-700 transition-colors ml-4 shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Preview panel */}
             <div className="px-6 py-4 bg-stone-50/50 border-b border-stone-100">
               <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">
                 Impact Preview — {revisionImpact.className} · {revisionImpact.sessionName}
@@ -429,28 +578,15 @@ export function FeeSetupClient({
               </div>
             </div>
 
-            {/* Mode selector */}
             <div className="px-6 py-4 space-y-2.5">
               <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">Choose Revision Mode</p>
 
-              {/* Option 1: Future Only */}
-              <button
-                onClick={() => setRevisionMode("FUTURE_ONLY")}
-                className={cn(
-                  "w-full text-left rounded-xl border p-4 transition-all",
-                  revisionMode === "FUTURE_ONLY"
-                    ? "border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500"
-                    : "border-stone-200 hover:border-stone-300 bg-white"
-                )}
-              >
+              <button onClick={() => setRevisionMode("FUTURE_ONLY")}
+                className={cn("w-full text-left rounded-xl border p-4 transition-all",
+                  revisionMode === "FUTURE_ONLY" ? "border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500" : "border-stone-200 hover:border-stone-300 bg-white")}>
                 <div className="flex items-start gap-3">
-                  <div className={cn(
-                    "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
-                    revisionMode === "FUTURE_ONLY" ? "border-indigo-500" : "border-stone-300"
-                  )}>
-                    {revisionMode === "FUTURE_ONLY" && (
-                      <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                    )}
+                  <div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5", revisionMode === "FUTURE_ONLY" ? "border-indigo-500" : "border-stone-300")}>
+                    {revisionMode === "FUTURE_ONLY" && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -469,24 +605,12 @@ export function FeeSetupClient({
                 </div>
               </button>
 
-              {/* Option 2: Update Unpaid */}
-              <button
-                onClick={() => setRevisionMode("UPDATE_UNPAID")}
-                className={cn(
-                  "w-full text-left rounded-xl border p-4 transition-all",
-                  revisionMode === "UPDATE_UNPAID"
-                    ? "border-blue-500 bg-blue-50/40 ring-1 ring-blue-500"
-                    : "border-stone-200 hover:border-stone-300 bg-white"
-                )}
-              >
+              <button onClick={() => setRevisionMode("UPDATE_UNPAID")}
+                className={cn("w-full text-left rounded-xl border p-4 transition-all",
+                  revisionMode === "UPDATE_UNPAID" ? "border-blue-500 bg-blue-50/40 ring-1 ring-blue-500" : "border-stone-200 hover:border-stone-300 bg-white")}>
                 <div className="flex items-start gap-3">
-                  <div className={cn(
-                    "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5",
-                    revisionMode === "UPDATE_UNPAID" ? "border-blue-500" : "border-stone-300"
-                  )}>
-                    {revisionMode === "UPDATE_UNPAID" && (
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    )}
+                  <div className={cn("w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5", revisionMode === "UPDATE_UNPAID" ? "border-blue-500" : "border-stone-300")}>
+                    {revisionMode === "UPDATE_UNPAID" && <div className="w-2 h-2 rounded-full bg-blue-500" />}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -502,42 +626,210 @@ export function FeeSetupClient({
                         No eligible unpaid records found — this mode will have no effect.
                       </p>
                     )}
-                    <div className="flex gap-3 mt-2">
-                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
-                        <ShieldCheck className="w-3 h-3" /> {revisionImpact.fullyPaid + revisionImpact.partiallyPaid} record(s) protected
-                      </span>
-                      <span className="text-[10px] text-blue-600 font-semibold">
-                        {revisionImpact.completelyUnpaid} record(s) will update
-                      </span>
-                    </div>
                   </div>
                 </div>
               </button>
             </div>
 
-            {/* Action buttons */}
             <div className="px-6 pb-5 flex gap-2.5 justify-end border-t border-stone-100 pt-4">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => !pending && setRevisionDialogOpen(false)}
-                disabled={pending}
-                className="h-9 text-xs font-semibold text-stone-500 rounded-lg"
-              >
+              <Button size="sm" variant="ghost" onClick={() => !pending && setRevisionDialogOpen(false)} disabled={pending} className="h-9 text-xs font-semibold text-stone-500 rounded-lg">
                 Cancel — No Changes
               </Button>
-              <Button
-                size="sm"
-                onClick={handleConfirmRevision}
-                disabled={pending}
-                className={cn(
-                  "h-9 text-xs font-bold text-white rounded-lg min-w-[140px]",
-                  revisionMode === "FUTURE_ONLY"
-                    ? "bg-indigo-600 hover:bg-indigo-500"
-                    : "bg-blue-600 hover:bg-blue-500"
-                )}
-              >
+              <Button size="sm" onClick={handleConfirmRevision} disabled={pending} className={cn("h-9 text-xs font-bold text-white rounded-lg min-w-[140px]", revisionMode === "FUTURE_ONLY" ? "bg-indigo-600 hover:bg-indigo-500" : "bg-blue-600 hover:bg-blue-500")}>
                 {pending ? "Applying…" : "Apply Changes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ASSIGN OPTIONAL FEE MODAL ─────────────────────────────────────── */}
+      {assignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !pending && setAssignModalOpen(false)} />
+          <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-stone-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-650">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-stone-900 text-base leading-tight">Assign Additional / Optional Fee</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">Assign student-specific fees to one or multiple students</p>
+                </div>
+              </div>
+              <button onClick={() => !pending && setAssignModalOpen(false)} className="text-stone-400 hover:text-stone-700 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Fee Head Selector */}
+                <div>
+                  <Label className="text-xs font-bold text-stone-700">Fee Head *</Label>
+                  <Select value={optFeeHeadId} onChange={e => setOptFeeHeadId(e.target.value)} className="h-9 text-xs mt-1.5 rounded-lg w-full">
+                    {heads.map(h => (
+                      <option key={h.id} value={h.id}>{h.name}{h.frequency ? ` (${h.frequency})` : ""}</option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Student-Specific Amount */}
+                <div>
+                  <Label className="text-xs font-bold text-stone-700">Amount per Student (₹) *</Label>
+                  <div className="relative mt-1.5">
+                    <span className="absolute left-2.5 top-2 text-stone-400 text-xs font-bold">₹</span>
+                    <Input value={optAmount} onChange={e => setOptAmount(e.target.value)} placeholder="e.g. 1500" className="pl-6 h-9 text-xs font-bold rounded-lg" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Applicable Months Selector */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <Label className="text-xs font-bold text-stone-700">Applicable Months *</Label>
+                  <div className="flex gap-2 text-[10px]">
+                    <button type="button" onClick={() => setOptMonths(MONTH_ORDER.map(m => m.value))} className="text-indigo-600 font-bold hover:underline">Select All</button>
+                    <span className="text-stone-300">|</span>
+                    <button type="button" onClick={() => setOptMonths([])} className="text-stone-500 font-semibold hover:underline">Clear</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-6 gap-1.5 p-2.5 border border-stone-200 rounded-xl bg-stone-50/40">
+                  {MONTH_ORDER.map(m => {
+                    const isSelected = optMonths.includes(m.value);
+                    return (
+                      <label key={m.value} className={cn("flex items-center gap-1.5 p-1.5 rounded-lg border text-xs cursor-pointer transition-all select-none",
+                        isSelected ? "bg-indigo-50 border-indigo-300 text-indigo-900 font-bold" : "bg-white border-stone-200 text-stone-600 hover:border-stone-300")}>
+                        <input type="checkbox" checked={isSelected}
+                          onChange={() => {
+                            setOptMonths(prev => isSelected ? prev.filter(x => x !== m.value) : [...prev, m.value]);
+                          }} className="rounded border-stone-300 text-indigo-600 w-3.5 h-3.5" />
+                        <span>{m.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div>
+                <Label className="text-xs font-bold text-stone-700">Remarks (Optional)</Label>
+                <Input value={optRemarks} onChange={e => setOptRemarks(e.target.value)} placeholder="e.g. Route: Bus Stop A to School" className="h-9 text-xs mt-1.5 rounded-lg" />
+              </div>
+
+              {/* Student Multi-Selection */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <Label className="text-xs font-bold text-stone-700">
+                    Select Students ({selectedStudentIds.length} of {classStudents.length} selected) *
+                  </Label>
+                  <div className="flex gap-2 text-[10px]">
+                    <button type="button" onClick={() => setSelectedStudentIds(classStudents.map(s => s.id))} className="text-indigo-600 font-bold hover:underline">Select All Class</button>
+                    <span className="text-stone-300">|</span>
+                    <button type="button" onClick={() => setSelectedStudentIds([])} className="text-stone-500 font-semibold hover:underline">Clear Selection</button>
+                  </div>
+                </div>
+
+                <div className="relative mb-2">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
+                  <Input value={studentModalSearch} onChange={e => setStudentModalSearch(e.target.value)} placeholder="Search student name or admission no…" className="pl-8 h-8 text-xs rounded-lg" />
+                </div>
+
+                <div className="border border-stone-200 rounded-xl max-h-48 overflow-y-auto divide-y divide-stone-100 bg-white">
+                  {classStudents
+                    .filter(s => !studentModalSearch.trim() || s.fullName.toLowerCase().includes(studentModalSearch.toLowerCase()) || s.admissionNo.toLowerCase().includes(studentModalSearch.toLowerCase()))
+                    .map(s => {
+                      const checked = selectedStudentIds.includes(s.id);
+                      return (
+                        <label key={s.id} className={cn("flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-stone-50 transition-colors", checked && "bg-indigo-50/30")}>
+                          <div className="flex items-center gap-2.5">
+                            <input type="checkbox" checked={checked}
+                              onChange={() => {
+                                setSelectedStudentIds(prev => checked ? prev.filter(x => x !== s.id) : [...prev, s.id]);
+                              }} className="rounded border-stone-300 text-indigo-600 w-4 h-4" />
+                            <div>
+                              <p className="font-bold text-stone-900 text-xs">{s.fullName}</p>
+                              <p className="text-[10px] text-stone-400">Adm No: {s.admissionNo}</p>
+                            </div>
+                          </div>
+                          {checked && <Badge className="bg-indigo-100 text-indigo-700 border-none text-[9px] px-1.5 py-0">Selected</Badge>}
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-stone-100 bg-stone-50/50 flex gap-2 justify-end shrink-0">
+              <Button size="sm" variant="ghost" onClick={() => !pending && setAssignModalOpen(false)} disabled={pending} className="h-9 text-xs text-stone-500 rounded-lg">
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleAssignOptionalFeeSubmit} disabled={pending} className="h-9 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg min-w-[130px]">
+                {pending ? "Assigning…" : `Assign Fee (${selectedStudentIds.length})`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DEACTIVATE / STOP OPTIONAL FEE MODAL ──────────────────────────── */}
+      {deactivateModalOpen && targetDeactivateAssignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !pending && setDeactivateModalOpen(false)} />
+          <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-lg mx-4 overflow-hidden">
+            <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-stone-100">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <PowerOff className="w-4.5 h-4.5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-stone-900 text-base leading-tight">Stop / Deactivate Optional Fee</h3>
+                  <p className="text-xs text-stone-500 mt-1">
+                    {targetDeactivateAssignment.student.fullName} ({targetDeactivateAssignment.student.admissionNo})
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => !pending && setDeactivateModalOpen(false)} className="text-stone-400 hover:text-stone-700 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs space-y-1">
+                <p className="font-extrabold text-amber-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Financial Safety Guaranteed
+                </p>
+                <p className="text-amber-800 leading-snug">
+                  Historical paid fee records, allocations, and generated receipts are <strong>permanently protected</strong>.
+                  Only completely unpaid future billing records from the selected stop month onward will be removed.
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-xs font-bold text-stone-700">Fee Head</Label>
+                <p className="text-sm font-extrabold text-stone-900 mt-0.5">{targetDeactivateAssignment.feeHead.name} ({formatCurrency(targetDeactivateAssignment.amount)})</p>
+              </div>
+
+              <div>
+                <Label className="text-xs font-bold text-stone-700">Effective Stop Month *</Label>
+                <Select value={effectiveStopMonth} onChange={e => setEffectiveStopMonth(e.target.value as FeeMonth)} className="h-9 text-xs mt-1.5 rounded-lg w-full">
+                  {MONTH_ORDER.map(m => (
+                    <option key={m.value} value={m.value}>Stop billing from {m.label} onward</option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-stone-100 bg-stone-50/50 flex gap-2 justify-end">
+              <Button size="sm" variant="ghost" onClick={() => !pending && setDeactivateModalOpen(false)} disabled={pending} className="h-9 text-xs text-stone-500 rounded-lg">
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleDeactivateOptionalFeeSubmit} disabled={pending} className="h-9 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-lg">
+                {pending ? "Stopping…" : "Confirm Deactivation"}
               </Button>
             </div>
           </div>
@@ -547,13 +839,14 @@ export function FeeSetupClient({
       {/* TABS SELECTOR */}
       <div className="bg-stone-50 border-b border-stone-200 px-5 py-3 flex gap-2 shrink-0">
         {[
-          { id: "structures", label: "Fee Structures", icon: Layers },
-          { id: "heads", label: "Fee Heads", icon: Settings },
+          { id: "structures", label: "Class Fee Structures (Fixed)", icon: Layers },
+          { id: "optional", label: "Additional / Optional Fees", icon: UserPlus },
+          { id: "heads", label: "Fee Heads Master", icon: Settings },
           { id: "rules", label: "Late Fee Rules", icon: Clock },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
             className={cn("flex items-center gap-2 px-4.5 py-2 text-sm font-extrabold rounded-lg transition-all",
-              activeTab === tab.id ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-200/50")}>
+              activeTab === tab.id ? "bg-stone-900 text-white shadow-xs" : "text-stone-600 hover:bg-stone-200/50")}>
             <tab.icon className="w-4 h-4" /> {tab.label}
           </button>
         ))}
@@ -590,7 +883,7 @@ export function FeeSetupClient({
             <div className="flex-1 overflow-y-auto border border-stone-200 rounded-xl">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="bg-stone-50 border-b border-stone-200 text-stone-505 font-bold uppercase text-[10px] sticky top-0 z-10">
+                  <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase text-[10px] sticky top-0 z-10">
                     <th className="py-3 px-4">Name</th>
                     <th className="py-3 px-4">Description</th>
                     <th className="py-3 px-4">Status</th>
@@ -638,7 +931,6 @@ export function FeeSetupClient({
         {/* T2: FEE STRUCTURES */}
         {activeTab === "structures" && (
           <div className="grid grid-cols-[200px_200px_1fr] gap-5 h-full overflow-hidden">
-            {/* SESSION SELECTOR */}
             <div className="border border-stone-200 rounded-xl p-3 overflow-y-auto space-y-1.5 bg-stone-50/50">
               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Sessions</span>
               {sessions.map(s => (
@@ -650,7 +942,6 @@ export function FeeSetupClient({
               ))}
             </div>
 
-            {/* CLASS SELECTOR */}
             <div className="border border-stone-200 rounded-xl p-3 overflow-y-auto space-y-1.5 bg-stone-50/50">
               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Classes</span>
               {classes.map(c => {
@@ -666,23 +957,17 @@ export function FeeSetupClient({
               })}
             </div>
 
-            {/* EXPANDED ERP-STYLE FEE STRUCTURE TABLE WITH MONTH MATRIX */}
             <div className="border border-stone-200 rounded-xl flex flex-col overflow-hidden bg-white shadow-xs">
               <div className="border-b px-5 py-4 bg-stone-50 flex justify-between items-center">
                 <div>
-                  <h4 className="font-extrabold text-stone-900 text-sm">Class Fee Structure Master</h4>
-                  <p className="text-[11px] text-stone-505 mt-1">Session: {sessions.find(s => s.id === selectedSessionId)?.name} · Class: {classes.find(c => c.id === selectedClassId)?.name}</p>
+                  <h4 className="font-extrabold text-stone-900 text-sm">Class Fixed Fee Structure Master</h4>
+                  <p className="text-[11px] text-stone-500 mt-1">Session: {sessions.find(s => s.id === selectedSessionId)?.name} · Class: {classes.find(c => c.id === selectedClassId)?.name}</p>
                 </div>
                 <div className="flex gap-2.5">
                   <Button size="sm" onClick={handleAddStructRow} variant="outline" className="h-9 text-xs font-semibold border-stone-300 rounded-lg">
                     <Plus className="w-3.5 h-3.5 mr-1 text-indigo-650" /> Add Row
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSaveStructure}
-                    disabled={pending || checkingImpact}
-                    className="h-9 text-xs font-bold bg-indigo-600 text-white rounded-lg min-w-[110px]"
-                  >
+                  <Button size="sm" onClick={handleSaveStructure} disabled={pending || checkingImpact} className="h-9 text-xs font-bold bg-indigo-600 text-white rounded-lg min-w-[110px]">
                     {checkingImpact ? "Checking…" : pending ? "Saving…" : "Save Structure"}
                   </Button>
                 </div>
@@ -789,7 +1074,145 @@ export function FeeSetupClient({
           </div>
         )}
 
-        {/* T3: LATE FEE RULES */}
+        {/* T3: ADDITIONAL / OPTIONAL FEES (NEW!) */}
+        {activeTab === "optional" && (
+          <div className="grid grid-cols-[200px_200px_1fr] gap-5 h-full overflow-hidden">
+            {/* SESSION SELECTOR */}
+            <div className="border border-stone-200 rounded-xl p-3 overflow-y-auto space-y-1.5 bg-stone-50/50">
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Sessions</span>
+              {sessions.map(s => (
+                <button key={s.id} onClick={() => setOptionalSessionId(s.id)}
+                  className={cn("w-full text-left px-3 py-2 text-xs font-bold rounded-lg",
+                    optionalSessionId === s.id ? "bg-indigo-600 text-white shadow-sm" : "text-stone-650 hover:bg-stone-200/50")}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+
+            {/* CLASS SELECTOR */}
+            <div className="border border-stone-200 rounded-xl p-3 overflow-y-auto space-y-1.5 bg-stone-50/50">
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Classes</span>
+              {classes.map(c => {
+                const count = optionalAssignments.filter(a => a.student.id).length;
+                return (
+                  <button key={c.id} onClick={() => setOptionalClassId(c.id)}
+                    className={cn("w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex justify-between items-center",
+                      optionalClassId === c.id ? "bg-stone-900 text-white" : "text-stone-650 hover:bg-stone-200/50")}>
+                    <span>{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* MAIN OPTIONAL FEES ROSTER VIEW */}
+            <div className="border border-stone-200 rounded-xl flex flex-col overflow-hidden bg-white shadow-xs">
+              <div className="border-b px-5 py-4 bg-stone-50 flex justify-between items-center gap-4">
+                <div>
+                  <h4 className="font-extrabold text-stone-900 text-sm flex items-center gap-2">
+                    Student-Specific Additional Fees
+                    <Badge className="bg-indigo-100 text-indigo-700 border-none text-[10px] px-2 py-0.5">Dynamic Fee Heads</Badge>
+                  </h4>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    Session: {sessions.find(s => s.id === optionalSessionId)?.name} · Class: {classes.find(c => c.id === optionalClassId)?.name} ({classStudents.length} Students enrolled)
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
+                    <Input value={studentSearch} onChange={e => setStudentSearch(e.target.value)} placeholder="Search student…" className="pl-8 h-9 text-xs w-48 rounded-lg" />
+                  </div>
+                  <Button size="sm" onClick={() => openAssignModalForStudents(classStudents.map(s => s.id))} className="h-9 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg gap-1.5 shrink-0">
+                    <UserPlus className="w-3.5 h-3.5" /> + Assign Additional Fee
+                  </Button>
+                </div>
+              </div>
+
+              {/* Roster Table */}
+              <div className="flex-1 overflow-auto p-0">
+                {loadingOptional ? (
+                  <div className="p-12 text-center text-xs text-stone-400 font-semibold flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /> Loading class roster…
+                  </div>
+                ) : filteredClassStudents.length === 0 ? (
+                  <div className="p-12 text-center text-xs text-stone-400 font-semibold">
+                    No students found in this class for the selected session.
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="sticky top-0 bg-stone-50 border-b border-stone-200 z-10">
+                      <tr className="text-stone-500 font-bold uppercase text-[9px]">
+                        <th className="py-3 px-4 w-60">Student Info</th>
+                        <th className="py-3 px-4">Assigned Additional Fees</th>
+                        <th className="py-3 px-4 text-right w-44">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {filteredClassStudents.map(student => {
+                        const studentAssigned = studentAssignmentMap.get(student.id) || [];
+                        return (
+                          <tr key={student.id} className="hover:bg-stone-50/50">
+                            <td className="py-3 px-4">
+                              <p className="font-extrabold text-stone-900 text-xs">{student.fullName}</p>
+                              <p className="text-[10px] text-stone-400 mt-0.5">Adm No: {student.admissionNo}</p>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {studentAssigned.length === 0 ? (
+                                <span className="text-stone-400 italic text-[11px]">No optional fees assigned (Fixed Class Fees only)</span>
+                              ) : (
+                                <div className="flex overflow-x-auto gap-2 max-w-[340px] pb-1 scrollbar-thin">
+                                  {studentAssigned.map(asg => (
+                                    <div key={asg.id} className={cn("inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs shrink-0 whitespace-nowrap transition-all",
+                                      asg.isActive ? "bg-stone-50 border-stone-200 text-stone-800" : "bg-stone-100 border-stone-200 text-stone-400 opacity-60")}>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-extrabold text-stone-900">{asg.feeHead.name}</span>
+                                        <span className="font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px]">
+                                          {formatCurrency(asg.amount)}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] text-stone-400">({asg.months.length} mo)</span>
+                                      {asg.isActive ? (
+                                        <button onClick={() => { setTargetDeactivateAssignment(asg); setDeactivateModalOpen(true); }}
+                                          title="Stop / Deactivate fee" className="text-stone-400 hover:text-rose-600 transition-colors ml-1">
+                                          <PowerOff className="w-3 h-3" />
+                                        </button>
+                                      ) : (
+                                        <div className="flex items-center gap-1.5 ml-1">
+                                          <Badge variant="outline" className="text-[9px] px-1 py-0 border-stone-300">Stopped</Badge>
+                                          <button
+                                            onClick={() => handleReactivateOptionalFee(asg.id)}
+                                            title="Revoke Stop / Reactivate fee"
+                                            className="text-indigo-600 hover:text-indigo-800 text-[10px] font-extrabold underline cursor-pointer"
+                                          >
+                                            Revoke
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <Button size="sm" variant="ghost" onClick={() => openAssignModalForStudents([student.id])}
+                                className="h-8 text-xs font-semibold text-indigo-650 hover:bg-indigo-50 rounded-lg">
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Assign Fee
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* T4: LATE FEE RULES */}
         {activeTab === "rules" && (
           <div className="flex flex-col h-full space-y-4">
             <div className="flex justify-between items-center shrink-0">
@@ -856,6 +1279,7 @@ export function FeeSetupClient({
                       <td className="py-3 px-4">
                         <Badge variant={r.isActive ? "success" : "secondary"} className="rounded-md px-2 py-0.5">{r.isActive ? "Active" : "Inactive"}</Badge>
                       </td>
+
                     </tr>
                   ))}
                 </tbody>

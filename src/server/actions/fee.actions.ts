@@ -18,6 +18,12 @@ import {
   generateStudentMonthlyLedger,
   checkFeeStructureRevisionImpact,
   applyFeeStructureRevision,
+  assignStudentOptionalFee,
+  bulkAssignOptionalFeeToStudents,
+  updateStudentOptionalFee,
+  deactivateStudentOptionalFee,
+  reactivateStudentOptionalFee,
+  listStudentOptionalFees,
 } from "@/server/services/fee.service";
 import type {
   CreateFeeHeadInput,
@@ -26,6 +32,11 @@ import type {
   RecordPaymentInput,
   UpdateFeeStructureInput,
   ApplyFeeRevisionInput,
+  AssignStudentOptionalFeeInput,
+  BulkAssignOptionalFeeInput,
+  UpdateStudentOptionalFeeInput,
+  DeactivateStudentOptionalFeeInput,
+  ListStudentOptionalFeesInput,
 } from "@/server/validators/fee.validator";
 
 export async function listFeeHeadsAction(activeOnly = false) {
@@ -130,3 +141,51 @@ export async function applyFeeStructureRevisionAction(input: ApplyFeeRevisionInp
     stats: r.stats,
   };
 }
+
+// ── Student Optional Fees Server Actions ───────────────────────────────────
+
+export async function assignStudentOptionalFeeAction(input: AssignStudentOptionalFeeInput) {
+  const r = await assignStudentOptionalFee(input);
+  revalidatePath("/fees");
+  revalidatePath("/fees/setup");
+  revalidatePath("/students");
+  revalidatePath(`/students/${input.studentId}`);
+  return { success: true, id: r.id };
+}
+
+export async function bulkAssignOptionalFeeToStudentsAction(input: BulkAssignOptionalFeeInput) {
+  const r = await bulkAssignOptionalFeeToStudents(input);
+  revalidatePath("/fees");
+  revalidatePath("/fees/setup");
+  revalidatePath("/students");
+  return { success: true, count: r.count };
+}
+
+export async function updateStudentOptionalFeeAction(input: UpdateStudentOptionalFeeInput) {
+  const r = await updateStudentOptionalFee(input);
+  revalidatePath("/fees");
+  revalidatePath("/fees/setup");
+  revalidatePath("/students");
+  return { success: true, id: r.id };
+}
+
+export async function deactivateStudentOptionalFeeAction(input: DeactivateStudentOptionalFeeInput) {
+  const r = await deactivateStudentOptionalFee(input);
+  revalidatePath("/fees");
+  revalidatePath("/fees/setup");
+  revalidatePath("/students");
+  return { success: true, id: r.id };
+}
+
+export async function reactivateStudentOptionalFeeAction(assignmentId: string) {
+  const r = await reactivateStudentOptionalFee(assignmentId);
+  revalidatePath("/fees");
+  revalidatePath("/fees/setup");
+  revalidatePath("/students");
+  return { success: true, id: r.id };
+}
+
+export async function listStudentOptionalFeesAction(input?: ListStudentOptionalFeesInput) {
+  return listStudentOptionalFees(input);
+}
+
