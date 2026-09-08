@@ -59,77 +59,100 @@ function matchHeader(cellValue: string): string | null {
   return null;
 }
 
-// Reusable helper to map Excel class names/aliases to database class names
-const CLASS_ALIAS_MAP: Record<string, string> = {
-  "pp-1": "Class PP",
-  "pp-2": "Class PP",
-  "pp1": "Class PP",
-  "pp2": "Class PP",
-  "pp": "Class PP",
-  "lkg": "Class PP",
-  "ukg": "Class PP",
-  "nursery": "Class PP",
-  "i": "Class 1",
-  "ii": "Class 2",
-  "iii": "Class 3",
-  "iv": "Class 4",
-  "v": "Class 5",
-  "vi": "Class 6",
-  "vii": "Class 7",
-  "viii": "Class 8",
-  "ix": "Class 9",
-  "x": "Class 10",
-  "xi": "Class 11",
-  "xii": "Class 12",
-};
+// Canonical categories for intelligent class mapping
+export type CanonicalClassKey =
+  | "NURSERY"
+  | "PRE_NURSERY"
+  | "LKG"
+  | "UKG"
+  | "PREP"
+  | "PRE_PRIMARY"
+  | "PLAYGROUP"
+  | `CLASS_${number}`
+  | "UNKNOWN";
 
-export function getNormalizedClassNameAlias(className: string): string {
-  let normalized = className
-    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "")
-    .trim()
-    .toLowerCase();
+export function getCanonicalClassCategory(name: string): { category: CanonicalClassKey; rawNumber?: number } {
+  if (!name) return { category: "UNKNOWN" };
 
-  // Strip prefixes like "grade", "class", "std", "standard"
-  normalized = normalized
-    .replace(/^(grade|class|std|standard)\s+/g, "")
+  let clean = name
+    .toLowerCase()
+    .replace(/[\r\n\t\u200B-\u200D\uFEFF]/g, "")
+    .replace(/['"“”‘’]/g, "")
+    .replace(/[\s_\-\.]+/g, " ")
     .trim();
 
-  const ordinalNames: Record<string, string> = {
-    first: "class 1",
-    second: "class 2",
-    third: "class 3",
-    fourth: "class 4",
-    fifth: "class 5",
-    sixth: "class 6",
-    seventh: "class 7",
-    eighth: "class 8",
-    ninth: "class 9",
-    tenth: "class 10",
-    eleventh: "class 11",
-    twelfth: "class 12",
+  // Strip prefixes like "grade", "class", "std", "standard"
+  clean = clean.replace(/^(grade|class|std|standard)\s+/g, "").trim();
+
+  // 1. Pre-Nursery / Playgroup
+  if (/^(pre\s*nur(s(ery)?)?|prenur(s(ery)?)?)$/.test(clean)) {
+    return { category: "PRE_NURSERY" };
+  }
+  if (/^(pg|play\s*group|playgroup|play-group)$/.test(clean)) {
+    return { category: "PLAYGROUP" };
+  }
+
+  // 2. Nursery (e.g., nur, nursery, nurs, class nur, class nursery, class nur.)
+  if (/^(nur|nurs|nursery|nur\.|nurs\.)$/.test(clean)) {
+    return { category: "NURSERY" };
+  }
+
+  // 3. LKG (e.g. lkg, l.k.g., lower kg, lower kindergarten, jr kg, junior kg, pp1, pp-1, kg1, kg-1, kg i)
+  if (/^(lkg|l\s*k\s*g|lower\s*kg|lower\s*kindergarten|lowerkg|jr\s*kg|jrkg|junior\s*kg|juniorkg|junior\s*kindergarten|pp\s*1|pp1|pp-1|pre\s*primary\s*1|pre-primary\s*1|preprimary\s*1|kg\s*1|kg1|kg-1|kg\s*i|kg-i)$/.test(clean)) {
+    return { category: "LKG" };
+  }
+
+  // 4. UKG (e.g. ukg, u.k.g., upper kg, upper kindergarten, sr kg, senior kg, pp2, pp-2, kg2, kg-2, kg ii)
+  if (/^(ukg|u\s*k\s*g|upper\s*kg|upper\s*kindergarten|upperkg|sr\s*kg|srkg|senior\s*kg|seniorkg|senior\s*kindergarten|pp\s*2|pp2|pp-2|pre\s*primary\s*2|pre-primary\s*2|preprimary\s*2|kg\s*2|kg2|kg-2|kg\s*ii|kg-ii)$/.test(clean)) {
+    return { category: "UKG" };
+  }
+
+  // 5. Prep
+  if (/^(prep|preparatory|prep\.)$/.test(clean)) {
+    return { category: "PREP" };
+  }
+
+  // 6. PP / Pre-Primary
+  if (/^(pp|pre\s*primary|pre-primary|preprimary)$/.test(clean)) {
+    return { category: "PRE_PRIMARY" };
+  }
+
+  // 7. Ordinal word names
+  const ordinalNames: Record<string, number> = {
+    first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6,
+    seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12,
   };
-
-  if (ordinalNames[normalized]) {
-    return ordinalNames[normalized];
+  if (ordinalNames[clean]) {
+    return { category: `CLASS_${ordinalNames[clean]}`, rawNumber: ordinalNames[clean] };
   }
 
-  if (CLASS_ALIAS_MAP[normalized]) {
-    return CLASS_ALIAS_MAP[normalized];
+  const digitMatch = clean.match(/^(\d+)(st|nd|rd|th)?$/);
+  if (digitMatch) {
+    const num = parseInt(digitMatch[1], 10);
+    return { category: `CLASS_${num}`, rawNumber: num };
   }
 
-  if (normalized.startsWith("pp")) {
-    return "Class PP";
+  const romanMap: Record<string, number> = {
+    i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12,
+  };
+  if (romanMap[clean]) {
+    const num = romanMap[clean];
+    return { category: `CLASS_${num}`, rawNumber: num };
   }
 
-  if (/^\d+$/.test(normalized)) {
-    return `Class ${normalized}`;
-  }
+  return { category: "UNKNOWN" };
+}
 
-  const ordinalMatch = normalized.match(/^(\d+)(st|nd|rd|th)$/);
-  if (ordinalMatch) {
-    return `Class ${ordinalMatch[1]}`;
-  }
-
+export function getNormalizedClassNameAlias(className: string): string {
+  const cat = getCanonicalClassCategory(className);
+  if (cat.category === "NURSERY") return "Class Nursery";
+  if (cat.category === "PRE_NURSERY") return "Class Pre-Nursery";
+  if (cat.category === "PLAYGROUP") return "Class Playgroup";
+  if (cat.category === "LKG") return "Class LKG";
+  if (cat.category === "UKG") return "Class UKG";
+  if (cat.category === "PREP") return "Class Prep";
+  if (cat.category === "PRE_PRIMARY") return "Class PP";
+  if (cat.rawNumber) return `Class ${cat.rawNumber}`;
   return className;
 }
 
@@ -151,9 +174,9 @@ function romanToArabic(roman: string): number {
 // Normalize class names before matching
 function normalizeClassName(name: string): string {
   return name
-    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "") // remove leading/trailing quotes/spaces/hidden characters
+    .replace(/^["'\s\u200B-\u200D\uFEFF]+|["'\s\u200B-\u200D\uFEFF]+$/g, "")
     .trim()
-    .replace(/[\s\u200B-\u200D\uFEFF]+/g, " "); // collapse spacing and hidden characters
+    .replace(/[\s\u200B-\u200D\uFEFF]+/g, " ");
 }
 
 // Normalize section inputs
@@ -163,46 +186,76 @@ function normalizeSectionName(sectionName: string): string {
     .trim()
     .toLowerCase();
 
-  // Strip prefixes like "section" or "division" or "stream"
   normalized = normalized.replace(/^(section|division|stream)\s+/g, "").trim();
   return normalized;
 }
 
 // Helper to normalize class inputs and find matches/suggestions
-function findClassMatch(className: string, dbClasses: Array<{ id: string; name: string }>) {
-  const mappedClassName = getNormalizedClassNameAlias(className);
-  const normalizedInput = normalizeClassName(mappedClassName);
-  const cleanInput = normalizedInput.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  if (!cleanInput) return { matchedClass: null, suggestion: null };
-
-  // Try direct match against normalized ERP classes
-  const directMatch = dbClasses.find(c => {
-    const cleanDb = normalizeClassName(c.name).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-    return cleanDb === cleanInput;
-  });
-  if (directMatch) return { matchedClass: directMatch, suggestion: null };
-
-  // Attempt Roman numeral conversion (e.g., "XII" -> "12" or "12th")
-  const romanMatch = cleanInput.match(/^(i{1,3}|iv|v|vi{1,3}|ix|x|xi{0,2}|xii)$/);
-  let convertedInput = cleanInput;
-  if (romanMatch) {
-    const arabic = romanToArabic(romanMatch[0]);
-    convertedInput = String(arabic);
+export function findClassMatch(
+  className: string,
+  dbClasses: Array<{ id: string; name: string }>
+): { matchedClass: { id: string; name: string } | null; suggestion: string | null } {
+  if (!className || !className.trim()) {
+    return { matchedClass: null, suggestion: null };
   }
 
-  // Search DB classes with converted numbers or arabic equivalent
-  const matchWithConversion = dbClasses.find(c => {
-    const cleanDb = normalizeClassName(c.name).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-    // Compare translated arabic or Roman equivalents
-    if (cleanDb === convertedInput || cleanDb === convertedInput + "th") return true;
-    return false;
-  });
-  if (matchWithConversion) return { matchedClass: matchWithConversion, suggestion: null };
+  const rawClean = className.trim();
+  const inputCategory = getCanonicalClassCategory(rawClean);
 
-  // Generate closest suggestion based on substring
-  const suggestion = dbClasses.find(c => {
-    const cleanDb = normalizeClassName(c.name).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-    return cleanDb.includes(cleanInput) || cleanInput.includes(cleanDb);
+  // Strategy 1: Exact case-insensitive match on full raw string
+  const exactRaw = dbClasses.find(
+    (c) => c.name.trim().toLowerCase() === rawClean.toLowerCase()
+  );
+  if (exactRaw) return { matchedClass: exactRaw, suggestion: null };
+
+  // Strategy 2: Clean alphanumeric match (ignoring spaces, dots, dashes)
+  const alphaCleanInput = rawClean.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const alphaMatch = dbClasses.find(
+    (c) => c.name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() === alphaCleanInput
+  );
+  if (alphaMatch) return { matchedClass: alphaMatch, suggestion: null };
+
+  // Strategy 3: Canonical category matching (NURSERY, LKG, UKG, CLASS_1..12, etc.)
+  if (inputCategory.category !== "UNKNOWN") {
+    const categoryMatch = dbClasses.find((c) => {
+      const dbCat = getCanonicalClassCategory(c.name);
+      return dbCat.category === inputCategory.category;
+    });
+    if (categoryMatch) return { matchedClass: categoryMatch, suggestion: null };
+
+    // Fallback aliases for early childhood
+    if (inputCategory.category === "PRE_NURSERY") {
+      const alt = dbClasses.find((c) => {
+        const cat = getCanonicalClassCategory(c.name).category;
+        return cat === "NURSERY" || cat === "PLAYGROUP";
+      });
+      if (alt) return { matchedClass: alt, suggestion: null };
+    }
+  }
+
+  // Strategy 4: Substring / prefix-stripped matching
+  const strippedInput = rawClean.toLowerCase().replace(/^(grade|class|std|standard)\s+/g, "").trim();
+  const substringMatch = dbClasses.find((c) => {
+    const strippedDb = c.name.toLowerCase().replace(/^(grade|class|std|standard)\s+/g, "").trim();
+    return strippedDb === strippedInput || strippedDb.includes(strippedInput) || strippedInput.includes(strippedDb);
+  });
+  if (substringMatch) return { matchedClass: substringMatch, suggestion: null };
+
+  // Strategy 5: Roman numeral conversion match
+  const romanMatch = alphaCleanInput.match(/^(i{1,3}|iv|v|vi{1,3}|ix|x|xi{0,2}|xii)$/);
+  if (romanMatch) {
+    const arabicNum = String(romanToArabic(romanMatch[0]));
+    const romanConvertedMatch = dbClasses.find((c) => {
+      const cleanDb = c.name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      return cleanDb === arabicNum || cleanDb === `class${arabicNum}` || cleanDb === `${arabicNum}th`;
+    });
+    if (romanConvertedMatch) return { matchedClass: romanConvertedMatch, suggestion: null };
+  }
+
+  // Strategy 6: Closest suggestion based on substring
+  const suggestion = dbClasses.find((c) => {
+    const cleanDb = c.name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    return cleanDb.includes(alphaCleanInput) || alphaCleanInput.includes(cleanDb);
   });
 
   return { matchedClass: null, suggestion: suggestion ? suggestion.name : null };
@@ -477,8 +530,13 @@ export async function validateStudentsImport(
 
     // Duplicate checks within Excel sheet itself
     if (rawAdmissionNo && processedAdmissions.has(rawAdmissionNo)) {
-      status = "ERROR";
-      reasons.push(`Duplicate Admission No "${rawAdmissionNo}" in Excel`);
+      if (duplicateStrategy === "FAIL") {
+        status = "ERROR";
+        reasons.push(`Duplicate Admission No "${rawAdmissionNo}" in Excel`);
+      } else {
+        status = "WARNING";
+        reasons.push(`Duplicate Admission No "${rawAdmissionNo}" in Excel (Row will be skipped)`);
+      }
     } else if (rawAdmissionNo) {
       processedAdmissions.add(rawAdmissionNo);
     }
@@ -632,7 +690,7 @@ export async function executeStudentsImport(
   // Single global transaction execution (timeout: 5 minutes / 300000 ms)
   await prisma.$transaction(async (tx) => {
     for (const item of rowsToProcess) {
-      if (item.status === "WARNING" && duplicateStrategy === "SKIP") {
+      if (item.status === "WARNING" && (duplicateStrategy === "SKIP" || item.reason.toLowerCase().includes("duplicate") || item.reason.toLowerCase().includes("already exists"))) {
         skippedCount++;
         continue;
       }

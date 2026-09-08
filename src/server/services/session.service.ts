@@ -1,4 +1,4 @@
-import { EnrollmentStatus, SessionStatus } from "@prisma/client";
+import { EnrollmentStatus, SessionStatus, Role } from "@prisma/client";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { writeAuditLog } from "@/server/services/audit.service";
@@ -255,6 +255,43 @@ export async function closeSession(sessionId: string) {
         entityType: "AcademicSession",
         entityId: sessionId,
         newValue: { status: SessionStatus.CLOSED },
+      },
+      tx,
+    );
+
+    return updated;
+  });
+}
+
+export async function reopenSession(sessionId: string) {
+  const { user } = await requirePermission("session.update");
+  const schoolId = schoolIdFromUser(user);
+
+  if (user.role !== Role.PRINCIPAL && user.role !== Role.DEVELOPER) {
+    throw new Error("Only the Principal account can reopen a closed academic session.");
+  }
+
+  const session = await getSession(sessionId);
+  if (session.status !== SessionStatus.CLOSED) {
+    throw new Error("Only closed sessions can be reopened.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.academicSession.update({
+      where: { id: sessionId },
+      data: { status: SessionStatus.ACTIVE },
+    });
+
+    await writeAuditLog(
+      {
+        schoolId,
+        userId: user.id,
+        action: "update",
+        module: "session",
+        entityType: "AcademicSession",
+        entityId: sessionId,
+        oldValue: { status: SessionStatus.CLOSED },
+        newValue: { status: SessionStatus.ACTIVE },
       },
       tx,
     );

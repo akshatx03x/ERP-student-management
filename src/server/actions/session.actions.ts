@@ -6,6 +6,7 @@ import {
   createSession,
   setCurrentSession,
   closeSession,
+  reopenSession,
   archiveSession,
   getCurrentSession,
   promoteStudents,
@@ -42,6 +43,12 @@ export async function toggleSessionLockAction(sessionId: string, lock: boolean) 
 
 export async function closeSessionAction(sessionId: string) {
   const result = await closeSession(sessionId);
+  revalidatePath("/academics");
+  return result;
+}
+
+export async function reopenSessionAction(sessionId: string) {
+  const result = await reopenSession(sessionId);
   revalidatePath("/academics");
   return result;
 }

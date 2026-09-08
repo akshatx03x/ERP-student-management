@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { AlertTriangle, Trash2, X } from "lucide-react";
 import {
   createClassAction,
   createSectionAction,
@@ -31,6 +32,7 @@ export function ClassesClient({
   const [className, setClassName] = useState("");
   const [sectionClassId, setSectionClassId] = useState(classes[0]?.id ?? "");
   const [sectionName, setSectionName] = useState("");
+  const [classToDelete, setClassToDelete] = useState<ClassRow | null>(null);
 
   function run(fn: () => Promise<unknown>, ok: string) {
     startTransition(async () => {
@@ -39,6 +41,20 @@ export function ClassesClient({
         toast.success(ok);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed");
+      }
+    });
+  }
+
+  function confirmDeleteClass() {
+    if (!classToDelete) return;
+    const target = classToDelete;
+    startTransition(async () => {
+      try {
+        await deleteClassAction(target.id);
+        toast.success(`Class ${target.name} deleted`);
+        setClassToDelete(null);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to delete class");
       }
     });
   }
@@ -152,8 +168,9 @@ export function ClassesClient({
                   size="sm"
                   variant="destructive"
                   disabled={pending}
-                  onClick={() => run(() => deleteClassAction(c.id), "Class deleted")}
+                  onClick={() => setClassToDelete(c)}
                 >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
                   Delete Class
                 </Button>
               </div>
@@ -161,6 +178,67 @@ export function ClassesClient({
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Class Confirmation Modal */}
+      {classToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-stone-900 shadow-2xl border border-stone-200 dark:border-stone-800 overflow-hidden">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-stone-100 dark:border-stone-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900 dark:text-stone-100">Delete Class</h3>
+                  <p className="text-xs text-stone-500">{classToDelete.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClassToDelete(null)}
+                disabled={pending}
+                className="rounded-md p-1.5 text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-600 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-3">
+              <div className="rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 p-3 text-sm text-rose-800 dark:text-rose-300">
+                Are you sure you want to delete <strong>{classToDelete.name}</strong>?
+                {classToDelete.sections.length > 0 && (
+                  <span className="block mt-1 text-xs text-rose-700 dark:text-rose-400">
+                    This will also remove its {classToDelete.sections.length} associated section(s):{" "}
+                    {classToDelete.sections.map((s) => s.name).join(", ")}.
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                Note: A class cannot be deleted if sections associated with this class have student data.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 bg-stone-50 dark:bg-stone-900/50 border-t border-stone-100 dark:border-stone-800">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setClassToDelete(null)}
+                disabled={pending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirmDeleteClass}
+                disabled={pending}
+              >
+                {pending ? "Deleting..." : "Yes, Delete Class"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

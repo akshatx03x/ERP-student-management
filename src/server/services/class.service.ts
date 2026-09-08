@@ -147,10 +147,64 @@ export async function deleteClass(classId: string) {
   const schoolId = schoolIdFromUser(user);
   const existing = await getClass(classId);
 
-  const enrollmentCount = await prisma.studentEnrollment.count({ where: { classId } });
-  if (enrollmentCount > 0) throw new Error("Cannot delete class with active enrollments");
+  const sections = await prisma.section.findMany({
+    where: { classId },
+    select: { id: true },
+  });
+  const sectionIds = sections.map((s) => s.id);
+
+  const enrollmentCount = await prisma.studentEnrollment.count({
+    where: {
+      OR: [
+        { classId },
+        { sectionId: { in: sectionIds } },
+      ],
+    },
+  });
+
+  if (enrollmentCount > 0) {
+    throw new Error("Cannot delete class: Section is associated with this class and has student data.");
+  }
 
   return prisma.$transaction(async (tx) => {
+    // 1. Clean up child records for all sections of this class
+    if (sectionIds.length > 0) {
+      await tx.timetableSlot.deleteMany({ where: { sectionId: { in: sectionIds } } });
+      await tx.homework.deleteMany({ where: { sectionId: { in: sectionIds } } });
+      await tx.classTeacherAssignment.deleteMany({ where: { sectionId: { in: sectionIds } } });
+      await tx.transferCertificate.deleteMany({ where: { sectionId: { in: sectionIds } } });
+      await tx.promotionHistory.deleteMany({
+        where: {
+          OR: [
+            { fromSectionId: { in: sectionIds } },
+            { toSectionId: { in: sectionIds } },
+          ],
+        },
+      });
+      await tx.studentEnrollment.deleteMany({ where: { sectionId: { in: sectionIds } } });
+      await tx.section.deleteMany({ where: { classId } });
+    }
+
+    // 3. Clean up child records belonging directly to the class
+    await tx.classSubject.deleteMany({ where: { classId } });
+    await tx.examSubject.deleteMany({ where: { exam: { classId } } });
+    await tx.reportCard.deleteMany({ where: { exam: { classId } } });
+    await tx.exam.deleteMany({ where: { classId } });
+    await tx.feeStructureItem.deleteMany({ where: { feeStructure: { classId } } });
+    await tx.feeStructure.deleteMany({ where: { classId } });
+    await tx.admissionApplication.deleteMany({ where: { appliedClassId: classId } });
+    await tx.transferCertificate.deleteMany({ where: { classId } });
+    await tx.promotionHistory.deleteMany({
+      where: {
+        OR: [
+          { fromClassId: classId },
+          { toClassId: classId },
+        ],
+      },
+    });
+    await tx.studentEnrollment.deleteMany({ where: { classId } });
+
+    // 4. Finally delete the class
     await tx.class.delete({ where: { id: classId } });
     await writeAuditLog(
       {
@@ -272,9 +326,22 @@ export async function deleteSection(sectionId: string) {
   if (!section || section.class.schoolId !== schoolId) throw new Error("Section not found");
 
   const enrollmentCount = await prisma.studentEnrollment.count({ where: { sectionId } });
-  if (enrollmentCount > 0) throw new Error("Cannot delete section with enrollments");
+  if (enrollmentCount > 0) throw new Error("Cannot delete section: Section has student data associated with it.");
 
   return prisma.$transaction(async (tx) => {
+    await tx.timetableSlot.deleteMany({ where: { sectionId } });
+    await tx.homework.deleteMany({ where: { sectionId } });
+    await tx.classTeacherAssignment.deleteMany({ where: { sectionId } });
+    await tx.transferCertificate.deleteMany({ where: { sectionId } });
+    await tx.promotionHistory.deleteMany({
+      where: {
+        OR: [
+          { fromSectionId: sectionId },
+          { toSectionId: sectionId },
+        ],
+      },
+    });
+    await tx.studentEnrollment.deleteMany({ where: { sectionId } });
     await tx.section.delete({ where: { id: sectionId } });
     await writeAuditLog(
       {

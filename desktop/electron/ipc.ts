@@ -1,4 +1,5 @@
-import { ipcMain, app } from "electron";
+import { ipcMain, app, dialog, BrowserWindow } from "electron";
+import fs from "fs";
 import { loadAppConfig } from "./config";
 import { getBackupProvider } from "./backup";
 import { checkDatabaseReady } from "./sqlite-manager";
@@ -53,6 +54,30 @@ export function registerIpcHandlers(): void {
     }
     const provider = getBackupProvider();
     return provider.restoreBackup(payload.backupIdOrPath);
+  });
+
+  // Channel 6: Native Save File Dialog
+  ipcMain.handle("dialog:save-file", async (_evt: any, payload?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => {
+    const focusedWin = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showSaveDialog(focusedWin!, {
+      title: "Save ERP Backup",
+      defaultPath: payload?.defaultPath || "school_erp_backup.erpbackup",
+      filters: payload?.filters || [
+        { name: "ERP Backup (*.erpbackup)", extensions: ["erpbackup"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    return result;
+  });
+
+  // Channel 7: Save Buffer to Disk
+  ipcMain.handle("file:save-buffer", async (_evt: any, payload: { targetPath: string; bufferBase64: string }) => {
+    if (!payload?.targetPath || !payload?.bufferBase64) {
+      throw new Error("Invalid payload: targetPath and bufferBase64 are required");
+    }
+    const buffer = Buffer.from(payload.bufferBase64, "base64");
+    await fs.promises.writeFile(payload.targetPath, buffer);
+    return { success: true, filePath: payload.targetPath };
   });
 
   console.log("[Electron IPC] Secure validated IPC channels registered successfully.");

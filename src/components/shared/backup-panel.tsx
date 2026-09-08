@@ -352,15 +352,34 @@ export function BackupPanel({
     if (isBackupBusy || !isPrincipal) return;
 
     setBackupError(null);
-    setBackupStep("preparing");
 
     startBackupTransition(async () => {
       try {
-        // Step 1: Create backup on server
+        const electronApi = typeof window !== "undefined" ? (window as any).electronAPI : null;
+        let selectedPath: string | null = null;
+
+        // Step 1: If in Electron, prompt Windows Save As dialog first
+        if (electronApi?.showSaveDialog) {
+          const defaultName = `school_erp_backup_${format(new Date(), "yyyy-MM-dd_HH-mm")}.erpbackup`;
+          const dialogResult = await electronApi.showSaveDialog({
+            defaultPath: defaultName,
+            filters: [
+              { name: "ERP Backup (*.erpbackup)", extensions: ["erpbackup"] },
+              { name: "All Files", extensions: ["*"] },
+            ],
+          });
+
+          if (dialogResult.canceled || !dialogResult.filePath) {
+            return; // User cancelled the Windows file dialog
+          }
+          selectedPath = dialogResult.filePath;
+        }
+
+        // Step 2: Create backup on server
         setBackupStep("preparing");
         const backup = await createBackupAction();
 
-        // Step 2: Trigger download
+        // Step 3: Fetch the generated backup file blob
         setBackupStep("downloading");
         const res = await fetch(`/api/backup/download?id=${encodeURIComponent(backup.id)}`);
         if (!res.ok) {
@@ -369,16 +388,67 @@ export function BackupPanel({
         }
 
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = backup.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
 
-        // Step 3: Update last backup info
+        // Step 4: Save file based on environment
+        if (electronApi?.saveFile && selectedPath) {
+          // Electron Desktop: save directly to selected Windows path
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const resStr = reader.result as string;
+              resolve(resStr.includes(",") ? resStr.split(",")[1] : resStr);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+
+          await electronApi.saveFile({
+            targetPath: selectedPath,
+            bufferBase64: base64,
+          });
+        } else if (typeof window !== "undefined" && "showSaveFilePicker" in window) {
+          // Modern Browser File System Access API
+          try {
+            const handle = await (window as any).showSaveFilePicker({
+              suggestedName: backup.filename,
+              types: [
+                {
+                  description: "ERP Backup (*.erpbackup)",
+                  accept: { "application/octet-stream": [".erpbackup", ".db"] },
+                },
+              ],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+          } catch (pickerErr: any) {
+            if (pickerErr.name === "AbortError") {
+              setBackupStep("idle");
+              return;
+            }
+            // Fallback to link download if picker failed
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = backup.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }
+        } else {
+          // Standard Browser fallback download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = backup.filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+
+        // Step 5: Update last backup info
         setLastBackup({
           id: backup.id,
           filename: backup.filename,
@@ -392,7 +462,11 @@ export function BackupPanel({
         });
 
         setBackupStep("done");
-        toast.success("Backup created and downloaded successfully.");
+        toast.success(
+          selectedPath
+            ? "Backup created and saved successfully."
+            : "Backup created and downloaded successfully."
+        );
 
         // Reset after a moment
         setTimeout(() => setBackupStep("idle"), 3000);

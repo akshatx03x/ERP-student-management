@@ -164,6 +164,7 @@ export function StudentsClient({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [previewFilter, setPreviewFilter] = useState<"ALL" | "READY" | "WARNING" | "ERROR">("ALL");
+  const [showDuplicateConfirmModal, setShowDuplicateConfirmModal] = useState(false);
 
   const originalPreviewDataRef = useRef<any>(null);
   const [importProgress, setImportProgress] = useState<{
@@ -322,14 +323,19 @@ export function StudentsClient({
       reasons.push(`Class "${row.className}" not found in ERP`);
     }
 
-    const dupInSheet = updatedRows.some((r, idx) => idx !== rowIdx && r.admissionNo === row.admissionNo);
-    if (dupInSheet) {
-      status = "ERROR";
-      reasons.push(`Duplicate Admission No "${row.admissionNo}" in Excel`);
+    const firstIdxWithSameAdm = updatedRows.findIndex(r => r.admissionNo && r.admissionNo === row.admissionNo);
+    if (row.admissionNo && firstIdxWithSameAdm !== -1 && firstIdxWithSameAdm < rowIdx) {
+      if (duplicateStrategy === "FAIL") {
+        status = "ERROR";
+        reasons.push(`Duplicate Admission No "${row.admissionNo}" in Excel`);
+      } else {
+        status = "WARNING";
+        reasons.push(`Duplicate Admission No "${row.admissionNo}" in Excel (Row will be skipped)`);
+      }
     }
 
     const originalRow = originalPreviewDataRef.current?.rows.find((r: any) => r.rowNumber === rowIndex);
-    if (originalRow && originalRow.admissionNo === row.admissionNo && originalRow.reason.includes("already exists")) {
+    if (originalRow && originalRow.admissionNo === row.admissionNo && (originalRow.reason.includes("already exists") || originalRow.reason.includes("duplicate"))) {
       if (duplicateStrategy === "FAIL") {
         status = "ERROR";
         reasons.push(`Admission No. "${row.admissionNo}" already exists in ERP`);
@@ -371,12 +377,44 @@ export function StudentsClient({
     });
   };
 
+  const isDuplicateRow = (r: any) => {
+    const reason = (r.reason || "").toLowerCase();
+    return reason.includes("duplicate") || (reason.includes("already exists") && duplicateStrategy === "SKIP");
+  };
+
+  const getDuplicateRows = () => {
+    if (!previewData) return [];
+    return previewData.rows.filter(isDuplicateRow);
+  };
+
   const handleConfirmImport = async () => {
-    if (!previewData || previewData.summary.errors > 0) {
-      toast.error("Please fix all errors before importing");
+    if (!previewData) return;
+
+    if (previewData.summary.ready === 0) {
+      toast.error("No valid student records found to import.");
       return;
     }
+
+    // Check if there are blocking non-duplicate format errors
+    const nonDuplicateErrors = previewData.rows.filter(r => r.status === "ERROR" && !isDuplicateRow(r));
+    if (nonDuplicateErrors.length > 0) {
+      toast.error(`Please fix ${nonDuplicateErrors.length} format error(s) (such as missing class/section/name) before importing.`);
+      return;
+    }
+
+    const duplicates = getDuplicateRows();
+    if (duplicates.length > 0) {
+      setShowDuplicateConfirmModal(true);
+      return;
+    }
+
+    await executeImport();
+  };
+
+  const executeImport = async () => {
+    if (!previewData) return;
     setIsCommitting(true);
+    setShowDuplicateConfirmModal(false);
 
     if (duplicateStrategy === "FAIL") {
       setImportProgress({
@@ -1051,14 +1089,21 @@ export function StudentsClient({
                         </table>
                       </div>
 
-                      {previewData.summary.errors > 0 && (
+                      {previewData.summary.errors > 0 && previewData.rows.some(r => r.status === "ERROR" && !isDuplicateRow(r)) ? (
                         <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-rose-700 text-xs shrink-0 flex items-start gap-2">
                           <span className="text-lg leading-none">⚠️</span>
                           <p>
-                            <strong>Errors detected:</strong> You can fix class, section, gender, or category options directly in the dropdown inputs above to resolve error issues. The import is blocked until errors are resolved.
+                            <strong>Errors detected:</strong> You can fix class, section, gender, or category options directly in the dropdown inputs above to resolve error issues. The import is blocked until format errors are resolved.
                           </p>
                         </div>
-                      )}
+                      ) : getDuplicateRows().length > 0 ? (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs shrink-0 flex items-start gap-2">
+                          <span className="text-lg leading-none">ℹ️</span>
+                          <p>
+                            <strong>{getDuplicateRows().length} duplicate record(s) detected:</strong> These duplicates will be automatically removed / skipped from the import, allowing you to safely import the remaining <strong>{previewData.summary.ready} unique valid student(s)</strong>.
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   )}
 
@@ -1078,7 +1123,7 @@ export function StudentsClient({
                           <span className="text-3xl font-extrabold text-indigo-700">{executionResult.updated}</span>
                         </div>
                         <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
-                          <span className="text-xs font-bold text-amber-600 block mb-1">Skipped</span>
+                          <span className="text-xs font-bold text-amber-600 block mb-1">Skipped (Duplicates)</span>
                           <span className="text-3xl font-extrabold text-amber-700">{executionResult.skipped}</span>
                         </div>
                         <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl">
@@ -1166,9 +1211,14 @@ export function StudentsClient({
                           type="button"
                           onClick={handleConfirmImport}
                           loading={isCommitting}
-                          disabled={previewData.summary.errors > 0}
+                          disabled={
+                            previewData.summary.ready === 0 ||
+                            (previewData.summary.errors > 0 && previewData.rows.some(r => r.status === "ERROR" && !isDuplicateRow(r)))
+                          }
                         >
-                          {isCommitting ? "Importing Batch..." : `Confirm & Import (${previewData.summary.ready} Students)`}
+                          {isCommitting
+                            ? "Importing Batch..."
+                            : `Confirm & Import (${previewData.summary.ready} Students)`}
                         </Button>
                       </div>
                     </>
@@ -1187,6 +1237,108 @@ export function StudentsClient({
                   )}
                 </>
               )}
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {/* DUPLICATE CONFIRMATION POPUP MODAL */}
+      {showDuplicateConfirmModal && previewData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <Card className="w-full max-w-xl bg-white shadow-2xl border-stone-200 animate-in fade-in-50 zoom-in-95">
+            <CardHeader className="border-b px-6 py-4 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-lg shrink-0">
+                  ⚠️
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold text-stone-800">
+                    Duplicate Records Detected
+                  </CardTitle>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    Duplicates will be removed from the import
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDuplicateConfirmModal(false)}
+                className="text-stone-400 hover:text-stone-600 transition-colors"
+                disabled={isCommitting}
+              >
+                ✕
+              </button>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 text-xs text-amber-900 space-y-1">
+                <p className="font-semibold text-amber-950">
+                  {getDuplicateRows().length} duplicate student record(s) were found in your file.
+                </p>
+                <p className="text-amber-800 leading-relaxed">
+                  These duplicates have been removed from the import list and will be skipped. Only the <strong>{previewData.summary.ready} unique valid student(s)</strong> will be imported into the ERP.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-stone-700 mb-2">
+                  Duplicates to be Removed / Skipped ({getDuplicateRows().length}):
+                </h4>
+                <div className="border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-stone-50 text-stone-600 font-semibold border-b sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 w-12 text-center">Row</th>
+                        <th className="px-3 py-2">Admission No</th>
+                        <th className="px-3 py-2">Student Name</th>
+                        <th className="px-3 py-2">Class</th>
+                        <th className="px-3 py-2">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y text-stone-700">
+                      {getDuplicateRows().map((row, idx) => (
+                        <tr key={idx} className="hover:bg-stone-50/50">
+                          <td className="px-3 py-2 text-center font-mono font-bold text-stone-400">
+                            {row.rowNumber}
+                          </td>
+                          <td className="px-3 py-2 font-mono font-semibold text-stone-800">
+                            {row.admissionNo || "—"}
+                          </td>
+                          <td className="px-3 py-2 font-medium">
+                            {row.studentName || "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.className || "—"} {row.sectionName ? `(${row.sectionName})` : ""}
+                          </td>
+                          <td className="px-3 py-2 text-amber-700 font-medium text-[11px]">
+                            {row.reason}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <p className="text-xs text-stone-500">
+                Click <strong>&quot;Continue to Import&quot;</strong> to proceed with importing the remaining {previewData.summary.ready} valid students.
+              </p>
+            </CardContent>
+            <CardFooter className="border-t px-6 py-4 flex items-center justify-between bg-stone-50/50 rounded-b-xl">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowDuplicateConfirmModal(false)}
+                disabled={isCommitting}
+              >
+                Cancel & Review
+              </Button>
+              <Button
+                type="button"
+                onClick={executeImport}
+                loading={isCommitting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                Continue to Import ({previewData.summary.ready} Students)
+              </Button>
             </CardFooter>
           </Card>
         </div>
