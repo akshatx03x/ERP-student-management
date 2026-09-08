@@ -16,7 +16,7 @@ import { Role } from "@prisma/client";
 import { seedRoleDefaults } from "@/server/permissions/guard";
 
 const DEVELOPER_EMAIL = "developer@vidyanjali.edu.in";
-const PRINCIPAL_EMAIL = "principal@vidyanjali.edu";
+const PRINCIPAL_EMAIL = "principal@vidyanjali.edu.in";
 const SEED_PASSWORD = "vidyanjalierp@890";
 
 async function createSystemUser(params: {
@@ -79,45 +79,142 @@ export async function seedSystemAccounts() {
       return;
     }
 
-    // Check existence of both accounts
-    const [developerUser, principalUser] = await Promise.all([
-      prisma.user.findFirst({ where: { OR: [{ email: DEVELOPER_EMAIL }, { role: Role.DEVELOPER }] } }),
-      prisma.user.findFirst({ where: { OR: [{ email: PRINCIPAL_EMAIL }, { role: Role.PRINCIPAL }] } }),
-    ]);
+    const hashedPassword = await hashPassword(SEED_PASSWORD);
 
-    const tasks: Promise<unknown>[] = [];
+    // 1. Ensure Developer Account exists and has valid credentials
+    const developerUser = await prisma.user.findFirst({
+      where: { email: DEVELOPER_EMAIL },
+      include: { accounts: true },
+    });
 
     if (!developerUser) {
       console.log("[seed] Creating Developer system account...");
-      tasks.push(
-        createSystemUser({
-          email: DEVELOPER_EMAIL,
-          name: "Developer",
-          role: Role.DEVELOPER,
-          designation: "System Developer",
-          schoolId: school.id,
-        }).then(() => console.log("[seed] Developer account created ✓")),
-      );
+      await createSystemUser({
+        email: DEVELOPER_EMAIL,
+        name: "Developer",
+        role: Role.DEVELOPER,
+        designation: "System Developer",
+        schoolId: school.id,
+      });
+      console.log("[seed] Developer account created ✓");
+    } else {
+      await prisma.user.update({
+        where: { id: developerUser.id },
+        data: { isActive: true, role: Role.DEVELOPER },
+      });
+      await prisma.account.deleteMany({
+        where: { userId: developerUser.id, providerId: "credential" },
+      });
+      await prisma.account.create({
+        data: {
+          userId: developerUser.id,
+          accountId: DEVELOPER_EMAIL,
+          providerId: "credential",
+          password: hashedPassword,
+        },
+      });
+      console.log("[seed] Developer credentials verified ✓");
     }
 
-    if (!principalUser) {
-      console.log("[seed] Creating Principal system account...");
-      tasks.push(
-        createSystemUser({
+    // 2. Ensure Primary Principal Account (principal@vidyanjali.edu.in) exists and has valid credentials
+    const primaryPrincipal = await prisma.user.findFirst({
+      where: { email: PRINCIPAL_EMAIL },
+      include: { accounts: true },
+    });
+
+    if (!primaryPrincipal) {
+      // Check if there is an existing principal user with a legacy email (e.g. vidhyanjali / .edu)
+      const legacyPrincipal = await prisma.user.findFirst({
+        where: {
+          role: Role.PRINCIPAL,
+          NOT: { email: PRINCIPAL_EMAIL },
+        },
+      });
+
+      if (legacyPrincipal) {
+        console.log(`[seed] Updating legacy principal (${legacyPrincipal.email}) to ${PRINCIPAL_EMAIL}...`);
+        await prisma.user.update({
+          where: { id: legacyPrincipal.id },
+          data: {
+            email: PRINCIPAL_EMAIL,
+            loginIdentifier: PRINCIPAL_EMAIL,
+            isActive: true,
+            role: Role.PRINCIPAL,
+          },
+        });
+        await prisma.account.deleteMany({
+          where: { userId: legacyPrincipal.id, providerId: "credential" },
+        });
+        await prisma.account.create({
+          data: {
+            userId: legacyPrincipal.id,
+            accountId: PRINCIPAL_EMAIL,
+            providerId: "credential",
+            password: hashedPassword,
+          },
+        });
+        console.log("[seed] Principal account updated and verified ✓");
+      } else {
+        console.log("[seed] Creating Principal system account...");
+        await createSystemUser({
           email: PRINCIPAL_EMAIL,
           name: "Principal",
           role: Role.PRINCIPAL,
           designation: "School Principal",
           schoolId: school.id,
-        }).then(() => console.log("[seed] Principal account created ✓")),
-      );
+        });
+        console.log("[seed] Principal account created ✓");
+      }
+    } else {
+      await prisma.user.update({
+        where: { id: primaryPrincipal.id },
+        data: {
+          isActive: true,
+          role: Role.PRINCIPAL,
+          loginIdentifier: PRINCIPAL_EMAIL,
+        },
+      });
+      await prisma.account.deleteMany({
+        where: { userId: primaryPrincipal.id, providerId: "credential" },
+      });
+      await prisma.account.create({
+        data: {
+          userId: primaryPrincipal.id,
+          accountId: PRINCIPAL_EMAIL,
+          providerId: "credential",
+          password: hashedPassword,
+        },
+      });
+      console.log("[seed] Principal credentials verified ✓");
     }
 
-    if (tasks.length > 0) {
-      await Promise.all(tasks);
-    } else {
-      console.log("[seed] All system accounts already exist — nothing to do");
+    // 3. Also update password for any other Principal users in the system (e.g. alternate logins)
+    const otherPrincipals = await prisma.user.findMany({
+      where: {
+        role: Role.PRINCIPAL,
+        NOT: { email: PRINCIPAL_EMAIL },
+      },
+    });
+
+    for (const alt of otherPrincipals) {
+      await prisma.user.update({
+        where: { id: alt.id },
+        data: { isActive: true },
+      });
+      await prisma.account.deleteMany({
+        where: { userId: alt.id, providerId: "credential" },
+      });
+      await prisma.account.create({
+        data: {
+          userId: alt.id,
+          accountId: alt.email,
+          providerId: "credential",
+          password: hashedPassword,
+        },
+      });
     }
+
+    console.log("[seed] All system accounts synchronized and verified.");
   } catch (err) {
     // Seeding is non-critical — log but do not crash the server
     console.error("[seed] System account seeding failed:", err);

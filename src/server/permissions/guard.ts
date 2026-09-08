@@ -111,6 +111,12 @@ export async function hasPermission(key: PermissionKey) {
 }
 
 export async function ensurePermissionCatalog() {
+  const count = await prisma.permission.count();
+  const totalExpected = PERMISSION_RESOURCES.length * PERMISSION_ACTIONS.length;
+  if (count >= totalExpected) {
+    return;
+  }
+
   for (const resource of PERMISSION_RESOURCES) {
     for (const action of PERMISSION_ACTIONS) {
       const key = permissionKey(resource, action);
@@ -130,6 +136,11 @@ export async function ensurePermissionCatalog() {
 
 export async function seedRoleDefaults() {
   await ensurePermissionCatalog();
+  const rolePermCount = await prisma.rolePermission.count();
+  if (rolePermCount > 0) {
+    return;
+  }
+
   const permissions = await prisma.permission.findMany();
   const byKey = new Map(permissions.map((p) => [p.key, p]));
 

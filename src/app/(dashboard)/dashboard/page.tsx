@@ -166,7 +166,10 @@ export default async function DashboardPage({
             sessionId: sessId || undefined,
             status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
           },
-          include: { allocations: true },
+          select: {
+            amount: true,
+            allocations: { select: { amount: true } },
+          },
         }),
       ]);
 

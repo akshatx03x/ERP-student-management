@@ -16,8 +16,8 @@ import {
 async function hashPasswordSecurely(password: string): Promise<string> {
   // If the password is the default one, return the pre-computed hash directly.
   // This avoids requiring 'better-auth/crypto' at all in standard desktop production.
-  if (password === "Principal@123") {
-    return "44dc4966f1e18bfbe83c2c8e07c7b8cd:8e218be9b41ea69c7a6c08620fe70bc183a011d37c2fbc616526973242618be11128263ebdb12ff67d611bbb053bada27d15f8864e077dcb9784c8092f4c528b";
+  if (password === "vidyanjalierp@890") {
+    return "c15c92785e1b2b9fcd889ebd33fae9b4:566fff627eff8b0013b9d04ed7872bc10a3d266ec91adcd1999f781c35488565e8d625c3b5ca0568a9738008572e40c5aeaae426a4dae8dd4e08f21dad7b15a8";
   }
   
   try {
@@ -27,7 +27,7 @@ async function hashPasswordSecurely(password: string): Promise<string> {
     // If better-auth is not installed/packaged (e.g. standalone production) but the password was changed,
     // fallback to a default hash to avoid crashing the seed process.
     console.warn("[Seed] better-auth/crypto module not found. Falling back to default pre-computed hash.");
-    return "44dc4966f1e18bfbe83c2c8e07c7b8cd:8e218be9b41ea69c7a6c08620fe70bc183a011d37c2fbc616526973242618be11128263ebdb12ff67d611bbb053bada27d15f8864e077dcb9784c8092f4c528b";
+    return "c15c92785e1b2b9fcd889ebd33fae9b4:566fff627eff8b0013b9d04ed7872bc10a3d266ec91adcd1999f781c35488565e8d625c3b5ca0568a9738008572e40c5aeaae426a4dae8dd4e08f21dad7b15a8";
   }
 }
 
@@ -82,7 +82,7 @@ async function main() {
           schoolName: "Vidyanjali Public School",
           address: "",
           phone: "",
-          email: process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu",
+          email: process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu.in",
           website: "",
           principalName: process.env.SEED_PRINCIPAL_NAME ?? "Principal",
           receiptFooter: "Thank you for your payment.",
@@ -102,15 +102,15 @@ async function main() {
         schoolId: school.id,
         schoolName: "Vidyanjali Public School",
         principalName: process.env.SEED_PRINCIPAL_NAME ?? "Principal",
-        email: process.env.SEED_PRINCIPAL_EMAIL,
+        email: process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu.in",
         receiptFooter: "Thank you for your payment.",
         reportCardFooter: "This is a computer-generated report card.",
       },
     });
   }
 
-  const email = process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu";
-  const password = process.env.SEED_PRINCIPAL_PASSWORD ?? "Principal@123";
+  const email = process.env.SEED_PRINCIPAL_EMAIL ?? "principal@vidyanjali.edu.in";
+  const password = process.env.SEED_PRINCIPAL_PASSWORD ?? "vidyanjalierp@890";
   const name = process.env.SEED_PRINCIPAL_NAME ?? "Principal";
 
   let staff = await prisma.staffProfile.findFirst({
