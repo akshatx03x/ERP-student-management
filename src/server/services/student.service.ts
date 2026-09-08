@@ -37,6 +37,45 @@ export async function createStudentUser(
   const email = studentSyntheticEmail(student.admissionNo);
   const hashed = hashedPassword ?? await hashPassword(studentDobPassword(student.dateOfBirth));
 
+  const existing = await tx.user.findFirst({
+    where: {
+      OR: [
+        { email },
+        { schoolId, loginIdentifier: student.admissionNo }
+      ]
+    }
+  });
+
+  if (existing) {
+    const user = await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        name: student.fullName,
+        email,
+        role: Role.STUDENT,
+        isActive: true,
+        loginIdentifier: student.admissionNo,
+        schoolId,
+        studentId: student.id,
+      }
+    });
+
+    await tx.account.deleteMany({
+      where: { accountId: email, providerId: "credential" }
+    });
+
+    await tx.account.create({
+      data: {
+        accountId: email,
+        providerId: "credential",
+        password: hashed,
+        userId: user.id,
+      }
+    });
+
+    return user;
+  }
+
   const user = await tx.user.create({
     data: {
       name: student.fullName,
@@ -552,10 +591,11 @@ export async function createStudent(input: CreateStudentInput) {
  */
 export async function createStudentWithFamily(
   input: CreateStudentWithFamilyInput,
-  outerTx?: Prisma.TransactionClient
+  outerTx?: Prisma.TransactionClient,
+  callingUser?: any
 ) {
-  const { user } = await requirePermission("student.create");
-  const schoolId = schoolIdFromUser(user);
+  const user = callingUser || (await requirePermission("student.create")).user;
+  const schoolId = callingUser?.schoolId || schoolIdFromUser(user);
   const data = parseOrThrow(createStudentWithFamilySchema, input);
 
   if (!data.fatherName && !data.motherName && !data.guardianName) {
@@ -604,10 +644,6 @@ export async function createStudentWithFamily(
   // Compute password hash outside transaction (CPU-bound bcrypt)
   let hashedLoginPassword = "";
   if (data.createLogin) {
-    const email = studentSyntheticEmail(data.admissionNo);
-    const existingUser = await client.user.findUnique({ where: { email } });
-    if (existingUser) throw new Error(`Login already exists for admission no ${data.admissionNo}`);
-
     const password = studentDobPassword(data.dateOfBirth);
     hashedLoginPassword = await hashPassword(password);
   }
@@ -813,7 +849,7 @@ export async function createStudentWithFamily(
           sessionId: data.sessionId,
           classId: data.classId,
           userId: user.id,
-          requireStructure: true,
+          requireStructure: false,
         });
       }
 

@@ -24,11 +24,13 @@ export function formatDate(date: Date | string | null | undefined) {
   }).format(d);
 }
 
-export function studentDobPassword(dob: Date | null | undefined, format = "DDMMYYYY") {
+export function studentDobPassword(dob: Date | string | null | undefined, format = "DDMMYYYY") {
   if (!dob) return "Welcome@123";
-  const day = String(dob.getUTCDate()).padStart(2, "0");
-  const month = String(dob.getUTCMonth() + 1).padStart(2, "0");
-  const year = String(dob.getUTCFullYear());
+  const d = typeof dob === "string" ? new Date(dob) : dob;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return "Welcome@123";
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = String(d.getUTCFullYear());
   if (format === "YYYYMMDD") return `${year}${month}${day}`;
   if (format === "DD-MM-YYYY") return `${day}-${month}-${year}`;
   return `${day}${month}${year}`;

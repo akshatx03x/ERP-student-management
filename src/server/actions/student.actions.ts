@@ -154,9 +154,21 @@ export async function downloadImportSampleAction() {
 }
 
 export async function executeSingleRowImportAction(row: any, duplicateStrategy: "SKIP" | "UPDATE" | "FAIL") {
-  const { user } = await requirePermission("student.create");
-  const schoolId = schoolIdFromUser(user);
-  return executeStudentsImport([row], schoolId, user.id, duplicateStrategy);
+  try {
+    const { user } = await requirePermission("student.create");
+    const schoolId = schoolIdFromUser(user);
+    const result = await executeStudentsImport([row], schoolId, user.id, duplicateStrategy);
+    return result;
+  } catch (err: any) {
+    console.error(`[executeSingleRowImportAction error on row ${row?.rowNumber}]:`, err);
+    return {
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 1,
+      error: err instanceof Error ? err.message : "Failed to import record"
+    };
+  }
 }
 
 export async function unlinkStudentFamilyAction(studentId: string) {

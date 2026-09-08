@@ -775,7 +775,7 @@ export async function executeStudentsImport(
             updatedCount++;
           }
         } else {
-          await createStudentWithFamily(studentInput, tx);
+          await createStudentWithFamily(studentInput, tx, user);
           importedCount++;
         }
       } catch (err) {
