@@ -16,10 +16,24 @@ type AuditInput = {
 
 export async function writeAuditLog(input: AuditInput, tx?: Prisma.TransactionClient) {
   const client = tx ?? prisma;
+  let validUserId: string | undefined = input.userId ?? undefined;
+  if (validUserId) {
+    try {
+      const userExists = await client.user.findUnique({
+        where: { id: validUserId },
+        select: { id: true },
+      });
+      if (!userExists) {
+        validUserId = undefined;
+      }
+    } catch {
+      validUserId = undefined;
+    }
+  }
   return client.auditLog.create({
     data: {
       schoolId: input.schoolId ?? undefined,
-      userId: input.userId ?? undefined,
+      userId: validUserId,
       action: input.action,
       module: input.module,
       entityType: input.entityType,

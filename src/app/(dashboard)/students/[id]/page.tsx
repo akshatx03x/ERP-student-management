@@ -54,7 +54,9 @@ export default async function StudentDetailPage({
     enrollments: s.enrollments,
   }));
 
-  const currentEnrollment = student.enrollments[0] ?? null;
+  const currentEnrollment = selectedSessionId
+    ? student.enrollments.find((e) => e.sessionId === selectedSessionId) ?? student.enrollments.find((e) => e.session?.isCurrent) ?? student.enrollments[0] ?? null
+    : student.enrollments.find((e) => e.session?.isCurrent) ?? student.enrollments[0] ?? null;
 
   // ── Month-wise fee table aggregation ──
   const ALL_MONTHS = ["APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC","JAN","FEB","MAR"] as const;
@@ -204,7 +206,7 @@ export default async function StudentDetailPage({
       canDelete={canDelete}
       userRole={user.role}
       branding={branding}
-      selectedSessionId={selectedSessionId ?? null}
+      selectedSessionId={currentEnrollment?.sessionId ?? selectedSessionId ?? null}
     />
   );
 }

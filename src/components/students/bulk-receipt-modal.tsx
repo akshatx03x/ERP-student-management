@@ -154,9 +154,26 @@ export function BulkReceiptModal({
         return;
       }
 
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        toast.error("Pop-up blocked. Please allow pop-ups to print receipts.");
+      // Use hidden iframe to avoid browser popup blockers and guarantee print preview
+      let iframe = document.getElementById("bulk-print-receipt-iframe") as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = "bulk-print-receipt-iframe";
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "210mm";
+        iframe.style.height = "297mm";
+        iframe.style.border = "0";
+        iframe.style.opacity = "0";
+        iframe.style.pointerEvents = "none";
+        iframe.style.zIndex = "-9999";
+        document.body.appendChild(iframe);
+      }
+
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!doc) {
+        toast.error("Unable to initialize print preview");
         return;
       }
 
@@ -164,7 +181,8 @@ export function BulkReceiptModal({
         .map((el) => el.outerHTML)
         .join("\n");
 
-      printWindow.document.write(`
+      doc.open();
+      doc.write(`
         <!DOCTYPE html>
         <html>
           <head>
@@ -181,10 +199,19 @@ export function BulkReceiptModal({
                 margin: 0 !important;
                 padding: 0 !important;
                 font-family: system-ui, -apple-system, sans-serif;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              #print-root, .fee-receipt-print-wrapper, .printable-area {
+                display: block !important;
+                visibility: visible !important;
+                width: 100% !important;
               }
               .receipt-page {
                 page-break-inside: avoid;
                 break-inside: avoid;
+                page-break-after: always;
+                break-after: page;
                 margin-bottom: 4mm;
               }
               @media print {
@@ -193,15 +220,14 @@ export function BulkReceiptModal({
             </style>
           </head>
           <body>
-            <div id="print-root"></div>
+            <div id="print-root" class="fee-receipt-print-wrapper printable-area"></div>
           </body>
         </html>
       `);
-
-      printWindow.document.close();
+      doc.close();
 
       // Render React components into print window
-      const container = printWindow.document.getElementById("print-root");
+      const container = doc.getElementById("print-root");
       if (container) {
         const ReactDOM = (await import("react-dom/client")).default;
         const root = ReactDOM.createRoot(container);
@@ -220,13 +246,15 @@ export function BulkReceiptModal({
         );
 
         setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-        }, 800);
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setIsGeneratingPrint(false);
+        }, 600);
+      } else {
+        setIsGeneratingPrint(false);
       }
     } catch (e) {
       toast.error("Failed to generate bulk print layout");
-    } finally {
       setIsGeneratingPrint(false);
     }
   };
@@ -316,8 +344,15 @@ export function BulkReceiptModal({
       }
 
       document.body.removeChild(renderContainer);
-      pdf.save(`class_fee_receipts_${new Date().toISOString().split("T")[0]}.pdf`);
-      toast.success("Bulk receipt PDF generated successfully");
+      const selectedClass = classes.find((c) => c.id === selectedClassId);
+      const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+      const classSlug = selectedClass ? selectedClass.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "All_Classes";
+      const sessionSlug = selectedSession ? selectedSession.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "Session";
+      const dateStr = new Date().toISOString().split("T")[0];
+      const fileName = `Fee_Receipts_${classSlug}_${sessionSlug}_${dateStr}.pdf`;
+
+      pdf.save(fileName);
+      toast.success(`Bulk receipts saved as ${fileName}`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to generate bulk PDF");

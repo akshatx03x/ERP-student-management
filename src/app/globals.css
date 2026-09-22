@@ -83,15 +83,83 @@ body {
 }
 
 @media print {
-  .no-print {
+  @page {
+    size: A4 portrait;
+    margin: 5mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 1. Hide non-printable controls and UI chrome */
+  .no-print,
+  .no-print *,
+  nav,
+  header,
+  aside,
+  footer,
+  .sidebar,
+  .erp-header,
+  .sidebar-trigger,
+  button:not(.allow-print) {
     display: none !important;
   }
+
+  /* 2. When printing a modal (receipt or printable-area), hide surrounding screen elements */
+  body:has(.fee-receipt-print-wrapper) > *:not(:has(.fee-receipt-print-wrapper)),
+  body:has(.printable-area) > *:not(:has(.printable-area)),
+  body:has(.print-preview-area) > *:not(:has(.print-preview-area)) {
+    display: none !important;
+  }
+
+  /* 3. Reset modal overlays so printable content flows naturally */
+  div:has(.fee-receipt-print-wrapper),
+  div:has(.printable-area),
+  div:has(.print-preview-area) {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    inset: auto !important;
+  }
+
+  .fee-receipt-print-wrapper,
+  .printable-area,
+  .print-preview-area {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+  }
+
   .print-only {
     display: block !important;
-  }
-  body {
-    background: white;
-    color: black;
+    visibility: visible !important;
   }
 }
 

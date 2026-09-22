@@ -52,20 +52,38 @@ type StudentItem = {
   familyId: string;
   fatherName?: string | null;
   motherName?: string | null;
+  classId?: string | null;
+  sectionId?: string | null;
   classLabel?: string | null;
   primaryPhone?: string | null;
   secondaryPhone?: string | null;
+  enrollments?: Array<{
+    classId: string;
+    sectionId: string;
+    sessionId: string;
+    className: string;
+    sectionName: string;
+    sessionName: string;
+    isCurrent: boolean;
+  }>;
 };
 
 type Session = { id: string; name: string };
+type ClassRow = {
+  id: string;
+  name: string;
+  sections: Array<{ id: string; name: string }>;
+};
 
 export function FeeCollectionClient({
+  classes = [],
   students,
   sessions,
   currentSessionId,
   initialStudentId,
   returnTo,
 }: {
+  classes?: ClassRow[];
   students: StudentItem[];
   sessions: Session[];
   currentSessionId: string | null;
@@ -73,6 +91,9 @@ export function FeeCollectionClient({
   returnTo?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(currentSessionId ?? sessions[0]?.id ?? "");
+  const [selectedClassId, setSelectedClassId] = useState("");
+  const [selectedSectionId, setSelectedSectionId] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
@@ -86,7 +107,7 @@ export function FeeCollectionClient({
     if (s) {
       setSelectedStudentId(s.id);
       setStudentSearch(s.fullName);
-      loadProfile(s.id);
+      loadProfile(s.id, selectedSessionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialStudentId]);
@@ -115,24 +136,84 @@ export function FeeCollectionClient({
   const [walletForm, setWalletForm] = useState({ actionType: "CREDIT", amount: "", reason: "" });
   const [selectedFineForWaiver, setSelectedFineForWaiver] = useState<any | null>(null);
 
-  const filteredStudents = useMemo(() => {
-    const q = studentSearch.trim().toLowerCase();
-    if (!q) return [];
-    return students.filter(s =>
-      `${s.fullName} ${s.admissionNo} ${s.fatherName ?? ""} ${s.motherName ?? ""} ${s.classLabel ?? ""} ${s.primaryPhone ?? ""} ${s.secondaryPhone ?? ""}`.toLowerCase().includes(q)
-    ).slice(0, 10);
-  }, [studentSearch, students]);
+  const activeClass = classes.find((c) => c.id === selectedClassId);
+  const activeSections = activeClass?.sections ?? [];
 
-  function loadProfile(id: string) {
+  const filteredStudents = useMemo(() => {
+    let list = students;
+
+    // 1. Filter by Academic Session
+    if (selectedSessionId) {
+      list = list.filter((s) => {
+        if (s.enrollments && s.enrollments.length > 0) {
+          return s.enrollments.some((e) => e.sessionId === selectedSessionId);
+        }
+        return true;
+      });
+    }
+
+    // 2. Filter by Class
+    if (selectedClassId) {
+      list = list.filter((s) => {
+        if (s.enrollments && s.enrollments.length > 0) {
+          return s.enrollments.some(
+            (e) =>
+              e.classId === selectedClassId &&
+              (!selectedSessionId || e.sessionId === selectedSessionId)
+          );
+        }
+        return s.classId === selectedClassId;
+      });
+    }
+
+    // 3. Filter by Section
+    if (selectedSectionId) {
+      list = list.filter((s) => {
+        if (s.enrollments && s.enrollments.length > 0) {
+          return s.enrollments.some(
+            (e) =>
+              e.sectionId === selectedSectionId &&
+              (!selectedSessionId || e.sessionId === selectedSessionId)
+          );
+        }
+        return s.sectionId === selectedSectionId;
+      });
+    }
+
+    // 4. Text Search
+    const q = studentSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s) => {
+        const nameMatch = s.fullName.toLowerCase().includes(q);
+        const admMatch = s.admissionNo.toLowerCase().includes(q);
+        const fatherMatch = s.fatherName?.toLowerCase().includes(q);
+        const phoneMatch =
+          s.primaryPhone?.toLowerCase().includes(q) ||
+          s.secondaryPhone?.toLowerCase().includes(q);
+        return nameMatch || admMatch || fatherMatch || phoneMatch;
+      });
+    }
+
+    // If searching across entire school without class filter or search, show top 150
+    // But if Class is selected or search query is typed, show ALL matching students!
+    if (!selectedClassId && !q) {
+      return list.slice(0, 150);
+    }
+
+    return list;
+  }, [students, selectedSessionId, selectedClassId, selectedSectionId, studentSearch]);
+
+  function loadProfile(id: string, overrideSessionId?: string) {
     setProfileLoading(true);
     setSelectedMonths([]);
     setExpandedMonths({});
     setUseWalletApplied(false);
     setAllocationMode("FIFO");
     setManualMonthAmounts({});
+    const sessId = overrideSessionId ?? selectedSessionId;
     startTransition(async () => {
       try {
-        const data = await getStudentFinancialProfileAction(id);
+        const data = await getStudentFinancialProfileAction(id, sessId || undefined);
         setProfile(data);
         setExpandedMonths({});
       } catch (e) {
@@ -147,7 +228,7 @@ export function FeeCollectionClient({
     setSelectedStudentId(s.id);
     setStudentSearch(s.fullName);
     setShowDropdown(false);
-    loadProfile(s.id);
+    loadProfile(s.id, selectedSessionId);
   }
 
   function runAction(fn: () => Promise<unknown>, msg: string, cb?: () => void) {
@@ -372,7 +453,7 @@ export function FeeCollectionClient({
     runAction(async () => {
       await createFeeDiscountAction({
         studentId: profile.student.id,
-        sessionId: currentSessionId ?? sessions[0]?.id ?? "",
+        sessionId: selectedSessionId || currentSessionId || sessions[0]?.id || "",
         feeHeadId: discountForm.feeHeadId || undefined,
         month: targetMonth as any,
         discountType: discountForm.discountType as any,
@@ -479,31 +560,164 @@ export function FeeCollectionClient({
         
         {/* LEFT COLUMN: STUDENT DETAIL & PAYMENT ACTION DRAWER */}
       <div className="bg-white border-r border-stone-200 flex flex-col overflow-y-auto">
-        <div className="p-4 border-b border-stone-200 bg-white z-20">
-          <Label className="text-xs font-bold text-stone-500 uppercase tracking-widest block mb-2">Student Search</Label>
+        <div className="p-4 border-b border-stone-200 bg-white z-20 space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-bold text-stone-500 uppercase tracking-widest block">Student Search & Filter</Label>
+            {(selectedClassId || selectedSectionId || studentSearch) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedClassId("");
+                  setSelectedSectionId("");
+                  setStudentSearch("");
+                  setShowDropdown(false);
+                }}
+                className="text-[11px] font-bold text-stone-500 hover:text-stone-800 underline cursor-pointer"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          {/* ACADEMIC SESSION, CLASS & SECTION DROPDOWN ADD-ONS */}
+          <div className="space-y-2">
+            <div>
+              <span className="text-[10px] font-bold text-stone-500 uppercase block mb-1">Academic Session</span>
+              <select
+                value={selectedSessionId}
+                onChange={(e) => {
+                  const newSessId = e.target.value;
+                  setSelectedSessionId(newSessId);
+                  if (selectedStudentId) {
+                    loadProfile(selectedStudentId, newSessId);
+                  }
+                }}
+                className="w-full h-9 rounded-lg border border-stone-300 bg-stone-50 px-2.5 text-xs text-stone-900 font-bold focus:bg-white focus:border-stone-400"
+              >
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    Session {s.name} {s.id === currentSessionId ? "(Current)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-[10px] font-bold text-stone-400 uppercase block mb-1">Class</span>
+                <select
+                  value={selectedClassId}
+                  onChange={(e) => {
+                    setSelectedClassId(e.target.value);
+                    setSelectedSectionId("");
+                    setShowDropdown(true);
+                  }}
+                  className="w-full h-9 rounded-lg border border-stone-300 bg-stone-50 px-2.5 text-xs text-stone-800 font-medium focus:bg-white"
+                >
+                  <option value="">All Classes</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-stone-400 uppercase block mb-1">Section</span>
+                <select
+                  value={selectedSectionId}
+                  onChange={(e) => {
+                    setSelectedSectionId(e.target.value);
+                    setShowDropdown(true);
+                  }}
+                  disabled={!selectedClassId}
+                  className="w-full h-9 rounded-lg border border-stone-300 bg-stone-50 px-2.5 text-xs text-stone-800 font-medium disabled:opacity-50 focus:bg-white"
+                >
+                  <option value="">All Sections</option>
+                  {activeSections.map((sec) => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* STUDENT SEARCH INPUT & DROPDOWN */}
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" />
             <Input
               value={studentSearch}
-              onChange={e => { setStudentSearch(e.target.value); setShowDropdown(true); }}
+              onChange={(e) => {
+                setStudentSearch(e.target.value);
+                setShowDropdown(true);
+              }}
               onFocus={() => setShowDropdown(true)}
-              placeholder="Search name, adm no, parents, phone..."
-              className="pl-9 h-10 text-sm border-stone-355 rounded-lg"
+              placeholder="Search name, adm no, parent, phone..."
+              className="pl-9 pr-8 h-10 text-sm border-stone-300 rounded-lg bg-white"
             />
-            {showDropdown && filteredStudents.length > 0 && (
-              <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-stone-200 rounded-xl shadow-xl max-h-72 overflow-y-auto">
-                {filteredStudents.map(s => (
-                  <button key={s.id} type="button" onMouseDown={() => selectStudent(s)}
-                    className="w-full text-left px-4 py-3 hover:bg-stone-50 border-b border-stone-105 last:border-0 flex justify-between items-center transition-colors">
-                    <div>
-                      <p className="font-extrabold text-stone-900 text-sm">{s.fullName}</p>
-                      <p className="text-xs text-stone-505 mt-0.5">Adm: {s.admissionNo} · Class: {s.classLabel}</p>
-                      {s.fatherName && (
-                        <p className="text-xs text-indigo-700 font-semibold mt-1">Parent: {s.fatherName} {s.primaryPhone ? `(${s.primaryPhone})` : ""}</p>
-                      )}
-                    </div>
-                  </button>
-                ))}
+            {studentSearch && (
+              <button
+                type="button"
+                onClick={() => setStudentSearch("")}
+                className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* SEARCH DROPDOWN RESULTS */}
+            {showDropdown && (
+              <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-stone-200 rounded-xl shadow-2xl max-h-80 overflow-y-auto divide-y divide-stone-100">
+                <div className="px-3 py-2 bg-stone-50 border-b border-stone-200 flex items-center justify-between text-[11px] font-bold text-stone-600 sticky top-0 z-10 select-none">
+                  <span>
+                    {filteredStudents.length} {filteredStudents.length === 1 ? "student" : "students"} found
+                  </span>
+                  {selectedClassId && activeClass && (
+                    <span className="text-stone-400">Class: {activeClass.name}</span>
+                  )}
+                </div>
+                {filteredStudents.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-stone-400 font-medium">
+                    No matching students found.
+                  </div>
+                ) : (
+                  filteredStudents.map((s) => {
+                    const matchedEnrollment = s.enrollments?.find(
+                      (e) => (selectedSessionId ? e.sessionId === selectedSessionId : e.isCurrent)
+                    ) ?? s.enrollments?.[0];
+                    const displayClass = matchedEnrollment
+                      ? `${matchedEnrollment.className}-${matchedEnrollment.sectionName}`
+                      : s.classLabel || "Unassigned";
+
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onMouseDown={() => selectStudent(s)}
+                        className={cn(
+                          "w-full text-left px-4 py-2.5 hover:bg-stone-50 transition-colors flex justify-between items-center",
+                          selectedStudentId === s.id && "bg-emerald-50/60 border-l-4 border-l-emerald-600"
+                        )}
+                      >
+                        <div>
+                          <p className="font-extrabold text-stone-900 text-sm">{s.fullName}</p>
+                          <p className="text-xs text-stone-500 mt-0.5">
+                            Adm: <span className="font-mono font-bold text-stone-700">{s.admissionNo}</span> · Class: {displayClass}
+                          </p>
+                          {s.fatherName && (
+                            <p className="text-xs text-indigo-700 font-semibold mt-0.5">
+                              Parent: {s.fatherName} {s.primaryPhone ? `(${s.primaryPhone})` : ""}
+                            </p>
+                          )}
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-stone-300 shrink-0" />
+                      </button>
+                    );
+                  })
+                )}
               </div>
             )}
           </div>
@@ -1280,8 +1494,8 @@ export function FeeCollectionClient({
 
       {/* RECEIPT PREVIEW */}
       {receiptSnapshot && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative">
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-transparent print:static print:block print:overflow-visible">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative print:p-0 print:bg-transparent print:max-w-none print:shadow-none print:max-h-none print:rounded-none">
             <div className="flex items-center justify-between border-b pb-3 mb-2 no-print">
               <h3 className="text-sm font-bold text-stone-900">Official Fee Receipt Preview</h3>
               <button

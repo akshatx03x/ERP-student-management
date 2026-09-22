@@ -1365,8 +1365,8 @@ export async function getStudentFeeLedger(studentId: string, requestedSessionId?
   if (!student) throw new Error("Student not found");
 
   const enrollment = requestedSessionId
-    ? student.enrollments.find((e) => e.sessionId === requestedSessionId) ?? student.enrollments[0]
-    : student.enrollments[0] ?? null;
+    ? student.enrollments.find((e) => e.sessionId === requestedSessionId) ?? student.enrollments.find((e) => e.session?.isCurrent) ?? student.enrollments[0]
+    : student.enrollments.find((e) => e.session?.isCurrent) ?? student.enrollments[0] ?? null;
 
   const sessionId = requestedSessionId || enrollment?.sessionId;
 
@@ -1404,7 +1404,6 @@ export async function getStudentFeeLedger(studentId: string, requestedSessionId?
     prisma.feePaymentAllocation.findMany({
       where: {
         studentId,
-        ...(sessionId ? { studentFee: { sessionId } } : {}),
       },
       include: {
         payment: {
@@ -2150,6 +2149,7 @@ export async function getPaymentReceipt(paymentId: string) {
     const snap = (payment.receipt.snapshot as Record<string, any>) || {};
     const updatedSnap = {
       ...snap,
+      studentName: snap.studentName || snap.allocations?.[0]?.studentName || payment.allocations?.[0]?.student?.fullName,
       receiptNumber: snap.receiptNumber ?? payment.receiptNumber,
       branding: snap.branding || {
         schoolName: branding.schoolName,
@@ -2171,6 +2171,7 @@ export async function getPaymentReceipt(paymentId: string) {
   const snapshot = {
     receiptNo: payment.receiptNo,
     receiptNumber: payment.receiptNumber,
+    studentName: payment.allocations?.[0]?.student?.fullName,
     paidAt: payment.paidAt.toISOString(),
     amount: decimalToNumber(payment.amount),
     amountFormatted: formatCurrency(decimalToNumber(payment.amount)),

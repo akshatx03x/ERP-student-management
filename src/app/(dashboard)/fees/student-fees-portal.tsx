@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getReceiptAction } from "@/server/actions/fee.actions";
 import { FeeReceiptPrintable } from "@/components/fees/fee-receipt-printable";
+import { printReceipt } from "@/components/fees/receipt-printer";
 
 type PortalData = {
   currentClass: {
@@ -168,7 +169,9 @@ export function StudentFeesPortal({ data }: { data: PortalData }) {
                           const r = await getReceiptAction(p.paymentId);
                           setReceipt(r.snapshot);
                           toast.success("Receipt loaded");
-                          setTimeout(() => window.print(), 300);
+                          if (r?.snapshot) {
+                            printReceipt(r.snapshot);
+                          }
                         } catch (e) {
                           toast.error(e instanceof Error ? e.message : "Failed");
                         }
@@ -213,8 +216,8 @@ export function StudentFeesPortal({ data }: { data: PortalData }) {
       ) : null}
 
       {receipt ? (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative">
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-transparent print:static print:block print:overflow-visible">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative print:p-0 print:bg-transparent print:max-w-none print:shadow-none print:max-h-none print:rounded-none">
             <div className="flex items-center justify-between border-b pb-3 mb-2 no-print">
               <h3 className="text-sm font-bold text-stone-900">Official Fee Receipt Preview</h3>
               <button

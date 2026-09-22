@@ -6,24 +6,26 @@ import { PageHeader } from "@/components/shared/states";
 export default async function DynamicFinanceDashboardPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     sessionId?: string;
     month?: string;
     classId?: string;
     sectionId?: string;
     startDate?: string;
     endDate?: string;
-  };
+  }>;
 }) {
   await requirePermission("fee.view");
 
+  const sp = await searchParams;
+
   const filters = {
-    sessionId: searchParams.sessionId,
-    month: searchParams.month,
-    classId: searchParams.classId,
-    sectionId: searchParams.sectionId,
-    startDate: searchParams.startDate ? new Date(searchParams.startDate) : undefined,
-    endDate: searchParams.endDate ? new Date(searchParams.endDate) : undefined,
+    sessionId: sp.sessionId,
+    month: sp.month,
+    classId: sp.classId,
+    sectionId: sp.sectionId,
+    startDate: sp.startDate ? new Date(sp.startDate) : undefined,
+    endDate: sp.endDate ? new Date(sp.endDate) : undefined,
   };
 
   const dashboardData = await getPrincipalFinanceDashboardDynamic(filters);

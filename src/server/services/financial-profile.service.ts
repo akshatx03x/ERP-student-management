@@ -58,7 +58,14 @@ export async function getStudentFinancialProfile(
   });
   if (!student) throw new Error("Student not found");
 
-  const currentEnrollment = student.enrollments[0] ?? null;
+  // Prioritize current active session enrollment (isCurrent = true) or requested sessionIdInput
+  const activeSessionEnrollment =
+    student.enrollments.find((e) => e.session?.isCurrent) ?? student.enrollments[0] ?? null;
+
+  const currentEnrollment = sessionIdInput
+    ? (student.enrollments.find((e) => e.sessionId === sessionIdInput) ?? activeSessionEnrollment)
+    : activeSessionEnrollment;
+
   const targetSessionId = sessionIdInput || currentEnrollment?.sessionId;
 
   // Auto-sync ledger check: ensure student's ledger contains the full class structure
@@ -127,17 +134,21 @@ export async function getStudentFinancialProfile(
       },
       orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
     }),
-    prisma.familyAdvanceWallet.findUnique({
-      where: { familyId: student.familyId },
-    }),
-    prisma.advanceTransaction.findMany({
-      where: { familyId: student.familyId },
-      include: {
-        recordedBy: { select: { id: true, name: true } },
-        targetStudent: { select: { id: true, fullName: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+    student.familyId
+      ? prisma.familyAdvanceWallet.findUnique({
+          where: { familyId: student.familyId },
+        })
+      : Promise.resolve(null),
+    student.familyId
+      ? prisma.advanceTransaction.findMany({
+          where: { familyId: student.familyId },
+          include: {
+            recordedBy: { select: { id: true, name: true } },
+            targetStudent: { select: { id: true, fullName: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
     prisma.feeDiscount.findMany({
       where: {
         studentId,
@@ -150,23 +161,25 @@ export async function getStudentFinancialProfile(
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.student.findMany({
-      where: {
-        familyId: student.familyId,
-        id: { not: studentId },
-        schoolId,
-      },
-      include: {
-        enrollments: {
-          include: { class: true, section: true },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-        studentFees: {
-          include: { allocations: true, fine: true },
-        },
-      },
-    }),
+    student.familyId
+      ? prisma.student.findMany({
+          where: {
+            familyId: student.familyId,
+            id: { not: studentId },
+            schoolId,
+          },
+          include: {
+            enrollments: {
+              include: { class: true, section: true },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+            studentFees: {
+              include: { allocations: true, fine: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   const auditLogs = await prisma.auditLog.findMany({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -10,10 +10,13 @@ import { getReceiptAction } from "@/server/actions/fee.actions";
 import { toast } from "sonner";
 import {
   Edit3, Eye, Users,
-  Receipt, Tag, RotateCcw, AlertCircle, Printer, X, CheckSquare, Square
+  Receipt, Tag, RotateCcw, AlertCircle, Printer, Download, X, CheckSquare, Square
 } from "lucide-react";
 import { IdCardPrintButton } from "./id-card-print-button";
 import { IDCardModal } from "@/components/students/id-card-modal";
+import { FeeReceiptPrintable } from "@/components/fees/fee-receipt-printable";
+import { SingleFeeReceipt } from "@/components/fees/fee-receipt-single";
+import { printReceipt, printBulkReceipts } from "@/components/fees/receipt-printer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,12 +143,18 @@ export function StudentFeePageClient({
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
   const [bulkPrintLoading, setBulkPrintLoading] = useState(false);
   const [bulkReceiptSnapshots, setBulkReceiptSnapshots] = useState<any[] | null>(null);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
 
   async function handlePrint(paymentId: string) {
     setPrintLoading(paymentId);
     try {
       const r = await getReceiptAction(paymentId);
-      setReceiptSnapshot(r.snapshot);
+      if (r?.snapshot) {
+        setReceiptSnapshot(r.snapshot);
+        await printReceipt(r.snapshot);
+      }
+    } catch {
+      toast.error("Failed to load receipt");
     } finally {
       setPrintLoading(null);
     }
@@ -164,10 +173,94 @@ export function StudentFeePageClient({
         return;
       }
       setBulkReceiptSnapshots(snapshots);
+      await printBulkReceipts(snapshots);
     } catch (e) {
       toast.error("Failed to load receipt details for printing");
     } finally {
       setBulkPrintLoading(false);
+    }
+  }
+
+  async function handleDownloadBulkPDF() {
+    if (!bulkReceiptSnapshots || bulkReceiptSnapshots.length === 0) return;
+    setBulkDownloading(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+      const ReactDOM = (await import("react-dom/client")).default;
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const renderContainer = document.createElement("div");
+      renderContainer.style.position = "absolute";
+      renderContainer.style.left = "-9999px";
+      renderContainer.style.top = "-9999px";
+      renderContainer.style.width = "210mm";
+      document.body.appendChild(renderContainer);
+
+      const maxPerPage = 3;
+      const totalPages = Math.ceil(bulkReceiptSnapshots.length / maxPerPage);
+
+      for (let pIdx = 0; pIdx < totalPages; pIdx++) {
+        if (pIdx > 0) pdf.addPage();
+        const pageReceipts = bulkReceiptSnapshots.slice(pIdx * maxPerPage, (pIdx + 1) * maxPerPage);
+
+        renderContainer.innerHTML = "";
+        const pageWrapper = document.createElement("div");
+        pageWrapper.style.width = "195mm";
+        pageWrapper.style.backgroundColor = "#ffffff";
+        pageWrapper.style.padding = "4mm";
+        pageWrapper.style.boxSizing = "border-box";
+        renderContainer.appendChild(pageWrapper);
+
+        const root = ReactDOM.createRoot(pageWrapper);
+        root.render(
+          <div style={{ display: "flex", flexDirection: "column", gap: "4mm", width: "100%", backgroundColor: "#ffffff" }}>
+            {pageReceipts.map((snap, idx) => (
+              <div key={idx} style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "stretch", width: "100%", backgroundColor: "#ffffff" }}>
+                <SingleFeeReceipt data={snap} copyType="SCHOOL COPY" isSideBySide={true} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "3%" }}>
+                  <div style={{ height: "100%", borderLeft: "2px dashed #a8a29e" }} />
+                </div>
+                <SingleFeeReceipt data={snap} copyType="PARENT COPY" isSideBySide={true} />
+              </div>
+            ))}
+          </div>
+        );
+
+        await new Promise((r) => setTimeout(r, 120));
+
+        const canvas = await html2canvas(pageWrapper, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+        });
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+        root.unmount();
+      }
+
+      document.body.removeChild(renderContainer);
+
+      const studentSlug = student.fullName.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const admSlug = student.admissionNo.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const dateStr = new Date().toISOString().split("T")[0];
+      const fileName = `Fee_Receipts_${studentSlug}_Adm_${admSlug}_${dateStr}.pdf`;
+
+      pdf.save(fileName);
+      toast.success(`PDF saved as ${fileName}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate bulk PDF");
+    } finally {
+      setBulkDownloading(false);
     }
   }
 
@@ -515,79 +608,48 @@ export function StudentFeePageClient({
 
       {/* ── RECEIPT PREVIEW MODAL ── */}
       {receiptSnapshot && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setReceiptSnapshot(null)}>
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4">
-              <h3 className="text-sm font-black text-stone-900">Fee Receipt</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-stone-800 transition-colors"
-                >
-                  <Printer className="w-3.5 h-3.5" /> Print
-                </button>
-                <button onClick={() => setReceiptSnapshot(null)} className="text-stone-400 hover:text-stone-700 transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-transparent print:static print:block print:overflow-visible">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative print:p-0 print:bg-transparent print:max-w-none print:shadow-none print:max-h-none print:rounded-none">
+            <div className="flex items-center justify-between border-b pb-3 mb-2 no-print">
+              <h3 className="text-sm font-bold text-stone-900">Official Fee Receipt Preview</h3>
+              <button
+                onClick={() => setReceiptSnapshot(null)}
+                className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="border border-stone-200 rounded-xl p-5 text-xs space-y-4">
-              <div className="text-center border-b border-stone-100 pb-3">
-                <h2 className="text-base font-black uppercase">{receiptSnapshot.branding?.schoolName || "School"}</h2>
-                {receiptSnapshot.branding?.address && <p className="text-stone-500 text-[11px] mt-0.5">{receiptSnapshot.branding.address}</p>}
-                <div className="mt-2 inline-block bg-stone-100 rounded-full px-3 py-0.5 text-[10px] font-bold uppercase">Fee Receipt</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-700">
-                <p><span className="font-bold">Receipt No:</span> {receiptSnapshot.receiptNo}</p>
-                <p className="text-right"><span className="font-bold">Date:</span> {formatDate(receiptSnapshot.paidAt)}</p>
-                <p><span className="font-bold">Mode:</span> {receiptSnapshot.method}</p>
-              </div>
-              <table className="w-full border-collapse border-y border-stone-200">
-                <thead><tr className="bg-stone-100 text-[10px] font-bold uppercase text-stone-700">
-                  <th className="py-2 px-2">Student</th>
-                  <th className="py-2 px-2">Fee Head</th>
-                  <th className="py-2 px-2 text-right">Amount</th>
-                </tr></thead>
-                <tbody className="divide-y divide-stone-100">
-                  {(receiptSnapshot.allocations || []).map((a: any, idx: number) => (
-                    <tr key={idx}>
-                      <td className="py-2 px-2 font-bold">{a.studentName}</td>
-                      <td className="py-2 px-2 text-stone-600">{a.feeHead}</td>
-                      <td className="py-2 px-2 text-right font-mono font-bold">{formatCurrency(a.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-[11px] text-stone-500">Total Paid</span>
-                <span className="font-black text-stone-900 text-sm">{formatCurrency(receiptSnapshot.amount)}</span>
-              </div>
-              {receiptSnapshot.branding?.receiptFooter && (
-                <p className="text-center text-[10px] text-stone-400 border-t border-stone-100 pt-2">{receiptSnapshot.branding.receiptFooter}</p>
-              )}
-            </div>
+            <FeeReceiptPrintable data={receiptSnapshot} />
           </div>
         </div>
       )}
 
       {/* ── BULK RECEIPT PREVIEW MODAL ── */}
       {bulkReceiptSnapshots && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setBulkReceiptSnapshots(null)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4 print:hidden">
+        <div className="fee-receipt-modal fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 print:p-0 print:bg-white print:static print:block print:overflow-visible" onClick={() => setBulkReceiptSnapshots(null)}>
+          <div className="fee-receipt-print-wrapper printable-area bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto print:p-0 print:bg-white print:max-w-none print:shadow-none print:max-h-none print:rounded-none" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4 no-print">
               <div>
                 <h3 className="text-sm font-black text-stone-900">Selected Fee Receipts ({bulkReceiptSnapshots.length})</h3>
                 <p className="text-[11px] text-stone-500">Receipts for {student.fullName}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-stone-900 text-white rounded-lg text-xs font-bold hover:bg-stone-800 transition-colors shadow-xs"
+                  onClick={handleDownloadBulkPDF}
+                  disabled={bulkDownloading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-700 hover:bg-stone-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" /> {bulkDownloading ? "Downloading..." : "Download PDF"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => printBulkReceipts(bulkReceiptSnapshots)}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" /> Print All ({bulkReceiptSnapshots.length})
                 </button>
-                <button type="button" onClick={() => setBulkReceiptSnapshots(null)} className="text-stone-400 hover:text-stone-700 transition-colors p-1">
+                <button type="button" onClick={() => setBulkReceiptSnapshots(null)} className="text-stone-400 hover:text-stone-700 transition-colors p-1 cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -597,44 +659,27 @@ export function StudentFeePageClient({
               {bulkReceiptSnapshots.map((snap: any, index: number) => (
                 <div
                   key={snap.receiptNo || index}
-                  className="border border-stone-200 rounded-xl p-5 text-xs space-y-4 print:border-stone-400"
-                  style={{ pageBreakAfter: "always", breakAfter: "page" }}
+                  className="receipt-page print:p-0"
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "stretch",
+                    width: "100%",
+                    maxWidth: "195mm",
+                    backgroundColor: "#ffffff",
+                    pageBreakInside: "avoid",
+                    breakInside: "avoid",
+                    pageBreakAfter: "always",
+                    breakAfter: "page",
+                    margin: "0 auto",
+                  }}
                 >
-                  <div className="text-center border-b border-stone-100 pb-3">
-                    <h2 className="text-base font-black uppercase">{snap.branding?.schoolName || "School"}</h2>
-                    {snap.branding?.address && <p className="text-stone-500 text-[11px] mt-0.5">{snap.branding.address}</p>}
-                    <div className="mt-2 inline-block bg-stone-100 rounded-full px-3 py-0.5 text-[10px] font-bold uppercase">Fee Receipt</div>
+                  <SingleFeeReceipt data={snap} copyType="SCHOOL COPY" isSideBySide={true} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "3%" }}>
+                    <div style={{ height: "100%", borderLeft: "2px dashed #a8a29e" }} />
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-700">
-                    <p><span className="font-bold">Receipt No:</span> {snap.receiptNo}</p>
-                    <p className="text-right"><span className="font-bold">Date:</span> {formatDate(snap.paidAt)}</p>
-                    <p><span className="font-bold">Mode:</span> {snap.method}</p>
-                  </div>
-                  <table className="w-full border-collapse border-y border-stone-200">
-                    <thead>
-                      <tr className="bg-stone-100 text-[10px] font-bold uppercase text-stone-700">
-                        <th className="py-2 px-2 text-left">Student</th>
-                        <th className="py-2 px-2 text-left">Fee Head</th>
-                        <th className="py-2 px-2 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {(snap.allocations || []).map((a: any, idx: number) => (
-                        <tr key={idx}>
-                          <td className="py-2 px-2 font-bold">{a.studentName}</td>
-                          <td className="py-2 px-2 text-stone-600">{a.feeHead}</td>
-                          <td className="py-2 px-2 text-right font-mono font-bold">{formatCurrency(a.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="flex justify-between items-center pt-1">
-                    <span className="text-[11px] text-stone-500">Total Paid</span>
-                    <span className="font-black text-stone-900 text-sm">{formatCurrency(snap.amount)}</span>
-                  </div>
-                  {snap.branding?.receiptFooter && (
-                    <p className="text-center text-[10px] text-stone-400 border-t border-stone-100 pt-2">{snap.branding.receiptFooter}</p>
-                  )}
+                  <SingleFeeReceipt data={snap} copyType="PARENT COPY" isSideBySide={true} />
                 </div>
               ))}
             </div>
