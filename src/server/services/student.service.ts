@@ -616,6 +616,18 @@ export async function createStudentWithFamily(
     if (!family) throw new Error("Family not found");
   }
 
+  if (data.enroll && (!data.sessionId || data.sessionId === "")) {
+    const fallbackSession = await client.academicSession.findFirst({
+      where: { schoolId, isCurrent: true },
+    }) || await client.academicSession.findFirst({
+      where: { schoolId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (fallbackSession) {
+      data.sessionId = fallbackSession.id;
+    }
+  }
+
   if (data.enroll && data.sessionId && data.classId && data.sectionId) {
     const [session, cls, section] = await Promise.all([
       client.academicSession.findFirst({ where: { id: data.sessionId, schoolId } }),

@@ -12,6 +12,8 @@ import { updateStudentAction, unlinkStudentFamilyAction } from "@/server/actions
 import { findFamilyByPhoneAction } from "@/server/actions/family.actions";
 import type { UpdateStudentInput } from "@/server/validators/student.validator";
 
+import { toDateInputValue, parseDateInput } from "@/lib/utils";
+
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
 
 export function EditStudentForm({
@@ -57,19 +59,12 @@ export function EditStudentForm({
   const [lookupPhone, setLookupPhone] = useState("");
   const [matchingFamily, setMatchingFamily] = useState<any>(null);
 
-  // Helper to format date for input field
-  const formatDateString = (d: string | Date | null | undefined) => {
-    if (!d) return "";
-    const date = new Date(d);
-    return date.toISOString().split("T")[0];
-  };
-
   const [form, setForm] = useState({
     firstName: student.firstName,
     middleName: student.middleName ?? "",
     lastName: student.lastName ?? "",
-    dateOfBirth: formatDateString(student.dateOfBirth),
-    admissionDate: formatDateString(student.admissionDate ?? new Date()),
+    dateOfBirth: toDateInputValue(student.dateOfBirth),
+    admissionDate: toDateInputValue(student.admissionDate),
     gender: student.gender ?? "",
     bloodGroup: student.bloodGroup ?? "",
     aadhaar: student.aadhaar ?? "",
@@ -135,8 +130,8 @@ export function EditStudentForm({
           firstName: form.firstName.trim(),
           middleName: form.middleName.trim() || null,
           lastName: form.lastName.trim() || null,
-          dateOfBirth: new Date(form.dateOfBirth),
-          admissionDate: form.admissionDate ? new Date(form.admissionDate) : null,
+          dateOfBirth: form.dateOfBirth ? parseDateInput(form.dateOfBirth) : null,
+          admissionDate: form.admissionDate ? parseDateInput(form.admissionDate) : null,
           gender: (form.gender as "MALE" | "FEMALE" | "OTHER") || null,
           bloodGroup: form.bloodGroup.trim() || null,
           aadhaar: form.aadhaar.trim() || null,
@@ -303,7 +298,6 @@ export function EditStudentForm({
             type="date"
             value={form.dateOfBirth}
             onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
-            required
           />
         </div>
         <div className="space-y-2">

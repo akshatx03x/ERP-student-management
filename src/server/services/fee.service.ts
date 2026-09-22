@@ -258,15 +258,23 @@ export async function generateStudentMonthlyLedgerInTx(
   // 3. Find class fee structure
   const structure = await findFeeStructureForClass(tx, opts.sessionId, opts.classId);
 
-  // 4. Find active student optional fee assignments
-  const optionalFees = await tx.studentOptionalFee.findMany({
-    where: {
-      studentId: opts.studentId,
-      sessionId: opts.sessionId,
-      isActive: true,
-    },
-    include: { feeHead: true },
-  });
+  // 4. Find active student optional fee assignments (graceful fallback if table is not yet migrated)
+  let optionalFees: any[] = [];
+  try {
+    if ((tx as any).studentOptionalFee) {
+      optionalFees = await (tx as any).studentOptionalFee.findMany({
+        where: {
+          studentId: opts.studentId,
+          sessionId: opts.sessionId,
+          isActive: true,
+        },
+        include: { feeHead: true },
+      });
+    }
+  } catch (optErr: any) {
+    console.warn("[generateStudentMonthlyLedgerInTx] Optional fee lookup skipped:", optErr?.message);
+    optionalFees = [];
+  }
 
   if (!structure && optionalFees.length === 0) {
     if (opts.requireStructure) {

@@ -16,7 +16,7 @@ type FormerStudent = {
   admissionNo: string;
   fullName: string;
   photoUrl?: string | null;
-  dateOfBirth: Date | string;
+  dateOfBirth?: Date | string | null;
   gender?: string | null;
   status: string;
   family?: {

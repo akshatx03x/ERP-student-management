@@ -8,9 +8,17 @@ export const paginationSchema = z.object({
   search: z.string().trim().optional(),
 });
 
-export const dateSchema = z.coerce.date();
+import { parseDateInput } from "@/lib/utils";
 
-export const optionalDateSchema = z.coerce.date().optional().nullable();
+export const dateSchema = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return undefined;
+  return parseDateInput(val as any) ?? val;
+}, z.date());
+
+export const optionalDateSchema = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined || val === "—") return null;
+  return parseDateInput(val as any);
+}, z.date().optional().nullable());
 
 export const positiveDecimalSchema = z.coerce
   .number()

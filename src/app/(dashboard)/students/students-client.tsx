@@ -237,6 +237,10 @@ export function StudentsClient({
       }
       const base64 = btoa(binary);
       const result = await validateStudentsImportAction(base64, duplicateStrategy);
+      if ((result as any).success === false) {
+        toast.error((result as any).error || "Excel analysis failed. Please verify the file structure.");
+        return;
+      }
 
       setPreviewData(result);
       originalPreviewDataRef.current = JSON.parse(JSON.stringify(result));
@@ -285,9 +289,9 @@ export function StudentsClient({
         row.data.sectionId = null;
       }
     } else if (field === "gender") {
-      row.data.gender = value;
+      row.data.gender = value ? value.toUpperCase() : null;
     } else if (field === "category") {
-      row.data.category = value;
+      row.data.category = value ? value.toUpperCase() : null;
     }
 
     // Client-side re-validation
@@ -390,15 +394,9 @@ export function StudentsClient({
   const handleConfirmImport = async () => {
     if (!previewData) return;
 
-    if (previewData.summary.ready === 0) {
-      toast.error("No valid student records found to import.");
-      return;
-    }
-
-    // Check if there are blocking non-duplicate format errors
-    const nonDuplicateErrors = previewData.rows.filter(r => r.status === "ERROR" && !isDuplicateRow(r));
-    if (nonDuplicateErrors.length > 0) {
-      toast.error(`Please fix ${nonDuplicateErrors.length} format error(s) (such as missing class/section/name) before importing.`);
+    const validRowsCount = previewData.rows.filter(r => r.status !== "ERROR").length;
+    if (validRowsCount === 0) {
+      toast.error("No valid student records found to import. All rows contain errors.");
       return;
     }
 
@@ -416,61 +414,71 @@ export function StudentsClient({
     setIsCommitting(true);
     setShowDuplicateConfirmModal(false);
 
-    if (duplicateStrategy === "FAIL") {
-      setImportProgress({
-        total: previewData.rows.length,
-        processed: 0,
-        remaining: previewData.rows.length,
-        currentName: "Processing atomically (Single Transaction)..."
-      });
-      try {
-        const result = await executeStudentsImportAction(previewData.rows, "FAIL");
-        setExecutionResult(result);
-        setImportStep("RESULT");
-        toast.success("Excel batch import completed!");
-        router.refresh();
-      } catch (err: any) {
-        toast.error(err.message || "Batch transaction failed. Database rolled back.");
-      } finally {
-        setImportProgress(null);
-        setIsCommitting(false);
-      }
-    } else {
-      const rowsToProcess = previewData.rows.filter(r => r.status !== "ERROR");
-      const total = rowsToProcess.length;
-      let imported = 0;
-      let updated = 0;
-      let skipped = 0;
-      let failed = 0;
+    const rowsToProcess = previewData.rows;
+    const totalCount = rowsToProcess.length;
+    let totalImported = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
 
-      setImportProgress({ total, processed: 0, remaining: total, currentName: "" });
+    setImportProgress({
+      total: totalCount,
+      processed: 0,
+      remaining: totalCount,
+      currentName: "Starting import..."
+    });
 
-      for (let i = 0; i < total; i++) {
-        const row = rowsToProcess[i]!;
+    try {
+      // Chunk size of 5 records per batch for fast processing and smooth progress updates
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < totalCount; i += CHUNK_SIZE) {
+        const chunk = rowsToProcess.slice(i, i + CHUNK_SIZE);
+        const firstStudent = chunk.find(r => r.studentName || r.admissionNo);
+        const currentNameLabel = firstStudent
+          ? `${firstStudent.studentName || firstStudent.admissionNo}`
+          : `Row ${chunk[0]?.rowNumber}`;
+
         setImportProgress({
-          total,
+          total: totalCount,
           processed: i,
-          remaining: total - i,
-          currentName: row.studentName || row.admissionNo
+          remaining: totalCount - i,
+          currentName: `Importing ${currentNameLabel}...`
         });
 
-        try {
-          const res = await executeSingleRowImportAction(row, duplicateStrategy);
-          imported += res.imported;
-          updated += res.updated;
-          skipped += res.skipped;
-          failed += res.failed;
-        } catch (err: any) {
-          failed++;
+        const result = await executeStudentsImportAction(chunk, duplicateStrategy);
+        if ((result as any).success !== false) {
+          totalImported += result.imported || 0;
+          totalUpdated += result.updated || 0;
+          totalSkipped += result.skipped || 0;
+          totalFailed += result.failed || 0;
+        } else {
+          totalFailed += chunk.length;
         }
+
+        const processedCount = Math.min(i + CHUNK_SIZE, totalCount);
+        setImportProgress({
+          total: totalCount,
+          processed: processedCount,
+          remaining: totalCount - processedCount,
+          currentName: `Processed ${processedCount} of ${totalCount} records`
+        });
       }
 
-      setImportProgress(null);
-      setIsCommitting(false);
-      setExecutionResult({ imported, updated, skipped, failed });
+      setExecutionResult({
+        imported: totalImported,
+        updated: totalUpdated,
+        skipped: totalSkipped,
+        failed: totalFailed
+      });
+
       setImportStep("RESULT");
       toast.success("Excel batch import completed!");
       router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Batch import failed. Please verify the records.");
+    } finally {
+      setImportProgress(null);
+      setIsCommitting(false);
     }
   };
 
@@ -955,7 +963,7 @@ export function StudentsClient({
                   {importStep === "PREVIEW" && previewData && (
                     <div className="space-y-4 flex flex-col h-full min-h-0">
                       {/* Summary Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 shrink-0">
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5 shrink-0">
                         <div className="bg-stone-50 border p-2.5 rounded-lg text-center">
                           <span className="text-[9px] uppercase font-bold text-stone-400 block mb-0.5">Total Rows</span>
                           <span className="text-base font-extrabold text-stone-700">{previewData.summary.total}</span>
@@ -983,10 +991,6 @@ export function StudentsClient({
                         <div className="bg-purple-50 border border-purple-100 p-2.5 rounded-lg text-center">
                           <span className="text-[9px] uppercase font-bold text-purple-600 block mb-0.5">Bad Section</span>
                           <span className="text-base font-extrabold text-purple-700">{previewData.summary.unknownSections ?? 0}</span>
-                        </div>
-                        <div className="bg-red-50 border border-red-100 p-2.5 rounded-lg text-center">
-                          <span className="text-[9px] uppercase font-bold text-red-600 block mb-0.5">Missing Fee Struct</span>
-                          <span className="text-base font-extrabold text-red-700">{previewData.summary.missingFeeStructures ?? 0}</span>
                         </div>
                       </div>
 
@@ -1089,11 +1093,11 @@ export function StudentsClient({
                         </table>
                       </div>
 
-                      {previewData.summary.errors > 0 && previewData.rows.some(r => r.status === "ERROR" && !isDuplicateRow(r)) ? (
-                        <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-rose-700 text-xs shrink-0 flex items-start gap-2">
-                          <span className="text-lg leading-none">⚠️</span>
+                      {previewData.summary.errors > 0 ? (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs shrink-0 flex items-start gap-2">
+                          <span className="text-lg leading-none">ℹ️</span>
                           <p>
-                            <strong>Errors detected:</strong> You can fix class, section, gender, or category options directly in the dropdown inputs above to resolve error issues. The import is blocked until format errors are resolved.
+                            <strong>{previewData.summary.errors} invalid row(s) detected:</strong> These invalid rows (e.g. missing required fields or unmapped class/section) will be automatically skipped during import. The remaining <strong>{previewData.summary.ready} valid student record(s)</strong> will be imported cleanly. You can also edit values inline above or click <strong>Download Error Report</strong>.
                           </p>
                         </div>
                       ) : getDuplicateRows().length > 0 ? (
@@ -1212,13 +1216,13 @@ export function StudentsClient({
                           onClick={handleConfirmImport}
                           loading={isCommitting}
                           disabled={
-                            previewData.summary.ready === 0 ||
-                            (previewData.summary.errors > 0 && previewData.rows.some(r => r.status === "ERROR" && !isDuplicateRow(r)))
+                            isCommitting ||
+                            previewData.rows.filter(r => r.status !== "ERROR").length === 0
                           }
                         >
                           {isCommitting
                             ? "Importing Batch..."
-                            : `Confirm & Import (${previewData.summary.ready} Students)`}
+                            : `Confirm & Import (${previewData.rows.filter(r => r.status !== "ERROR").length} Valid Student${previewData.rows.filter(r => r.status !== "ERROR").length === 1 ? "" : "s"})`}
                         </Button>
                       </div>
                     </>

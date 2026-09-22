@@ -1,10 +1,8 @@
 import { prisma } from "../src/server/lib/prisma";
 
 async function main() {
-  await prisma.student.deleteMany({
-    where: { admissionNo: { startsWith: "TEST-IMP-" } }
-  });
-  console.log("Cleaned up test students");
+  const sessions = await prisma.academicSession.findMany();
+  console.log("All Sessions in DB:", sessions);
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

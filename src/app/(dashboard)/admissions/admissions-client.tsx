@@ -20,7 +20,7 @@ import { UnifiedStudentForm, type UnifiedFormState } from "@/components/shared/u
 type Admission = {
   id: string;
   applicantName: string;
-  dateOfBirth: Date | string;
+  dateOfBirth?: Date | string | null;
   status: string;
   admissionNo: string | null;
   phone: string | null;

@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { updateStudentAction } from "@/server/actions/student.actions";
 import { uploadDocumentAction } from "@/server/actions/platform.actions";
 import { ContactOwner, DocumentOwnerType } from "@prisma/client";
+import { toDateInputValue, parseDateInput } from "@/lib/utils";
 
 // Modal Component Helper
 function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -91,7 +92,20 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
     setError(null);
     startTransition(async () => {
       try {
-        await updateStudentAction({ id: student.id, ...formData });
+        const payload: any = { ...formData };
+        if (payload.dateOfBirth !== undefined) {
+          payload.dateOfBirth = payload.dateOfBirth ? parseDateInput(payload.dateOfBirth) : null;
+        }
+        if (payload.tcDate !== undefined) {
+          payload.tcDate = payload.tcDate ? parseDateInput(payload.tcDate) : null;
+        }
+        if (payload.admissionDate !== undefined) {
+          payload.admissionDate = payload.admissionDate ? parseDateInput(payload.admissionDate) : null;
+        }
+        if (payload.gender === "") payload.gender = null;
+        if (payload.category === "") payload.category = null;
+
+        await updateStudentAction({ id: student.id, ...payload });
         setActiveModal(null);
         toast.success("Profile section updated successfully");
         router.refresh();
@@ -247,7 +261,7 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
                     middleName: student.middleName || "",
                     lastName: student.lastName || "",
                     gender: student.gender || "",
-                    dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split("T")[0] : "",
+                    dateOfBirth: toDateInputValue(student.dateOfBirth),
                     religion: student.religion || "",
                     category: student.category || "",
                     bloodGroup: student.bloodGroup || "",
@@ -1026,7 +1040,6 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
               <Label>DOB</Label>
               <Input 
                 type="date"
-                required 
                 value={formData.dateOfBirth || ""} 
                 onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
               />

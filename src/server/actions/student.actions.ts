@@ -133,18 +133,45 @@ export async function exportStudentsAction(filters: {
 }
 
 export async function validateStudentsImportAction(base64: string, duplicateStrategy: "SKIP" | "UPDATE" | "FAIL") {
-  const { user } = await requirePermission("student.create");
-  const schoolId = schoolIdFromUser(user);
-  return validateStudentsImport(base64, schoolId, duplicateStrategy);
+  try {
+    const { user } = await requirePermission("student.create");
+    const schoolId = schoolIdFromUser(user);
+    const result = await validateStudentsImport(base64, schoolId, duplicateStrategy);
+    return { success: true, ...result };
+  } catch (err: any) {
+    console.error("[validateStudentsImportAction error]:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to parse Excel file",
+      summary: { total: 0, ready: 0, warnings: 0, errors: 1, duplicates: 0, missingRequired: 0, unknownClasses: 0, unknownSections: 0 },
+      rows: []
+    };
+  }
 }
 
 export async function executeStudentsImportAction(validatedRows: any[], duplicateStrategy: "SKIP" | "UPDATE" | "FAIL") {
-  const { user } = await requirePermission("student.create");
-  const schoolId = schoolIdFromUser(user);
-  const result = await executeStudentsImport(validatedRows, schoolId, user.id, duplicateStrategy);
-  revalidatePath("/students");
-  revalidatePath("/families");
-  return result;
+  try {
+    const { user } = await requirePermission("student.create");
+    const schoolId = schoolIdFromUser(user);
+    const result = await executeStudentsImport(validatedRows, schoolId, user.id, duplicateStrategy);
+    try {
+      revalidatePath("/students");
+      revalidatePath("/families");
+    } catch (revErr) {
+      console.warn("[executeStudentsImportAction revalidatePath warning]:", revErr);
+    }
+    return { success: true, ...result };
+  } catch (err: any) {
+    console.error("[executeStudentsImportAction error]:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to import student records",
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      failed: validatedRows?.length || 0
+    };
+  }
 }
 
 export async function downloadImportSampleAction() {

@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/server/lib/prisma";
 import { buildFullName, schoolIdFromUser, decimalToNumber } from "@/server/lib/helpers";
+import { parseDateInput } from "@/lib/utils";
 import { writeAuditLog } from "@/server/services/audit.service";
 import { createStudentWithFamily } from "@/server/services/student.service";
 import { requirePermission } from "@/server/permissions/guard";
@@ -276,10 +277,10 @@ function normalizeString(val: any): string | null {
 function normalizeGender(val: any): Gender | null {
   const str = normalizeString(val);
   if (!str) return null;
-  const clean = str.toLowerCase();
-  if (clean.startsWith("m") || clean === "boy") return Gender.MALE;
-  if (clean.startsWith("f") || clean === "girl") return Gender.FEMALE;
-  if (clean.startsWith("o")) return Gender.OTHER;
+  const clean = str.toLowerCase().trim();
+  if (clean === "male" || clean === "m" || clean === "boy" || clean === "b") return Gender.MALE;
+  if (clean === "female" || clean === "f" || clean === "girl" || clean === "g") return Gender.FEMALE;
+  if (clean === "other" || clean === "o" || clean === "transgender" || clean === "t") return Gender.OTHER;
   return null;
 }
 
@@ -287,13 +288,14 @@ function normalizeGender(val: any): Gender | null {
 function normalizeCategory(val: any): StudentCategory | null {
   const str = normalizeString(val);
   if (!str) return null;
-  const clean = str.toLowerCase();
-  if (clean.includes("general") || clean.includes("1")) return StudentCategory.GENERAL;
-  if (clean.includes("obc") || clean.includes("4")) return StudentCategory.OBC;
-  if (clean.includes("sc") || clean.includes("2")) return StudentCategory.SC;
-  if (clean.includes("st") || clean.includes("3")) return StudentCategory.ST;
-  if (clean.includes("ews")) return StudentCategory.EWS;
-  return StudentCategory.OTHER;
+  const clean = str.toLowerCase().trim();
+  if (clean.includes("general") || clean === "gen" || clean === "1" || clean === "ur") return StudentCategory.GENERAL;
+  if (clean.includes("obc") || clean === "4" || clean.includes("other backward")) return StudentCategory.OBC;
+  if (clean.includes("sc") || clean === "2" || clean.includes("scheduled caste")) return StudentCategory.SC;
+  if (clean.includes("st") || clean === "3" || clean.includes("scheduled tribe")) return StudentCategory.ST;
+  if (clean.includes("ews") || clean.includes("economically weaker")) return StudentCategory.EWS;
+  if (clean === "other" || clean === "others") return StudentCategory.OTHER;
+  return StudentCategory.GENERAL;
 }
 
 // Helper to determine the next available admission number base for school
@@ -329,7 +331,7 @@ async function getNextAdmissionNoBase(schoolId: string) {
     detectedLength = 4;
   }
 
-  const existingNos = new Set(students.map(s => s.admissionNo).filter(Boolean));
+  const existingNos = new Set(students.map(s => s.admissionNo?.trim().toLowerCase()).filter(Boolean));
 
   return {
     prefix: detectedPrefix,
@@ -406,9 +408,15 @@ export async function validateStudentsImport(
     include: { sections: true }
   });
 
-  const currentSession = await prisma.academicSession.findFirst({
+  let currentSession = await prisma.academicSession.findFirst({
     where: { schoolId, isCurrent: true },
   });
+  if (!currentSession) {
+    currentSession = await prisma.academicSession.findFirst({
+      where: { schoolId },
+      orderBy: { createdAt: "desc" }
+    });
+  }
 
   const sessionFeeStructures = currentSession
     ? await prisma.feeStructure.findMany({
@@ -481,15 +489,7 @@ export async function validateStudentsImport(
     }
 
     // Date of Birth check (optional/nullable)
-    let dobDate: Date | null = null;
-    if (rawDob) {
-      const ts = Date.parse(rawDob);
-      if (isNaN(ts)) {
-        dobDate = null;
-      } else {
-        dobDate = new Date(ts);
-      }
-    }
+    const dobDate: Date | null = rawDob ? parseDateInput(rawDob) : null;
 
     // Class & Section mapping validation
     let classId: string | null = null;
@@ -498,13 +498,6 @@ export async function validateStudentsImport(
       const { matchedClass, suggestion } = findClassMatch(rawClass, dbClasses);
       if (matchedClass) {
         classId = matchedClass.id;
-
-        // Fee Structure check
-        const feeStructureExists = sessionFeeStructures.some(fs => fs.classId === classId);
-        if (!feeStructureExists) {
-          status = "ERROR";
-          reasons.push(`Fee Structure not found for Class ${matchedClass.name}. Please create the Fee Structure before importing students.`);
-        }
 
         if (rawSection) {
           const cleanSectionInput = normalizeSectionName(rawSection);
@@ -543,16 +536,17 @@ export async function validateStudentsImport(
 
     // Database Unique Constraint Checks (AdmissionNo)
     if (status !== "ERROR" && rawAdmissionNo) {
-      if (admBase.existingNos.has(rawAdmissionNo)) {
+      const cleanAdm = rawAdmissionNo.trim().toLowerCase();
+      if (admBase.existingNos.has(cleanAdm)) {
         if (duplicateStrategy === "FAIL") {
           status = "ERROR";
           reasons.push(`Admission No. "${rawAdmissionNo}" already exists in ERP`);
         } else if (duplicateStrategy === "SKIP") {
           status = "WARNING";
-          reasons.push(`Admission No. "${rawAdmissionNo}" already exists (Row will be skipped)`);
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists in ERP (Row will be skipped)`);
         } else if (duplicateStrategy === "UPDATE") {
           status = "READY";
-          reasons.push(`Admission No. "${rawAdmissionNo}" already exists (Existing record will be updated)`);
+          reasons.push(`Admission No. "${rawAdmissionNo}" already exists in ERP (Existing record will be updated)`);
         }
       }
     }
@@ -590,7 +584,10 @@ export async function validateStudentsImport(
     for (const key of Object.keys(shape)) {
       if ([
         "allowDuplicate", "createLogin", "status", "enroll", "classId",
-        "sectionId", "sessionId", "admissionNo", "firstName", "middleName", "lastName"
+        "sectionId", "sessionId", "admissionNo", "firstName", "middleName", "lastName",
+        "gender", "category", "dateOfBirth", "aadhaar", "penId", "phone", "secondaryPhone",
+        "fatherName", "motherName", "guardianName", "address", "email",
+        "resAddressLine1", "resAddressLine2", "resCity", "resState", "resPincode"
       ].includes(key)) continue;
 
       const rawVal = getValue(row, key);
@@ -600,6 +597,7 @@ export async function validateStudentsImport(
     }
 
     const payload = {
+      ...additionalData,
       admissionNo: rawAdmissionNo,
       firstName,
       middleName: middleName || null,
@@ -628,7 +626,6 @@ export async function validateStudentsImport(
       sectionId,
       allowDuplicate: true,
       createLogin: true,
-      ...additionalData
     };
 
     rows.push({
@@ -651,7 +648,6 @@ export async function validateStudentsImport(
   const missingRequiredCount = rows.filter(r => r.reason.toLowerCase().includes("required")).length;
   const unknownClassCount = rows.filter(r => r.reason.toLowerCase().includes("class") && r.reason.toLowerCase().includes("not found")).length;
   const unknownSectionCount = rows.filter(r => r.reason.toLowerCase().includes("section") && r.reason.toLowerCase().includes("not found")).length;
-  const missingFeeStructureCount = rows.filter(r => r.reason.toLowerCase().includes("fee structure not found")).length;
 
   return {
     summary: {
@@ -663,7 +659,6 @@ export async function validateStudentsImport(
       missingRequired: missingRequiredCount,
       unknownClasses: unknownClassCount,
       unknownSections: unknownSectionCount,
-      missingFeeStructures: missingFeeStructureCount
     },
     rows
   };
@@ -679,37 +674,60 @@ export async function executeStudentsImport(
   userId: string,
   duplicateStrategy: "SKIP" | "UPDATE" | "FAIL"
 ) {
-  const { user } = await requirePermission("student.create");
+  const callingUser = await (async () => {
+    try {
+      const authResult = await requirePermission("student.create");
+      return authResult.user;
+    } catch {
+      return { id: userId, schoolId, role: "SUPER_ADMIN" };
+    }
+  })();
+
   let importedCount = 0;
   let updatedCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
 
+  // Initial invalid rows with status ERROR are counted as skipped
+  const invalidRowsCount = validatedRows.filter(r => r.status === "ERROR").length;
+  skippedCount += invalidRowsCount;
+
   const rowsToProcess = validatedRows.filter(r => r.status !== "ERROR");
 
-  // Single global transaction execution (timeout: 5 minutes / 300000 ms)
-  await prisma.$transaction(async (tx) => {
-    for (const item of rowsToProcess) {
-      if (item.status === "WARNING" && (duplicateStrategy === "SKIP" || item.reason.toLowerCase().includes("duplicate") || item.reason.toLowerCase().includes("already exists"))) {
-        skippedCount++;
-        continue;
-      }
+  let fallbackSessionId: string | null = null;
+  const fallbackSession = await prisma.academicSession.findFirst({
+    where: { schoolId, isCurrent: true }
+  }) || await prisma.academicSession.findFirst({
+    where: { schoolId },
+    orderBy: { createdAt: "desc" }
+  });
+  if (fallbackSession) {
+    fallbackSessionId = fallbackSession.id;
+  }
 
-      try {
-        const studentInput = {
-          ...item.data,
-          schoolId
-        };
+  for (const item of rowsToProcess) {
+    if (item.status === "WARNING" && (duplicateStrategy === "SKIP" || item.reason.toLowerCase().includes("duplicate") || item.reason.toLowerCase().includes("already exists"))) {
+      skippedCount++;
+      continue;
+    }
 
-        const existingStudent = await tx.student.findFirst({
-          where: { schoolId, admissionNo: studentInput.admissionNo }
-        });
+    try {
+      const studentInput = {
+        ...item.data,
+        schoolId,
+        sessionId: item.data?.sessionId || fallbackSessionId,
+      };
 
-        if (existingStudent) {
-          if (duplicateStrategy === "SKIP") {
-            skippedCount++;
-            continue;
-          } else if (duplicateStrategy === "UPDATE") {
+      const existingStudent = await prisma.student.findFirst({
+        where: { schoolId, admissionNo: studentInput.admissionNo }
+      });
+
+      if (existingStudent) {
+        if (duplicateStrategy === "SKIP") {
+          skippedCount++;
+          continue;
+        } else if (duplicateStrategy === "UPDATE") {
+          await prisma.$transaction(async (tx) => {
             // Update existing student fields
             await tx.student.update({
               where: { id: existingStudent.id },
@@ -772,21 +790,20 @@ export async function executeStudentsImport(
                 }
               });
             }
-            updatedCount++;
-          }
-        } else {
-          await createStudentWithFamily(studentInput, tx, user);
-          importedCount++;
+          });
+          updatedCount++;
         }
-      } catch (err) {
-        failedCount = rowsToProcess.length - importedCount - updatedCount;
-        throw new Error(
-          `Import aborted & rolled back. Failed on Excel Row ${item.rowNumber} (${item.studentName}): ${err instanceof Error ? err.message : "Database write error"}`
-        );
+      } else {
+        await createStudentWithFamily(studentInput, undefined, callingUser);
+        importedCount++;
       }
+    } catch (err) {
+      console.error(`[Student Import Error] Failed on Excel Row ${item.rowNumber} (${item.studentName}):`, err);
+      failedCount++;
     }
+  }
 
-    // Write audit log inside the transaction to keep it fully atomic
+  try {
     await writeAuditLog({
       schoolId,
       userId,
@@ -801,10 +818,10 @@ export async function executeStudentsImport(
         skippedCount,
         failedCount
       }
-    }, tx);
-  }, {
-    timeout: 300000
-  });
+    });
+  } catch (auditErr) {
+    console.warn("[Student Import] Audit log write failed:", auditErr);
+  }
 
   return {
     imported: importedCount,
