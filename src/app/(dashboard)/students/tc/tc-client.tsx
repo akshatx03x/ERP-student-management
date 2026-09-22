@@ -18,6 +18,8 @@ import {
   executeTCStatusActionAction,
   getTCDetailAction,
 } from "@/server/actions/tc.actions";
+import { TransferCertificateDocument } from "@/components/tc/transfer-certificate-document";
+import { printTC } from "@/components/tc/tc-printer";
 
 // ─── Component Types ─────────────────────────────────────────────────────────
 
@@ -326,117 +328,8 @@ export function TCClient({
   return (
     <div className="space-y-6">
       {previewTC && resolvedSnapshot && (
-        <div className="fixed inset-0 z-[9999] bg-white text-stone-900 p-8 hidden print:block print-preview-area overflow-auto">
-          {/* Certificate Content wrapper */}
-          <div className="relative border-4 border-double border-stone-800 p-6 mx-auto max-w-[800px] bg-white min-h-[1050px] flex flex-col justify-between">
-            
-            {/* Watermark overlay for Cancelled TC */}
-            {previewTC.status === "CANCELLED" && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-10 opacity-[0.08] rotate-[-40deg]">
-                <span className="text-8xl font-black text-rose-600 border-[16px] border-rose-600 px-10 py-4 uppercase">
-                  Cancelled
-                </span>
-              </div>
-            )}
-
-            {/* Header branding */}
-            <div className="text-center space-y-2 pb-4 border-b border-stone-300">
-              {resolvedSnapshot.branding?.logoDocumentId && (
-                <div className="flex justify-center mb-2">
-                  <img
-                    src={`/api/documents/${resolvedSnapshot.branding.logoDocumentId}`}
-                    alt="School Logo"
-                    className="h-16 w-16 object-contain"
-                  />
-                </div>
-              )}
-              <h2 className="text-2xl font-black tracking-wide text-stone-900 uppercase">
-                {resolvedSnapshot.branding?.schoolName || "VIDYANJALI SENIOR SECONDARY SCHOOL"}
-              </h2>
-              <p className="text-xs font-semibold text-stone-600">
-                {resolvedSnapshot.branding?.address || "Miranpur, Uttar Pradesh"}
-              </p>
-              <p className="text-xs text-stone-500">
-                Recognized | Phone: {resolvedSnapshot.branding?.phone || "—"}
-              </p>
-              <div className="mt-3">
-                <span className="bg-stone-900 text-white font-extrabold tracking-widest text-xs px-6 py-1 rounded">
-                  TRANSFER CERTIFICATE
-                </span>
-              </div>
-            </div>
-
-            {/* Metadata (TC No, Admission No) */}
-            <div className="grid grid-cols-2 text-xs font-semibold pt-4 pb-2 border-b border-stone-150">
-              <div>TC Number: <span className="font-bold text-stone-900 font-mono">{previewTC.tcNumber}</span></div>
-              <div className="text-right">Admission No: <span className="font-bold text-stone-900 font-mono">{resolvedSnapshot.student?.admissionNo}</span></div>
-            </div>
-
-            {/* Main Certificate Facts */}
-            <div className="space-y-4 text-xs leading-relaxed flex-1 pt-4">
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">1. Name of Student:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.fullName}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">2. Father / Guardian Name:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.family?.fatherName || "—"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">3. Mother Name:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.family?.motherName || "—"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">4. Nationality / Religion:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.religion || "Indian"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">5. Category (SC/ST/OBC/Gen):</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.category || "General"}</span></div>
-              <div className="flex gap-1.5">
-                <span className="w-48 text-stone-500 font-medium">6. Date of Birth (in Figures):</span> 
-                <span className="font-bold border-b border-dotted border-stone-400 flex-1">
-                  {resolvedSnapshot.student?.dateOfBirth ? new Date(resolvedSnapshot.student.dateOfBirth).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
-                </span>
-              </div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">7. Date of First Admission:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.admissionDate ? new Date(resolvedSnapshot.student.admissionDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">8. Class studied last (in words):</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.enrollment?.class} ({resolvedSnapshot.enrollment?.section})</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">9. School / Board Annual Exam Result:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.academic?.resultOutcome || "Passed"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">10. School Dues Status:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">Cleared</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">11. Total Attendance (days present):</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{previewTC.attendance || "—"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">12. General Conduct:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{previewTC.conduct || "Good"}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">13. Date of Application/Issue:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{new Date(previewTC.dateOfIssue).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}</span></div>
-              <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">14. Remarks / Reasons for leaving:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{previewTC.remarks || "Personal Reason"}</span></div>
-            </div>
-
-            {/* Footer with Signatures and Verification QR Code */}
-            <div className="flex items-end justify-between pt-8 border-t border-stone-300">
-              <div className="text-center space-y-1">
-                <div className="h-12"></div>
-                <p className="border-t border-stone-400 pt-1 text-[10px] w-28 mx-auto font-medium">Prepared By</p>
-              </div>
-              <div className="text-center space-y-1">
-                <div className="h-12"></div>
-                <p className="border-t border-stone-400 pt-1 text-[10px] w-28 mx-auto font-medium">Checked By</p>
-              </div>
-              {qrCodeUrl && (
-                <div className="flex flex-col items-center mb-1">
-                  <img src={qrCodeUrl} alt="TC Verification Code" className="h-16 w-16 border p-0.5 rounded bg-white" />
-                  <span className="text-[8px] text-stone-400 mt-1 uppercase font-mono">Verify TC Authenticity</span>
-                </div>
-              )}
-              <div className="text-center space-y-1 relative flex flex-col items-center">
-                <div className="h-12 flex items-end justify-center">
-                  {resolvedSnapshot.branding?.principalSignatureDocumentId ? (
-                    <img
-                      src={`/api/documents/${resolvedSnapshot.branding.principalSignatureDocumentId}`}
-                      alt="Principal Signature"
-                      className="max-h-12 object-contain"
-                    />
-                  ) : (
-                    <div className="h-12"></div>
-                  )}
-                </div>
-                <div className="border-t border-stone-400 pt-1 text-[10px] w-36 mx-auto font-semibold text-stone-850">
-                  {resolvedSnapshot.branding?.principalName ? (
-                    <>
-                      <p>{resolvedSnapshot.branding.principalName}</p>
-                      <p className="text-[8px] text-stone-500 font-normal">Principal</p>
-                    </>
-                  ) : (
-                    "Principal Signature"
-                  )}
-                </div>
-              </div>
-            </div>
-
-          </div>
+        <div className="fixed inset-0 z-[9999] bg-white text-stone-900 p-0 hidden print:block print-preview-area overflow-auto">
+          <TransferCertificateDocument tc={previewTC} snapshot={resolvedSnapshot} isPrintOnly={true} />
         </div>
       )}
 
@@ -478,7 +371,11 @@ export function TCClient({
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => window.print()} className="bg-stone-900 hover:bg-stone-800 text-white flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    onClick={() => printTC(previewTC, resolvedSnapshot)}
+                    className="bg-stone-900 hover:bg-stone-800 text-white flex items-center gap-1.5"
+                  >
                     <Printer className="h-4 w-4" /> Print / Save PDF
                   </Button>
                   {previewTC.status === "DRAFT" && (
@@ -504,115 +401,9 @@ export function TCClient({
             </Card>
 
             {/* On-screen Certificate Preview Layout */}
-            <div className="border border-stone-200 rounded-xl bg-stone-100/50 p-6 flex justify-center items-center">
-              <div className="relative border-4 border-double border-stone-800 p-6 w-full max-w-[800px] bg-white min-h-[1050px] flex flex-col justify-between shadow-md text-stone-900">
-                
-                {/* Watermark overlay for Cancelled TC */}
-                {previewTC.status === "CANCELLED" && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-10 opacity-[0.08] rotate-[-40deg]">
-                    <span className="text-8xl font-black text-rose-600 border-[16px] border-rose-600 px-10 py-4 uppercase">
-                      Cancelled
-                    </span>
-                  </div>
-                )}
-
-                {/* Header branding */}
-                <div className="text-center space-y-2 pb-4 border-b border-stone-300">
-                  {resolvedSnapshot.branding?.logoDocumentId && (
-                    <div className="flex justify-center mb-2">
-                      <img
-                        src={`/api/documents/${resolvedSnapshot.branding.logoDocumentId}`}
-                        alt="School Logo"
-                        className="h-16 w-16 object-contain"
-                      />
-                    </div>
-                  )}
-                  <h2 className="text-2xl font-black tracking-wide text-stone-900 uppercase">
-                    {resolvedSnapshot.branding?.schoolName || "VIDYANJALI SENIOR SECONDARY SCHOOL"}
-                  </h2>
-                  <p className="text-xs font-semibold text-stone-600">
-                    {resolvedSnapshot.branding?.address || "Balram Dwar, Karhera, Mohan Nagar, Ghaziabad, Uttar Pradesh"}
-                  </p>
-                  <p className="text-xs text-stone-500">
-                    Recognized | Phone: {resolvedSnapshot.branding?.phone || "—"}
-                  </p>
-                  <div className="mt-3">      
-                    <span className="bg-stone-900 text-white font-extrabold tracking-widest text-xs px-6 py-1 rounded">
-                      TRANSFER CERTIFICATE
-                    </span>
-                  </div>
-                </div>
-
-                {/* Metadata */}
-                <div className="grid grid-cols-2 text-xs font-semibold pt-4 pb-2 border-b border-stone-150">
-                  <div>TC Number: <span className="font-bold text-stone-900 font-mono">{previewTC.tcNumber}</span></div>
-                  <div className="text-right">Admission No: <span className="font-bold text-stone-900 font-mono">{resolvedSnapshot.student?.admissionNo}</span></div>
-                </div>
-
-                {/* Facts */}
-                <div className="space-y-4 text-xs leading-relaxed flex-1 pt-4">
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">1. Name of Student:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.fullName}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">2. Father / Guardian Name:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.family?.fatherName || "—"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">3. Mother Name:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.family?.motherName || "—"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">4. Nationality / Religion:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.religion || "Indian"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">5. Category (SC/ST/OBC/Gen):</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.category || "General"}</span></div>
-                  <div className="flex gap-1.5">
-                    <span className="w-48 text-stone-500 font-medium">6. Date of Birth (in Figures):</span> 
-                    <span className="font-bold border-b border-dotted border-stone-400 flex-1">
-                      {resolvedSnapshot.student?.dateOfBirth ? new Date(resolvedSnapshot.student.dateOfBirth).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
-                    </span>
-                  </div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">7. Date of First Admission:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.student?.admissionDate ? new Date(resolvedSnapshot.student.admissionDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">8. Class studied last (in words):</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.enrollment?.class} ({resolvedSnapshot.enrollment?.section})</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">9. School / Board Annual Exam Result:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{resolvedSnapshot.academic?.resultOutcome || "Passed"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">10. School Dues Status:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">Cleared</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">11. Total Attendance (days present):</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{previewTC.attendance || "—"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">12. General Conduct:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{previewTC.conduct || "Good"}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">13. Date of Application/Issue:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{new Date(previewTC.dateOfIssue).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}</span></div>
-                  <div className="flex gap-1.5"><span className="w-48 text-stone-500 font-medium">14. Remarks / Reasons for leaving:</span> <span className="font-bold border-b border-dotted border-stone-400 flex-1">{previewTC.remarks || "Personal Reason"}</span></div>
-                </div>
-
-                {/* Footer with Signatures and Verification QR Code */}
-                <div className="flex items-end justify-between pt-8 border-t border-stone-300">
-                  <div className="text-center space-y-1">
-                    <div className="h-12"></div>
-                    <p className="border-t border-stone-400 pt-1 text-[10px] w-28 mx-auto font-medium">Prepared By</p>
-                  </div>
-                  <div className="text-center space-y-1">
-                    <div className="h-12"></div>
-                    <p className="border-t border-stone-400 pt-1 text-[10px] w-28 mx-auto font-medium">Checked By</p>
-                  </div>
-                  {qrCodeUrl && (
-                    <div className="flex flex-col items-center mb-1">
-                      <img src={qrCodeUrl} alt="TC Verification Code" className="h-16 w-16 border p-0.5 rounded bg-white" />
-                      <span className="text-[8px] text-stone-400 mt-1 uppercase font-mono">Verify TC Authenticity</span>
-                    </div>
-                  )}
-                  <div className="text-center space-y-1 relative flex flex-col items-center">
-                    <div className="h-12 flex items-end justify-center">
-                      {resolvedSnapshot.branding?.principalSignatureDocumentId ? (
-                        <img
-                          src={`/api/documents/${resolvedSnapshot.branding.principalSignatureDocumentId}`}
-                          alt="Principal Signature"
-                          className="max-h-12 object-contain"
-                        />
-                      ) : (
-                        <div className="h-12"></div>
-                      )}
-                    </div>
-                    <div className="border-t border-stone-400 pt-1 text-[10px] w-36 mx-auto font-semibold text-stone-850">
-                      {resolvedSnapshot.branding?.principalName ? (
-                        <>
-                          <p>{resolvedSnapshot.branding.principalName}</p>
-                          <p className="text-[8px] text-stone-500 font-normal">Principal</p>
-                        </>
-                      ) : (
-                        "Principal Signature"
-                      )}
-                    </div>
-                  </div>
-                </div>
-
+            <div className="border border-stone-200 rounded-xl bg-stone-200/50 p-4 sm:p-8 flex justify-center items-center overflow-x-auto print-preview-area">
+              <div className="w-full max-w-[200mm] bg-white shadow-2xl rounded-sm border border-stone-300">
+                <TransferCertificateDocument tc={previewTC} snapshot={resolvedSnapshot} />
               </div>
             </div>
           </div>
