@@ -35,6 +35,7 @@ model School {
   cashBookEntries      CashBookEntry[]
   transferCertificates TransferCertificate[]
   studentOptionalFees  StudentOptionalFee[]
+  familyPayments       FamilyPayment[]
 }
 
 model SchoolBranding {
@@ -1012,21 +1013,25 @@ model FamilyPayment {
   id                  String                 @id @default(cuid())
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
+  schoolId            String
   familyId            String
   amount              Decimal
   method              PaymentMethod
   referenceNo         String?
   paidAt              DateTime               @default(now())
   receiptNo           String                 @unique
+  receiptNumber       Int?
   notes               String?
   recordedById        String?
   advanceTransactions AdvanceTransaction[]
   recordedBy          User?                  @relation("PaymentRecorder", fields: [recordedById], references: [id])
   family              Family                 @relation(fields: [familyId], references: [id])
+  school              School                 @relation(fields: [schoolId], references: [id])
   allocations         FeePaymentAllocation[]
   receipt             FeeReceipt?
 
   @@index([familyId, paidAt])
+  @@unique([schoolId, receiptNumber])
 }
 
 model FeePaymentAllocation {

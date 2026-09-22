@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { 
   User, Camera, Upload, X, ExternalLink, ShieldAlert, Phone, MapPin, 
-  HeartPulse, Bus, School, Award, Edit2, Trash2, Eye, Loader2, AlertCircle 
+  HeartPulse, Bus, School, Award, Edit2, Trash2, Eye, AlertCircle 
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { updateStudentAction } from "@/server/actions/student.actions";
 import { uploadDocumentAction } from "@/server/actions/platform.actions";
+import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
 import { ContactOwner, DocumentOwnerType } from "@prisma/client";
 import { toDateInputValue, parseDateInput } from "@/lib/utils";
 
@@ -122,6 +123,10 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
     ownerType: any,
     extraFields?: Record<string, any>,
   ) => {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size must be less than 5MB");
+      return;
+    }
     setIsUploading(true);
     const reader = new FileReader();
     reader.onloadend = async () => {
@@ -1520,10 +1525,7 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
       </Modal>
 
       {isUploading && (
-        <div className="fixed inset-0 z-[100] bg-stone-900/60 backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white select-none">
-          <Loader2 className="w-10 h-10 animate-spin text-white" />
-          <p className="text-sm font-extrabold tracking-wide uppercase">Uploading photo, please wait...</p>
-        </div>
+        <ImageUploadOverlay fullScreen label="Uploading photo, please wait…" />
       )}
     </div>
   );

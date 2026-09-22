@@ -8,9 +8,9 @@ import { FeeCollectionClient } from "./fee-collection-client";
 export default async function FeeCollectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ student?: string }>;
+  searchParams: Promise<{ student?: string; returnTo?: string }>;
 }) {
-  const { student: initialStudentId } = await searchParams;
+  const { student: initialStudentId, returnTo } = await searchParams;
   const { user } = await requirePermission("fee.view");
 
   if (user.role === "STUDENT") {
@@ -34,9 +34,11 @@ export default async function FeeCollectionPage({
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-stone-900">Fee Collection</h1>
-        <p className="text-sm text-stone-500 mt-0.5">Cashier workstation — search student, view outstanding months, collect payment</p>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-stone-900">Fee Collection</h1>
+          <p className="text-sm text-stone-500 mt-0.5">Cashier workstation — search student, view outstanding months, collect payment</p>
+        </div>
       </div>
       <FeeCollectionClient
         students={students.items.map((s: any) => ({
@@ -53,6 +55,7 @@ export default async function FeeCollectionPage({
         sessions={sessions.items}
         currentSessionId={current?.id ?? null}
         initialStudentId={initialStudentId ?? null}
+        returnTo={returnTo ?? null}
       />
     </div>
   );

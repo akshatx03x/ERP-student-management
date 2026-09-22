@@ -9,10 +9,13 @@ import { schoolIdFromUser } from "@/server/lib/helpers";
 
 export default async function StudentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ sessionId?: string }>;
 }) {
   const { id } = await params;
+  const { sessionId: selectedSessionId } = (await searchParams) || {};
 
   const { user } = await requirePermission("student.view");
   const schoolId = schoolIdFromUser(user);
@@ -22,7 +25,7 @@ export default async function StudentDetailPage({
 
   const [studentResult, ledgerResult] = await Promise.allSettled([
     getStudent(id),
-    getStudentFeeLedger(id),
+    getStudentFeeLedger(id, selectedSessionId),
     ...(isStudentSelf ? [getStudentPortalFees()] : []),
   ]);
 
@@ -180,6 +183,7 @@ export default async function StudentDetailPage({
       siblings={siblings}
       enrollments={student.enrollments.map((e) => ({
         id: e.id,
+        sessionId: e.sessionId,
         sessionName: e.session.name,
         className: e.class.name,
         sectionName: e.section.name,
@@ -200,6 +204,7 @@ export default async function StudentDetailPage({
       canDelete={canDelete}
       userRole={user.role}
       branding={branding}
+      selectedSessionId={selectedSessionId ?? null}
     />
   );
 }

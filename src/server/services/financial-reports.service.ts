@@ -1416,6 +1416,8 @@ export async function getClasswisePendingList(filters: ClasswisePendingListFilte
   });
 
   // Filter student aggregates based on pending range, status, etc.
+  const ACADEMIC_MONTH_ORDER = ["APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER", "JANUARY", "FEBRUARY", "MARCH"];
+
   let allRows = Array.from(studentStatsMap.values()).map(s => {
     let currentStatus = "UNPAID";
     if (s.paid >= s.expectedFee && s.expectedFee > 0) {
@@ -1424,9 +1426,15 @@ export async function getClasswisePendingList(filters: ClasswisePendingListFilte
       currentStatus = "PARTIAL";
     }
 
+    const sortedMonths = Array.from(s.monthsPending).sort((a, b) => {
+      const idxA = ACADEMIC_MONTH_ORDER.indexOf(a.toUpperCase());
+      const idxB = ACADEMIC_MONTH_ORDER.indexOf(b.toUpperCase());
+      return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+    }).map(m => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase());
+
     return {
       ...s,
-      monthsPending: Array.from(s.monthsPending).join(", ") || "—",
+      monthsPending: sortedMonths.join(", ") || "—",
       currentStatus,
     };
   });

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -25,6 +26,7 @@ export function DocumentsClient({ students }: { students: Student[] }) {
   const [studentId, setStudentId] = useState(students[0]?.id ?? "");
   const [docs, setDocs] = useState<Doc[]>([]);
   const [type, setType] = useState("OTHER");
+  const [isUploading, setIsUploading] = useState(false);
 
   function load() {
     startTransition(async () => {
@@ -43,6 +45,8 @@ export function DocumentsClient({ students }: { students: Student[] }) {
       toast.error("Max 5MB");
       return;
     }
+    const isImage = file.type.startsWith("image/");
+    setIsUploading(isImage);
     startTransition(async () => {
       try {
         const buffer = await file.arrayBuffer();
@@ -61,6 +65,8 @@ export function DocumentsClient({ students }: { students: Student[] }) {
         load();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed");
+      } finally {
+        setIsUploading(false);
       }
     });
   }
@@ -84,7 +90,19 @@ export function DocumentsClient({ students }: { students: Student[] }) {
             </Select>
             <Button type="button" variant="outline" disabled={pending} onClick={load}>Load</Button>
           </div>
-          <input type="file" disabled={pending || !studentId} onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="file"
+              disabled={pending || isUploading || !studentId}
+              onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+            />
+            {isUploading && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading image…
+              </span>
+            )}
+          </div>
           <div className="space-y-2">
             {docs.map((d) => (
               <div key={d.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">

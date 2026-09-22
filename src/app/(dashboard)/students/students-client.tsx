@@ -19,6 +19,7 @@ import {
   downloadImportSampleAction,
 } from "@/server/actions/student.actions";
 import { BulkIDCardModal } from "@/components/students/bulk-id-card-modal";
+import { BulkReceiptModal } from "@/components/students/bulk-receipt-modal";
 
 type StudentRow = {
   id: string;
@@ -80,6 +81,7 @@ export function StudentsClient({
   const [showRecommendations, setShowRecommendations] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isBulkIDCardOpen, setIsBulkIDCardOpen] = useState(false);
+  const [isBulkReceiptOpen, setIsBulkReceiptOpen] = useState(false);
 
   const [importResult, setImportResult] = useState<{
     successCount: number;
@@ -226,6 +228,10 @@ export function StudentsClient({
 
   const handleUploadAndAnalyze = async (file: File | null) => {
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size must be less than 5MB");
+      return;
+    }
     setSelectedFile(file);
     setIsAnalyzing(true);
     try {
@@ -731,6 +737,15 @@ export function StudentsClient({
             onClick={() => setIsBulkIDCardOpen(true)}
           >
             Print ID Cards
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => setIsBulkReceiptOpen(true)}
+            className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-bold"
+          >
+            🧾 Bulk Receipts
           </Button>
         </div>
       </div>
@@ -1354,6 +1369,16 @@ export function StudentsClient({
           classes={classes}
           sessions={sessions}
           initialSessionId={selectedSessionId}
+        />
+      )}
+      {isBulkReceiptOpen && (
+        <BulkReceiptModal
+          isOpen={isBulkReceiptOpen}
+          onClose={() => setIsBulkReceiptOpen(false)}
+          classes={classes}
+          sessions={sessions}
+          initialSessionId={selectedSessionId}
+          initialClassId={selectedClassId}
         />
       )}
     </div>

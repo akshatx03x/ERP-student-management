@@ -304,6 +304,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size must be less than 5MB");
+      return;
+    }
     setImportFile(file);
     await processUploadedFile(file);
   };

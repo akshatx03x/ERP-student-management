@@ -24,6 +24,8 @@ import {
   deactivateStudentOptionalFee,
   reactivateStudentOptionalFee,
   listStudentOptionalFees,
+  getStudentReceiptsForClass,
+  getBulkReceiptsData,
 } from "@/server/services/fee.service";
 import type {
   CreateFeeHeadInput,
@@ -94,8 +96,8 @@ export async function listFeeStructuresAction(sessionId?: string, classId?: stri
   return listFeeStructures(sessionId, classId);
 }
 
-export async function getStudentFeeLedgerAction(studentId: string) {
-  return getStudentFeeLedger(studentId);
+export async function getStudentFeeLedgerAction(studentId: string, sessionId?: string) {
+  return getStudentFeeLedger(studentId, sessionId);
 }
 
 export async function getStudentPortalFeesAction() {
@@ -187,5 +189,13 @@ export async function reactivateStudentOptionalFeeAction(assignmentId: string) {
 
 export async function listStudentOptionalFeesAction(input?: ListStudentOptionalFeesInput) {
   return listStudentOptionalFees(input);
+}
+
+export async function getStudentReceiptsForClassAction(input: { sessionId?: string; classId?: string; sectionId?: string }) {
+  return getStudentReceiptsForClass(input);
+}
+
+export async function getBulkReceiptsDataAction(paymentIds: string[]) {
+  return getBulkReceiptsData(paymentIds);
 }
 

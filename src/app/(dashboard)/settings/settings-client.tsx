@@ -24,6 +24,7 @@ import {
   updateUserCredentialsAction,
 } from "@/server/actions/settings.actions";
 import { uploadDocumentAction } from "@/server/actions/platform.actions";
+import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
 import type { PermissionGroup, PermissionPreset, PermissionKey } from "@/config/permissions";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -309,6 +310,7 @@ export function SettingsClient({
     reportCardFooter: branding.reportCardFooter ?? "",
     logoDocumentId: branding.logoDocumentId ?? "",
   });
+  const [isLogoUploading, setIsLogoUploading] = useState(false);
 
   // ── Staff State ───────────────────────────────────────────────────────────
 
@@ -800,22 +802,25 @@ export function SettingsClient({
             <div className="space-y-2 md:col-span-2 border-t pt-3 mt-1">
               <Label>School Logo</Label>
               <div className="flex flex-wrap items-center gap-4 mt-1">
-                {form.logoDocumentId ? (
-                  <img
-                    src={`/api/documents/${form.logoDocumentId}`}
-                    className="h-16 w-auto object-contain border rounded p-1 bg-stone-50"
-                    alt="School Logo"
-                  />
-                ) : (
-                  <div className="h-16 w-16 bg-stone-100 border border-dashed rounded flex items-center justify-center text-xs text-stone-400">
-                    No Logo
-                  </div>
-                )}
+                <div className="relative shrink-0">
+                  {form.logoDocumentId ? (
+                    <img
+                      src={`/api/documents/${form.logoDocumentId}`}
+                      className="h-16 w-auto object-contain border rounded p-1 bg-stone-50"
+                      alt="School Logo"
+                    />
+                  ) : (
+                    <div className="h-16 w-16 bg-stone-100 border border-dashed rounded flex items-center justify-center text-xs text-stone-400">
+                      No Logo
+                    </div>
+                  )}
+                  {isLogoUploading && <ImageUploadOverlay label="Uploading…" className="rounded" />}
+                </div>
                 <div className="space-y-1">
                   <input
                     type="file"
                     accept="image/*"
-                    disabled={pending}
+                    disabled={pending || isLogoUploading}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
@@ -823,6 +828,7 @@ export function SettingsClient({
                         toast.error("Logo must be less than 5MB");
                         return;
                       }
+                      setIsLogoUploading(true);
                       startTransition(async () => {
                         try {
                           const buffer = await file.arrayBuffer();
@@ -843,8 +849,11 @@ export function SettingsClient({
                           toast.success("Logo uploaded");
                         } catch {
                           toast.error("Failed to upload logo");
+                        } finally {
+                          setIsLogoUploading(false);
                         }
                       });
+                      e.target.value = "";
                     }}
                     className="text-xs"
                   />

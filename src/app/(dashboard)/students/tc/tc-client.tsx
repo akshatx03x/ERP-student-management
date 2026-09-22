@@ -357,7 +357,7 @@ export function TCClient({
                 {resolvedSnapshot.branding?.address || "Miranpur, Uttar Pradesh"}
               </p>
               <p className="text-xs text-stone-500">
-                Affiliated to CBSE | Phone: {resolvedSnapshot.branding?.phone || "—"}
+                Recognized | Phone: {resolvedSnapshot.branding?.phone || "—"}
               </p>
               <div className="mt-3">
                 <span className="bg-stone-900 text-white font-extrabold tracking-widest text-xs px-6 py-1 rounded">
@@ -534,9 +534,9 @@ export function TCClient({
                     {resolvedSnapshot.branding?.address || "Balram Dwar, Karhera, Mohan Nagar, Ghaziabad, Uttar Pradesh"}
                   </p>
                   <p className="text-xs text-stone-500">
-                    Affiliated to CBSE | Phone: {resolvedSnapshot.branding?.phone || "—"}
+                    Recognized | Phone: {resolvedSnapshot.branding?.phone || "—"}
                   </p>
-                  <div className="mt-3">
+                  <div className="mt-3">      
                     <span className="bg-stone-900 text-white font-extrabold tracking-widest text-xs px-6 py-1 rounded">
                       TRANSFER CERTIFICATE
                     </span>

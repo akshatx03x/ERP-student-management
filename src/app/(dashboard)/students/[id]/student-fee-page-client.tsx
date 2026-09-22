@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getReceiptAction } from "@/server/actions/fee.actions";
+import { toast } from "sonner";
 import {
   Edit3, Eye, Users,
-  Receipt, Tag, RotateCcw, AlertCircle, Printer, X
+  Receipt, Tag, RotateCcw, AlertCircle, Printer, X, CheckSquare, Square
 } from "lucide-react";
 import { IdCardPrintButton } from "./id-card-print-button";
 import { IDCardModal } from "@/components/students/id-card-modal";
@@ -16,6 +19,7 @@ import { IDCardModal } from "@/components/students/id-card-modal";
 
 type EnrollmentRow = {
   id: string;
+  sessionId: string;
   sessionName: string;
   className: string;
   sectionName: string;
@@ -82,6 +86,7 @@ export function StudentFeePageClient({
   canDelete,
   userRole,
   branding,
+  selectedSessionId,
 }: {
   student: {
     id: string;
@@ -123,11 +128,18 @@ export function StudentFeePageClient({
   canDelete: boolean;
   userRole: string;
   branding: any;
+  selectedSessionId?: string | null;
 }) {
+  const router = useRouter();
   const [activityTab, setActivityTab] = useState<ActivityTab>("transactions");
   const [receiptSnapshot, setReceiptSnapshot] = useState<any | null>(null);
   const [printLoading, setPrintLoading] = useState<string | null>(null);
   const [isIDCardModalOpen, setIsIDCardModalOpen] = useState(false);
+
+  // Multi-select receipts state for bulk printing
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [bulkPrintLoading, setBulkPrintLoading] = useState(false);
+  const [bulkReceiptSnapshots, setBulkReceiptSnapshots] = useState<any[] | null>(null);
 
   async function handlePrint(paymentId: string) {
     setPrintLoading(paymentId);
@@ -136,6 +148,26 @@ export function StudentFeePageClient({
       setReceiptSnapshot(r.snapshot);
     } finally {
       setPrintLoading(null);
+    }
+  }
+
+  async function handleBulkPrint() {
+    if (selectedPaymentIds.length === 0) return;
+    setBulkPrintLoading(true);
+    try {
+      const results = await Promise.all(
+        selectedPaymentIds.map((id) => getReceiptAction(id))
+      );
+      const snapshots = results.map((r) => r?.snapshot).filter(Boolean);
+      if (snapshots.length === 0) {
+        toast.error("Failed to generate receipt snapshots");
+        return;
+      }
+      setBulkReceiptSnapshots(snapshots);
+    } catch (e) {
+      toast.error("Failed to load receipt details for printing");
+    } finally {
+      setBulkPrintLoading(false);
     }
   }
 
@@ -157,7 +189,7 @@ export function StudentFeePageClient({
     <div className="space-y-4 text-sm">
 
       {/* ── TOPBAR ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Link href="/students" className="text-xs text-stone-500 hover:text-stone-700 font-medium">
             Students
@@ -171,22 +203,49 @@ export function StudentFeePageClient({
             {student.status}
           </Badge>
         </div>
-        {!isStudentSelf && (
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/students/${student.id}/details`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors shadow-xs"
-            >
-              <Eye className="w-3.5 h-3.5" /> View More
-            </Link>
-            <Link
-              href={`/students/${student.id}/edit`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-stone-800 transition-colors shadow-xs"
-            >
-              <Edit3 className="w-3.5 h-3.5" /> Edit Profile
-            </Link>
-          </div>
-        )}
+
+        <div className="flex items-center gap-3">
+          {enrollments.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-stone-100/80 px-2.5 py-1 rounded-lg border border-stone-200">
+              <label className="text-[11px] font-bold text-stone-600">Session:</label>
+              <select
+                value={selectedSessionId ?? (enrollments.find(e => e.status === "ACTIVE")?.sessionId || enrollments[0]?.sessionId || "")}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    router.push(`/students/${student.id}?sessionId=${val}`);
+                  } else {
+                    router.push(`/students/${student.id}`);
+                  }
+                }}
+                className="h-7 text-xs font-black bg-white border border-stone-300 rounded px-2 text-stone-900 shadow-xs focus:ring-2 focus:ring-stone-900 focus:outline-none"
+              >
+                {enrollments.map((enr) => (
+                  <option key={enr.sessionId || enr.id} value={enr.sessionId}>
+                    {enr.sessionName} ({enr.className}-{enr.sectionName})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!isStudentSelf && (
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/students/${student.id}/details`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors shadow-xs"
+              >
+                <Eye className="w-3.5 h-3.5" /> View More
+              </Link>
+              <Link
+                href={`/students/${student.id}/edit`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-stone-800 transition-colors shadow-xs"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Edit Profile
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── UPPER: 2-COL GRID ── */}
@@ -277,27 +336,95 @@ export function StudentFeePageClient({
                 paymentHistory.length === 0 ? (
                   <EmptyState label="No payment transactions recorded." />
                 ) : (
-                  <ActivityTable
-                    headers={["Rec No.", "Date", "Amount", "Mode", ...(!isStudentSelf ? ["Collected By"] : []), ""]}
-                    rows={paymentHistory.map((p) => [
-                      <span key="r" className="font-mono font-bold text-stone-700">{p.receiptNo}</span>,
-                      <span key="d" className="text-stone-500">{p.paidAt}</span>,
-                      <span key="a" className="font-bold text-stone-900">{p.allocatedToStudent}</span>,
-                      <span key="m" className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">{p.method}</span>,
-                      ...(!isStudentSelf ? [<span key="collector" className="text-stone-500 truncate" title={p.recordedBy ?? undefined}>{p.recordedBy ?? "—"}</span>] : []),
-                      <button
-                        key="print"
-                        onClick={() => handlePrint(p.id)}
-                        disabled={printLoading === p.id}
-                        title="Print receipt"
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors disabled:opacity-40"
-                      >
-                        {printLoading === p.id
-                          ? <span className="w-3 h-3 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" />
-                          : <Printer className="w-3.5 h-3.5" />}
-                      </button>,
-                    ])}
-                  />
+                  <div className="space-y-2">
+                    {/* Bulk Actions Bar */}
+                    {selectedPaymentIds.length > 0 && (
+                      <div className="flex items-center justify-between bg-stone-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-sm animate-in fade-in">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-amber-300">{selectedPaymentIds.length}</span>
+                          <span className="text-stone-300 text-[11px]">{selectedPaymentIds.length === 1 ? "receipt selected" : "receipts selected"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleBulkPrint}
+                            disabled={bulkPrintLoading}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-stone-950 rounded text-[11px] font-extrabold transition-colors disabled:opacity-50"
+                          >
+                            {bulkPrintLoading ? (
+                              <span className="w-3 h-3 border-2 border-stone-950 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Printer className="w-3 h-3" />
+                            )}
+                            Print Selected ({selectedPaymentIds.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPaymentIds([])}
+                            className="text-stone-400 hover:text-white text-[11px] font-semibold underline px-1"
+                          >
+                            Deselect
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <ActivityTable
+                      headers={[
+                        <input
+                          key="select-all"
+                          type="checkbox"
+                          checked={paymentHistory.length > 0 && selectedPaymentIds.length === paymentHistory.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPaymentIds(paymentHistory.map((p) => p.id));
+                            } else {
+                              setSelectedPaymentIds([]);
+                            }
+                          }}
+                          className="rounded border-stone-300 text-stone-900 focus:ring-stone-900 h-3.5 w-3.5 cursor-pointer"
+                          title="Select all receipts"
+                        />,
+                        "Rec No.",
+                        "Date",
+                        "Amount",
+                        "Mode",
+                        ...(!isStudentSelf ? ["Collected By"] : []),
+                        ""
+                      ]}
+                      rows={paymentHistory.map((p) => [
+                        <input
+                          key="chk"
+                          type="checkbox"
+                          checked={selectedPaymentIds.includes(p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPaymentIds((prev) => [...prev, p.id]);
+                            } else {
+                              setSelectedPaymentIds((prev) => prev.filter((id) => id !== p.id));
+                            }
+                          }}
+                          className="rounded border-stone-300 text-stone-900 focus:ring-stone-900 h-3.5 w-3.5 cursor-pointer"
+                        />,
+                        <span key="r" className="font-mono font-bold text-stone-700">{p.receiptNo}</span>,
+                        <span key="d" className="text-stone-500">{p.paidAt}</span>,
+                        <span key="a" className="font-bold text-stone-900">{p.allocatedToStudent}</span>,
+                        <span key="m" className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">{p.method}</span>,
+                        ...(!isStudentSelf ? [<span key="collector" className="text-stone-500 truncate" title={p.recordedBy ?? undefined}>{p.recordedBy ?? "—"}</span>] : []),
+                        <button
+                          key="print"
+                          onClick={() => handlePrint(p.id)}
+                          disabled={printLoading === p.id}
+                          title="Print receipt"
+                          className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors disabled:opacity-40"
+                        >
+                          {printLoading === p.id
+                            ? <span className="w-3 h-3 border-2 border-stone-400 border-t-transparent rounded-full animate-spin" />
+                            : <Printer className="w-3.5 h-3.5" />}
+                        </button>,
+                      ])}
+                    />
+                  </div>
                 )
               )}
             </div>
@@ -438,6 +565,78 @@ export function StudentFeePageClient({
               {receiptSnapshot.branding?.receiptFooter && (
                 <p className="text-center text-[10px] text-stone-400 border-t border-stone-100 pt-2">{receiptSnapshot.branding.receiptFooter}</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BULK RECEIPT PREVIEW MODAL ── */}
+      {bulkReceiptSnapshots && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setBulkReceiptSnapshots(null)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4 print:hidden">
+              <div>
+                <h3 className="text-sm font-black text-stone-900">Selected Fee Receipts ({bulkReceiptSnapshots.length})</h3>
+                <p className="text-[11px] text-stone-500">Receipts for {student.fullName}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-stone-900 text-white rounded-lg text-xs font-bold hover:bg-stone-800 transition-colors shadow-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print All ({bulkReceiptSnapshots.length})
+                </button>
+                <button type="button" onClick={() => setBulkReceiptSnapshots(null)} className="text-stone-400 hover:text-stone-700 transition-colors p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {bulkReceiptSnapshots.map((snap: any, index: number) => (
+                <div
+                  key={snap.receiptNo || index}
+                  className="border border-stone-200 rounded-xl p-5 text-xs space-y-4 print:border-stone-400"
+                  style={{ pageBreakAfter: "always", breakAfter: "page" }}
+                >
+                  <div className="text-center border-b border-stone-100 pb-3">
+                    <h2 className="text-base font-black uppercase">{snap.branding?.schoolName || "School"}</h2>
+                    {snap.branding?.address && <p className="text-stone-500 text-[11px] mt-0.5">{snap.branding.address}</p>}
+                    <div className="mt-2 inline-block bg-stone-100 rounded-full px-3 py-0.5 text-[10px] font-bold uppercase">Fee Receipt</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-700">
+                    <p><span className="font-bold">Receipt No:</span> {snap.receiptNo}</p>
+                    <p className="text-right"><span className="font-bold">Date:</span> {formatDate(snap.paidAt)}</p>
+                    <p><span className="font-bold">Mode:</span> {snap.method}</p>
+                  </div>
+                  <table className="w-full border-collapse border-y border-stone-200">
+                    <thead>
+                      <tr className="bg-stone-100 text-[10px] font-bold uppercase text-stone-700">
+                        <th className="py-2 px-2 text-left">Student</th>
+                        <th className="py-2 px-2 text-left">Fee Head</th>
+                        <th className="py-2 px-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {(snap.allocations || []).map((a: any, idx: number) => (
+                        <tr key={idx}>
+                          <td className="py-2 px-2 font-bold">{a.studentName}</td>
+                          <td className="py-2 px-2 text-stone-600">{a.feeHead}</td>
+                          <td className="py-2 px-2 text-right font-mono font-bold">{formatCurrency(a.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="text-[11px] text-stone-500">Total Paid</span>
+                    <span className="font-black text-stone-900 text-sm">{formatCurrency(snap.amount)}</span>
+                  </div>
+                  {snap.branding?.receiptFooter && (
+                    <p className="text-center text-[10px] text-stone-400 border-t border-stone-100 pt-2">{snap.branding.receiptFooter}</p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -698,7 +897,7 @@ function ActivityTable({
   headers,
   rows,
 }: {
-  headers: string[];
+  headers: (string | React.ReactNode)[];
   rows: React.ReactNode[][];
 }) {
   return (
@@ -706,8 +905,8 @@ function ActivityTable({
       <table className="w-full text-xs text-left">
         <thead className="bg-stone-50 border-b border-stone-200">
           <tr>
-            {headers.map((h) => (
-              <th key={h} className="py-2 px-3 font-black uppercase text-[9px] text-stone-500 tracking-wider">{h}</th>
+            {headers.map((h, idx) => (
+              <th key={idx} className="py-2 px-3 font-black uppercase text-[9px] text-stone-500 tracking-wider">{h}</th>
             ))}
           </tr>
         </thead>

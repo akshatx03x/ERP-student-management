@@ -13,6 +13,7 @@ import { findFamilyByPhoneAction } from "@/server/actions/family.actions";
 import type { UpdateStudentInput } from "@/server/validators/student.validator";
 
 import { toDateInputValue, parseDateInput } from "@/lib/utils";
+import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
 
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
 
@@ -53,6 +54,7 @@ export function EditStudentForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
   const [siblings, setSiblings] = useState<any[]>(student.siblings ?? []);
   const [unlinkFamily, setUnlinkFamily] = useState(false);
@@ -174,27 +176,35 @@ export function EditStudentForm({
               <span>Photo</span>
             </div>
           )}
+          {isPhotoLoading && <ImageUploadOverlay label="Loading…" />}
         </div>
         <div className="space-y-1 text-center sm:text-left">
           <Label className="text-sm font-semibold">Student Profile Picture</Label>
-          <p className="text-xs text-muted-foreground">Upload passport size photo (JPG, PNG or WEBP, max 3MB).</p>
+          <p className="text-xs text-muted-foreground">Upload passport size photo (JPG, PNG or WEBP, max 5MB).</p>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Input
               type="file"
               accept="image/*"
+              disabled={isPhotoLoading}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                  if (file.size > 3 * 1024 * 1024) {
-                    alert("Please select an image smaller than 3MB.");
+                  if (file.size > 5 * 1024 * 1024) {
+                    alert("Please select an image smaller than 5MB.");
                     return;
                   }
+                  setIsPhotoLoading(true);
                   const reader = new FileReader();
                   reader.onloadend = () => {
                     setForm(prev => ({ ...prev, photoUrl: reader.result as string }));
+                    setIsPhotoLoading(false);
+                  };
+                  reader.onerror = () => {
+                    setIsPhotoLoading(false);
                   };
                   reader.readAsDataURL(file);
                 }
+                e.target.value = "";
               }}
               className="w-auto h-8 text-xs cursor-pointer"
             />

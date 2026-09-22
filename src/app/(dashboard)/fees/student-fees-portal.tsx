@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getReceiptAction } from "@/server/actions/fee.actions";
+import { FeeReceiptPrintable } from "@/components/fees/fee-receipt-printable";
 
 type PortalData = {
   currentClass: {
@@ -212,8 +213,19 @@ export function StudentFeesPortal({ data }: { data: PortalData }) {
       ) : null}
 
       {receipt ? (
-        <div className="print-only rounded border bg-white p-6 text-black">
-          <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(receipt, null, 2)}</pre>
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative">
+            <div className="flex items-center justify-between border-b pb-3 mb-2 no-print">
+              <h3 className="text-sm font-bold text-stone-900">Official Fee Receipt Preview</h3>
+              <button
+                onClick={() => setReceipt(null)}
+                className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <FeeReceiptPrintable data={receipt as any} />
+          </div>
         </div>
       ) : null}
     </div>

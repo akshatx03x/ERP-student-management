@@ -20,6 +20,8 @@ import {
   reconcileFamilyAdvanceAction,
 } from "@/server/actions/wallet.actions";
 import { getStudentFinancialProfileAction } from "@/server/actions/financial-profile.actions";
+import { FeeReceiptPrintable } from "@/components/fees/fee-receipt-printable";
+import Link from "next/link";
 import {
   Search,
   CreditCard,
@@ -40,6 +42,7 @@ import {
   Trash2,
   PenLine,
   Check,
+  ArrowLeft,
 } from "lucide-react";
 
 type StudentItem = {
@@ -61,11 +64,13 @@ export function FeeCollectionClient({
   sessions,
   currentSessionId,
   initialStudentId,
+  returnTo,
 }: {
   students: StudentItem[];
   sessions: Session[];
   currentSessionId: string | null;
   initialStudentId?: string | null;
+  returnTo?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [studentSearch, setStudentSearch] = useState("");
@@ -456,9 +461,23 @@ export function FeeCollectionClient({
   );
 
   return (
-    <div className="max-w-[1550px] mx-auto bg-stone-50 rounded-2xl border border-stone-200 shadow-md overflow-hidden grid grid-cols-[420px_1fr] h-[calc(100vh-170px)] text-sm">
-      
-      {/* LEFT COLUMN: STUDENT DETAIL & PAYMENT ACTION DRAWER */}
+    <div className="flex flex-col gap-3">
+      {returnTo && (
+        <div className="bg-indigo-50/90 border border-indigo-200/80 rounded-xl px-4 py-3 flex items-center justify-between text-xs shadow-xs">
+          <Link
+            href={returnTo}
+            className="inline-flex items-center gap-2 font-bold text-indigo-700 hover:text-indigo-900 transition-colors bg-white px-3 py-1.5 rounded-lg border border-indigo-200 shadow-2xs hover:bg-indigo-50"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Pending Dues Report
+          </Link>
+          <span className="text-stone-500 font-medium hidden sm:inline">
+            Direct Cashier Workstation Access
+          </span>
+        </div>
+      )}
+      <div className="max-w-[1550px] w-full mx-auto bg-stone-50 rounded-2xl border border-stone-200 shadow-md overflow-hidden grid grid-cols-[420px_1fr] h-[calc(100vh-185px)] text-sm">
+        
+        {/* LEFT COLUMN: STUDENT DETAIL & PAYMENT ACTION DRAWER */}
       <div className="bg-white border-r border-stone-200 flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-stone-200 bg-white z-20">
           <Label className="text-xs font-bold text-stone-500 uppercase tracking-widest block mb-2">Student Search</Label>
@@ -1261,44 +1280,22 @@ export function FeeCollectionClient({
 
       {/* RECEIPT PREVIEW */}
       {receiptSnapshot && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl max-h-[95vh] overflow-y-auto space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-sm font-bold text-stone-900">Official Fee Receipt</h3>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => window.print()} className="bg-stone-900 text-white h-7 text-xs"><Printer className="w-3.5 h-3.5 mr-1" /> Print</Button>
-                <button onClick={() => setReceiptSnapshot(null)}><X className="w-5 h-5 text-stone-400" /></button>
-              </div>
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-4 shadow-2xl max-h-[95vh] overflow-y-auto relative">
+            <div className="flex items-center justify-between border-b pb-3 mb-2 no-print">
+              <h3 className="text-sm font-bold text-stone-900">Official Fee Receipt Preview</h3>
+              <button
+                onClick={() => setReceiptSnapshot(null)}
+                className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="border border-stone-300 rounded-xl p-6 text-xs space-y-4">
-              <div className="text-center border-b pb-3">
-                <h2 className="text-lg font-black uppercase">{receiptSnapshot.branding?.schoolName || "Vidyanjali Public School"}</h2>
-                {receiptSnapshot.branding?.address && <p className="text-stone-500 text-[11px]">{receiptSnapshot.branding.address}</p>}
-                <div className="mt-2 inline-block bg-stone-100 rounded-full px-3 py-0.5 text-[10px] font-bold uppercase">FEE RECEIPT</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-700">
-                <p><span className="font-bold">Receipt No:</span> {receiptSnapshot.receiptNo}</p>
-                <p className="text-right"><span className="font-bold">Date:</span> {formatDate(receiptSnapshot.paidAt)}</p>
-                <p><span className="font-bold">Mode:</span> {receiptSnapshot.method}</p>
-              </div>
-              <table className="w-full border-collapse border-y border-stone-200">
-                <thead><tr className="bg-stone-100 text-[10px] font-bold uppercase text-stone-700">
-                  <th className="py-2 px-2">Student</th><th className="py-2 px-2">Fee Head</th><th className="py-2 px-2 text-right">Amount</th>
-                </tr></thead>
-                <tbody className="divide-y divide-stone-100">
-                  {(receiptSnapshot.allocations || []).map((a: any, idx: number) => (
-                    <tr key={idx}><td className="py-2 px-2 font-bold">{a.studentName}</td><td className="py-2 px-2">{a.feeHead}</td>
-                      <td className="py-2 px-2 text-right font-mono font-bold">{formatCurrency(a.amount)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-between font-bold text-sm pt-1">
-                <span>Total Amount Paid:</span><span className="font-mono text-base">{receiptSnapshot.amountFormatted || formatCurrency(receiptSnapshot.amount)}</span>
-              </div>
-            </div>
+            <FeeReceiptPrintable data={receiptSnapshot} />
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

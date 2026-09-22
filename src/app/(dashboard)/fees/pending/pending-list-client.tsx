@@ -16,6 +16,7 @@ import {
   AlertCircle,
   ExternalLink,
   BookOpen,
+  CreditCard,
 } from "lucide-react";
 import { getClasswisePendingListAction } from "@/server/actions/financial-reports.actions";
 import Link from "next/link";
@@ -302,7 +303,7 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
                   "MARCH",
                 ].map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {m.charAt(0) + m.slice(1).toLowerCase()}
                   </option>
                 ))}
               </Select>
@@ -330,7 +331,7 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
                   "MARCH",
                 ].map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {m.charAt(0) + m.slice(1).toLowerCase()}
                   </option>
                 ))}
               </Select>
@@ -491,10 +492,10 @@ export function PendingListClient({ metaData }: { metaData: MetaData }) {
                         </td>
                         <td className="p-3 text-right">
                           <Link
-                            href={`/students/${row.studentId}`}
-                            className="text-xs text-indigo-600 hover:text-indigo-850 font-bold flex items-center justify-end gap-1"
+                            href={`/fees?student=${row.studentId}&returnTo=/fees/pending`}
+                            className="text-xs text-indigo-600 hover:text-indigo-850 font-bold inline-flex items-center gap-1.5 hover:underline bg-indigo-50/70 hover:bg-indigo-100/70 px-2.5 py-1 rounded-md transition-colors"
                           >
-                            Profile <ExternalLink className="w-3 h-3" />
+                            <CreditCard className="w-3.5 h-3.5" /> Collect Fee
                           </Link>
                         </td>
                       </tr>

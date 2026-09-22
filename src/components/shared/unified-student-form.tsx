@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
 
 export type GuardianItem = {
   id: string;
@@ -146,6 +147,7 @@ export function UnifiedStudentForm({
   onSearchFamily?: (phone: string) => Promise<void>;
 }) {
   const [pending, startTransition] = useTransition();
+  const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
   const [form, setForm] = useState<UnifiedFormState>(() => ({
     applicantName: "",
@@ -275,27 +277,35 @@ export function UnifiedStudentForm({
                   <span>Photo</span>
                 </div>
               )}
+              {isPhotoLoading && <ImageUploadOverlay label="Loading…" />}
             </div>
             <div className="space-y-1 text-center sm:text-left">
               <Label className="text-sm font-semibold">Student Profile Picture</Label>
-              <p className="text-xs text-muted-foreground">Upload passport size photo (JPG, PNG or WEBP, max 3MB).</p>
+              <p className="text-xs text-muted-foreground">Upload passport size photo (JPG, PNG or WEBP, max 5MB).</p>
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Input
                   type="file"
                   accept="image/*"
+                  disabled={isPhotoLoading}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      if (file.size > 3 * 1024 * 1024) {
-                        alert("Please select an image smaller than 3MB.");
+                      if (file.size > 5 * 1024 * 1024) {
+                        alert("Please select an image smaller than 5MB.");
                         return;
                       }
+                      setIsPhotoLoading(true);
                       const reader = new FileReader();
                       reader.onloadend = () => {
                         handleChange("photoUrl", reader.result as string);
+                        setIsPhotoLoading(false);
+                      };
+                      reader.onerror = () => {
+                        setIsPhotoLoading(false);
                       };
                       reader.readAsDataURL(file);
                     }
+                    e.target.value = "";
                   }}
                   className="w-auto h-8 text-xs cursor-pointer"
                 />

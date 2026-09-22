@@ -183,6 +183,29 @@ export async function generateReceiptNoInTx(
   return `${prefix}-${String(seqValue).padStart(5, "0")}`;
 }
 
+export async function generateReceiptNumberInTx(
+  tx: Prisma.TransactionClient,
+  schoolId: string,
+): Promise<number> {
+  const counterId = `receipt_human_no:${schoolId}`;
+  const existingCounter = await tx.systemCounter.findUnique({ where: { id: counterId } });
+
+  if (!existingCounter) {
+    const maxPayment = await tx.familyPayment.findFirst({
+      where: { schoolId },
+      orderBy: { receiptNumber: "desc" },
+      select: { receiptNumber: true },
+    });
+    const startVal = Math.max(10000, maxPayment?.receiptNumber ?? 10000);
+    await tx.systemCounter.create({
+      data: { id: counterId, value: startVal },
+    });
+  }
+
+  const seqValue = await getNextSequenceValue(tx, counterId);
+  return seqValue;
+}
+
 /** Find the single fee structure for a class in a session. */
 export async function findFeeStructureForClass(
   tx: Prisma.TransactionClient | typeof prisma,
@@ -1318,7 +1341,7 @@ export async function listStudentFees(input?: {
 }
 
 /** Student fee ledger: total / paid / remaining + structure lines + payment history. */
-export async function getStudentFeeLedger(studentId: string) {
+export async function getStudentFeeLedger(studentId: string, requestedSessionId?: string) {
   const { user } = await requirePermission("fee.view");
   const schoolId = schoolIdFromUser(user);
 
@@ -1336,14 +1359,16 @@ export async function getStudentFeeLedger(studentId: string) {
       enrollments: {
         include: { class: true, section: true, session: true },
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
     },
   });
   if (!student) throw new Error("Student not found");
 
-  const enrollment = student.enrollments[0] ?? null;
-  const sessionId = enrollment?.sessionId;
+  const enrollment = requestedSessionId
+    ? student.enrollments.find((e) => e.sessionId === requestedSessionId) ?? student.enrollments[0]
+    : student.enrollments[0] ?? null;
+
+  const sessionId = requestedSessionId || enrollment?.sessionId;
 
   // Auto-sync ledger check: ensure student's ledger contains class structure & active optional fees
   if (enrollment && sessionId) {
@@ -1377,7 +1402,10 @@ export async function getStudentFeeLedger(studentId: string) {
       orderBy: [{ feeHead: { name: "asc" } }],
     }),
     prisma.feePaymentAllocation.findMany({
-      where: { studentId },
+      where: {
+        studentId,
+        ...(sessionId ? { studentFee: { sessionId } } : {}),
+      },
       include: {
         payment: {
           select: {
@@ -1882,6 +1910,8 @@ export async function recordFamilyPaymentInTx(
   const branding = await getBrandingBySchoolId(opts.schoolId, tx);
 
   const receiptNo = await generateReceiptNoInTx(tx, opts.schoolId);
+  const receiptNumber = await generateReceiptNumberInTx(tx, opts.schoolId);
+
   const expanded: Array<{
     studentId: string;
     studentFeeId: string | null;
@@ -1905,12 +1935,14 @@ export async function recordFamilyPaymentInTx(
 
   const payment = await tx.familyPayment.create({
     data: {
+      schoolId: opts.schoolId,
       familyId: opts.familyId,
       amount: paymentAmount,
       method: opts.method,
       referenceNo: opts.referenceNo,
       paidAt: opts.paidAt ?? new Date(),
       receiptNo,
+      receiptNumber,
       notes: opts.notes,
       recordedById: opts.userId ?? null,
       allocations: {
@@ -1925,7 +1957,15 @@ export async function recordFamilyPaymentInTx(
       family: true,
       allocations: {
         include: {
-          student: true,
+          student: {
+            include: {
+              enrollments: {
+                include: { class: true, section: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+          },
           studentFee: { include: { feeHead: true } },
         },
       },
@@ -1993,6 +2033,7 @@ export async function recordFamilyPaymentInTx(
 
   const snapshot = {
     receiptNo: payment.receiptNo,
+    receiptNumber: payment.receiptNumber,
     paidAt: payment.paidAt.toISOString(),
     amount: decimalToNumber(payment.amount),
     amountFormatted: formatCurrency(decimalToNumber(payment.amount)),
@@ -2017,7 +2058,13 @@ export async function recordFamilyPaymentInTx(
     allocations: payment.allocations.map((a) => ({
       studentName: a.student.fullName,
       admissionNo: a.student.admissionNo,
+      fatherName: payment.family.fatherName,
+      className: a.student.enrollments?.[0]
+        ? `${a.student.enrollments[0].class.name}-${a.student.enrollments[0].section.name}`
+        : "—",
       feeHead: a.studentFee?.feeHead.name ?? "General",
+      month: a.studentFee?.month ?? null,
+      dueYear: a.studentFee?.dueYear ?? null,
       amount: decimalToNumber(a.amount),
       amountFormatted: formatCurrency(decimalToNumber(a.amount)),
     })),
@@ -2070,7 +2117,20 @@ export async function getPaymentReceipt(paymentId: string) {
     include: {
       receipt: true,
       family: true,
-      allocations: { include: { student: true } },
+      allocations: {
+        include: {
+          student: {
+            include: {
+              enrollments: {
+                include: { class: true, section: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+          },
+          studentFee: { include: { feeHead: true } },
+        },
+      },
     },
   });
   if (!payment) throw new Error("Payment not found");
@@ -2084,24 +2144,66 @@ export async function getPaymentReceipt(paymentId: string) {
     if (!me || me.familyId !== payment.familyId) throw new Error("FORBIDDEN");
   }
 
+  const branding = await getBrandingBySchoolId(schoolId);
+
   if (payment.receipt) {
+    const snap = (payment.receipt.snapshot as Record<string, any>) || {};
+    const updatedSnap = {
+      ...snap,
+      receiptNumber: snap.receiptNumber ?? payment.receiptNumber,
+      branding: snap.branding || {
+        schoolName: branding.schoolName,
+        address: branding.address,
+        phone: branding.phone,
+        email: branding.email,
+        receiptFooter: branding.receiptFooter,
+        logoDocumentId: branding.logoDocumentId,
+      },
+    };
+
     if (user.role === Role.STUDENT) {
-      const snap = payment.receipt.snapshot as Record<string, unknown>;
-      const safe = { ...snap };
-      delete safe.family;
-      delete safe.recordedBy;
-      return { ...payment.receipt, snapshot: safe };
+      delete (updatedSnap as any).family;
+      delete (updatedSnap as any).recordedBy;
     }
-    return payment.receipt;
+    return { ...payment.receipt, snapshot: updatedSnap };
   }
 
-  const branding = await getBrandingBySchoolId(schoolId);
   const snapshot = {
     receiptNo: payment.receiptNo,
-    paidAt: formatDate(payment.paidAt),
+    receiptNumber: payment.receiptNumber,
+    paidAt: payment.paidAt.toISOString(),
+    amount: decimalToNumber(payment.amount),
     amountFormatted: formatCurrency(decimalToNumber(payment.amount)),
-    branding,
-    family: user.role === Role.STUDENT ? undefined : payment.family,
+    method: payment.method,
+    referenceNo: payment.referenceNo,
+    notes: payment.notes,
+    family: user.role === Role.STUDENT ? undefined : {
+      id: payment.family.id,
+      fatherName: payment.family.fatherName,
+      motherName: payment.family.motherName,
+      primaryPhone: payment.family.primaryPhone,
+    },
+    branding: {
+      schoolName: branding.schoolName,
+      address: branding.address,
+      phone: branding.phone,
+      email: branding.email,
+      receiptFooter: branding.receiptFooter,
+      logoDocumentId: branding.logoDocumentId,
+    },
+    allocations: payment.allocations.map((a) => ({
+      studentName: a.student.fullName,
+      admissionNo: a.student.admissionNo,
+      fatherName: payment.family.fatherName,
+      className: a.student.enrollments?.[0]
+        ? `${a.student.enrollments[0].class.name}-${a.student.enrollments[0].section.name}`
+        : "—",
+      feeHead: a.studentFee?.feeHead.name ?? "General",
+      month: a.studentFee?.month ?? null,
+      dueYear: a.studentFee?.dueYear ?? null,
+      amount: decimalToNumber(a.amount),
+      amountFormatted: formatCurrency(decimalToNumber(a.amount)),
+    })),
   };
 
   return { paymentId: payment.id, snapshot, generatedAt: payment.createdAt };
@@ -2509,6 +2611,186 @@ export async function listStudentOptionalFees(input?: ListStudentOptionalFeesInp
       student: i.student,
       feeHead: i.feeHead,
       session: i.session,
+    };
+  });
+}
+
+export async function getBulkReceiptsData(paymentIds: string[]) {
+  const { user } = await requirePermission("payment.view");
+  const schoolId = schoolIdFromUser(user);
+
+  const payments = await prisma.familyPayment.findMany({
+    where: {
+      id: { in: paymentIds },
+      family: { schoolId },
+    },
+    include: {
+      receipt: true,
+      family: true,
+      allocations: {
+        include: {
+          student: {
+            include: {
+              enrollments: {
+                include: { class: true, section: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+          },
+          studentFee: { include: { feeHead: true } },
+        },
+      },
+    },
+    orderBy: { paidAt: "desc" },
+  });
+
+  const branding = await getBrandingBySchoolId(schoolId);
+
+  const items = payments.map((payment) => {
+    if (payment.receipt) {
+      const snap = (payment.receipt.snapshot as Record<string, any>) || {};
+      return {
+        paymentId: payment.id,
+        snapshot: {
+          ...snap,
+          receiptNumber: snap.receiptNumber ?? payment.receiptNumber,
+          branding: snap.branding || branding,
+        },
+      };
+    }
+
+    const snapshot = {
+      receiptNo: payment.receiptNo,
+      receiptNumber: payment.receiptNumber,
+      paidAt: payment.paidAt.toISOString(),
+      amount: decimalToNumber(payment.amount),
+      amountFormatted: formatCurrency(decimalToNumber(payment.amount)),
+      method: payment.method,
+      referenceNo: payment.referenceNo,
+      notes: payment.notes,
+      family: {
+        id: payment.family.id,
+        fatherName: payment.family.fatherName,
+        motherName: payment.family.motherName,
+        primaryPhone: payment.family.primaryPhone,
+      },
+      branding: {
+        schoolName: branding.schoolName,
+        address: branding.address,
+        phone: branding.phone,
+        email: branding.email,
+        receiptFooter: branding.receiptFooter,
+        logoDocumentId: branding.logoDocumentId,
+      },
+      allocations: payment.allocations.map((a) => ({
+        studentName: a.student.fullName,
+        admissionNo: a.student.admissionNo,
+        fatherName: payment.family.fatherName,
+        className: a.student.enrollments?.[0]
+          ? `${a.student.enrollments[0].class.name}-${a.student.enrollments[0].section.name}`
+          : "—",
+        feeHead: a.studentFee?.feeHead.name ?? "General",
+        month: a.studentFee?.month ?? null,
+        dueYear: a.studentFee?.dueYear ?? null,
+        amount: decimalToNumber(a.amount),
+        amountFormatted: formatCurrency(decimalToNumber(a.amount)),
+      })),
+    };
+
+    return { paymentId: payment.id, snapshot };
+  });
+
+  return { branding, receipts: items };
+}
+
+export async function getStudentReceiptsForClass(input: {
+  sessionId?: string;
+  classId?: string;
+  sectionId?: string;
+}) {
+  const { user } = await requirePermission("payment.view");
+  const schoolId = schoolIdFromUser(user);
+
+  const students = await prisma.student.findMany({
+    where: {
+      schoolId,
+      status: "ACTIVE",
+      enrollments: {
+        some: {
+          ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+          ...(input.classId && input.classId !== "ALL" ? { classId: input.classId } : {}),
+          ...(input.sectionId ? { sectionId: input.sectionId } : {}),
+        },
+      },
+    },
+    select: {
+      id: true,
+      fullName: true,
+      admissionNo: true,
+      family: {
+        select: {
+          fatherName: true,
+          payments: {
+            include: {
+              allocations: {
+                include: {
+                  studentFee: { include: { feeHead: true } },
+                },
+              },
+            },
+            orderBy: { paidAt: "desc" },
+          },
+        },
+      },
+      enrollments: {
+        include: { class: true, section: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { fullName: "asc" },
+  });
+
+  return students.map((s) => {
+    const classLabel = s.enrollments[0]
+      ? `${s.enrollments[0].class.name}-${s.enrollments[0].section.name}`
+      : "—";
+
+    const payments = (s.family?.payments || [])
+      .filter((p) => p.allocations.some((a) => a.studentId === s.id))
+      .map((p) => {
+        const studentAllocations = p.allocations.filter((a) => a.studentId === s.id);
+        const monthsSet = new Set<string>();
+        for (const a of studentAllocations) {
+          if (a.studentFee?.month) {
+            monthsSet.add(a.studentFee.month);
+          }
+        }
+        const totalAllocated = studentAllocations.reduce(
+          (sum, a) => sum + decimalToNumber(a.amount),
+          0
+        );
+
+        return {
+          paymentId: p.id,
+          receiptNo: p.receiptNo,
+          receiptNumber: p.receiptNumber,
+          paidAt: p.paidAt,
+          amount: decimalToNumber(p.amount),
+          allocatedAmount: totalAllocated,
+          method: p.method,
+          months: Array.from(monthsSet),
+        };
+      });
+
+    return {
+      studentId: s.id,
+      fullName: s.fullName,
+      admissionNo: s.admissionNo,
+      fatherName: s.family?.fatherName || "—",
+      classLabel,
+      payments,
     };
   });
 }
