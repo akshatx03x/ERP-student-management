@@ -235,15 +235,15 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
     let filename = "report.csv";
 
     if (activeTab === "receipt" && receiptData?.items) {
-      header = "Date,Receipt No,Method,Student(s),Class,Amount,Status,Collected By\n";
+      header = "Date,Receipt No,Method,Student(s),Class,Parent,Amount,Status,Remarks,Collected By\n";
       body = receiptData.items.map((r: any) =>
-        `"${formatDate(r.paidAt)}","${r.receiptNo}","${r.method}","${r.students.map((s: any) => s.name).join("; ")}","${r.students[0]?.classSection ?? ""}",${r.amount},"${r.status}","${r.recordedBy?.name ?? ""}"`
+        `"${formatDate(r.paidAt)}","${r.receiptNo}","${r.method}","${r.students.map((s: any) => s.name).join("; ")}","${r.students[0]?.classSection ?? ""}","${r.family?.fatherName ?? ""}",${r.amount},"${r.status}","${(r.notes ?? "").replace(/"/g, '""')}","${r.recordedBy?.name ?? ""}"`
       ).join("\n");
       filename = "receipt-register.csv";
     } else if (activeTab === "cashbook" && cashBookData?.items) {
-      header = "Date,Voucher No,Type,Description,Credit,Debit,Recorded By\n";
+      header = "Date,Voucher No,Type,Description,Remarks,Credit,Debit,Recorded By\n";
       body = cashBookData.items.map((r: any) =>
-        `"${formatDate(r.date)}","${r.voucherNo ?? ""}","${r.transactionType}","${r.description}",${r.credit},${r.debit},"${r.recordedBy ?? ""}"`
+        `"${formatDate(r.date)}","${r.voucherNo ?? ""}","${r.transactionType}","${(r.description ?? "").replace(/"/g, '""')}","${(r.remarks ?? "").replace(/"/g, '""')}",${r.credit},${r.debit},"${r.recordedBy ?? ""}"`
       ).join("\n");
       filename = "cash-book.csv";
     } else if (activeTab === "discount" && discountData?.items) {
@@ -530,14 +530,15 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
                   <th className="py-3 px-4">Parent</th>
                   <th className="py-3 px-4 text-right">Amount</th>
                   <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Remarks</th>
                   <th className="py-3 px-4">Collected By</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {!receiptData ? (
-                  <tr><td colSpan={9} className="p-8 text-center text-stone-400">Loading…</td></tr>
+                  <tr><td colSpan={10} className="p-8 text-center text-stone-400">Loading…</td></tr>
                 ) : receiptData.items.length === 0 ? (
-                  <tr><td colSpan={9} className="p-8 text-center text-stone-400">No receipts found</td></tr>
+                  <tr><td colSpan={10} className="p-8 text-center text-stone-400">No receipts found</td></tr>
                 ) : (
                   receiptData.items.map((r: any) => (
                     <tr key={r.id} className="hover:bg-stone-50/40">
@@ -555,6 +556,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
                       <td className="py-2.5 px-4 text-stone-600 truncate max-w-[130px]" title={r.family?.fatherName}>{r.family?.fatherName ?? "—"}</td>
                       <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-700">{formatCurrency(r.amount)}</td>
                       <td className="py-2.5 px-4"><StatusBadge status={r.status} /></td>
+                      <td className="py-2.5 px-4 text-stone-600 max-w-[150px] truncate" title={r.notes ?? "—"}>{r.notes || "—"}</td>
                       <td className="py-2.5 px-4 text-stone-500">{r.recordedBy?.name ?? "—"}</td>
                     </tr>
                   ))
@@ -600,7 +602,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-stone-700 max-w-[180px] truncate" title={r.description}>{r.description}</td>
-                      <td className="py-2.5 px-4 text-stone-400 max-w-[120px] truncate">{r.remarks ?? "—"}</td>
+                      <td className="py-2.5 px-4 text-stone-600 max-w-[150px] truncate" title={r.remarks ?? "—"}>{r.remarks ?? "—"}</td>
                       <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-700">
                         {r.credit > 0 ? formatCurrency(r.credit) : "—"}
                       </td>

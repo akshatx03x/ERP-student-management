@@ -185,8 +185,9 @@ export function IDCard({
             fontWeight: 900,
             color: "#1a365d",
             letterSpacing: "0.2px",
-            lineHeight: "1.15",
+            lineHeight: "1.2",
             textTransform: "none",
+            marginBottom: "0.4mm",
           }}
         >
           {schoolName}
@@ -195,16 +196,15 @@ export function IDCard({
         {/* 3-Line Address & Phone Block */}
         <div
           style={{
-            fontSize: "6.8px",
+            fontSize: "7.2px",
             fontWeight: 600,
             color: "#1e293b",
-            lineHeight: "1.3",
-            marginTop: "0.6mm",
+            lineHeight: "1.35",
           }}
         >
-          <div>Balram Dwar, Karhera, Mohan Nagar,</div>
-          <div>Ghaziabad (Uttar Pradesh)</div>
-          <div style={{ fontWeight: 700 }}>{schoolPhone}</div>
+          <div style={{ lineHeight: "1.35", marginBottom: "0.2mm" }}>Balram Dwar, Karhera, Mohan Nagar,</div>
+          <div style={{ lineHeight: "1.35", marginBottom: "0.2mm" }}>Ghaziabad (Uttar Pradesh)</div>
+          <div style={{ fontWeight: 700, lineHeight: "1.35" }}>{schoolPhone}</div>
         </div>
       </div>
 
@@ -425,18 +425,21 @@ function IDCardRow({ label, value }: { label: string; value: string }) {
     <div
       style={{
         display: "flex",
-        alignItems: "baseline",
+        alignItems: "center",
         width: "100%",
+        lineHeight: "1.2",
+        boxSizing: "border-box",
       }}
     >
       {/* Label */}
       <div
         style={{
-          width: "14mm",
+          width: "13.5mm",
           flexShrink: 0,
           fontWeight: 800,
           color: "#0f172a",
-          fontSize: "9px",
+          fontSize: "8.5px",
+          lineHeight: "1.2",
         }}
       >
         {label}
@@ -445,12 +448,13 @@ function IDCardRow({ label, value }: { label: string; value: string }) {
       {/* Colon */}
       <div
         style={{
-          width: "2.2mm",
+          width: "2mm",
           flexShrink: 0,
           fontWeight: 800,
           textAlign: "center",
           color: "#0f172a",
-          fontSize: "9px",
+          fontSize: "8.5px",
+          lineHeight: "1.2",
         }}
       >
         :
@@ -462,10 +466,13 @@ function IDCardRow({ label, value }: { label: string; value: string }) {
           flex: 1,
           fontWeight: 700,
           color: "#000000",
-          fontSize: "9px",
-          wordBreak: "break-word",
+          fontSize: "8.5px",
+          lineHeight: "1.2",
+          whiteSpace: "nowrap",
           overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
+        title={value}
       >
         {value}
       </div>

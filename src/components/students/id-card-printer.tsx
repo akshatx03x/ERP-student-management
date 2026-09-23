@@ -57,8 +57,8 @@ export async function printSingleIDCard(
         ${styles}
         <style>
           @page {
-            size: auto;
-            margin: 5mm;
+            size: A4 portrait !important;
+            margin: 8mm !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -75,6 +75,7 @@ export async function printSingleIDCard(
             justify-content: center !important;
             align-items: flex-start !important;
             padding-top: 5mm !important;
+            line-height: normal !important;
           }
           .id-card-single-canvas {
             width: ${CARD_WIDTH_MM}mm !important;
@@ -148,8 +149,8 @@ export async function printBulkIDCards(
         ${styles}
         <style>
           @page {
-            size: A4 landscape;
-            margin: 12mm 10mm;
+            size: A4 landscape !important;
+            margin: 10mm 8mm !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -162,6 +163,7 @@ export async function printBulkIDCards(
             font-family: Arial, Helvetica, sans-serif !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            line-height: normal !important;
           }
           .bulk-landscape-page {
             width: 277mm !important;

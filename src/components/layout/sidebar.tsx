@@ -137,11 +137,11 @@ export function Sidebar({
                     activePath === item.href ||
                     (item.href === "/students"
                       ? activePath.startsWith("/students/") &&
-                        !activePath.startsWith("/students/former") &&
-                        !activePath.startsWith("/students/alumni")
+                      !activePath.startsWith("/students/former") &&
+                      !activePath.startsWith("/students/alumni")
                       : item.href === "/fees"
-                      ? activePath === "/fees"
-                      : activePath.startsWith(`${item.href}/`) || activePath === item.href);
+                        ? activePath === "/fees"
+                        : activePath.startsWith(`${item.href}/`) || activePath === item.href);
 
                   const IconComp = ICON_MAP[item.icon] ?? HelpCircle;
 

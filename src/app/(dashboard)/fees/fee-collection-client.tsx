@@ -287,29 +287,57 @@ export function FeeCollectionClient({
       : currentDueAmount;
   }, [currentDueAmount, allocationMode, manualMonthAmounts]);
 
-  function openPaymentModal() {
-    // Pre-initialize manual month amounts if manual mode selected
-    const initialManual: Record<string, string> = {};
-    if (selectedMonths.length > 0) {
-      selectedMonths.forEach(m => {
-        const matrixMonth = profile?.monthlyMatrix?.find((x: any) => x.month === m);
-        initialManual[m] = String(matrixMonth?.remaining || 0);
-      });
-    } else {
-      profile?.monthlyMatrix?.forEach((m: any) => {
-        if (m.remaining > 0) {
-          initialManual[m.month] = String(m.remaining);
-        }
-      });
-    }
-    setManualMonthAmounts(initialManual);
+  function distributeAmountToManualMonths(totalAmtStr: string) {
+    if (!profile?.monthlyMatrix) return;
 
+    const total = Number(totalAmtStr);
+    const targetMonthNames = selectedMonths.length > 0
+      ? selectedMonths
+      : (profile.monthlyMatrix.filter((x: any) => x.remaining > 0).map((x: any) => x.month) || []);
+
+    if (isNaN(total) || total <= 0) {
+      const emptyManual: Record<string, string> = {};
+      targetMonthNames.forEach((mName: string) => {
+        emptyManual[mName] = "0";
+      });
+      setManualMonthAmounts(emptyManual);
+      return;
+    }
+
+    let remainingToDistribute = total;
+    const nextManual: Record<string, string> = {};
+
+    targetMonthNames.forEach((mName: string) => {
+      const matrixMonth = profile.monthlyMatrix?.find((x: any) => x.month === mName);
+      const maxForMonth = matrixMonth?.remaining || 0;
+
+      if (remainingToDistribute > 0) {
+        const alloc = Math.min(remainingToDistribute, maxForMonth);
+        nextManual[mName] = String(alloc);
+        remainingToDistribute -= alloc;
+      } else {
+        nextManual[mName] = "0";
+      }
+    });
+
+    if (remainingToDistribute > 0 && targetMonthNames.length > 0) {
+      const lastMonth = targetMonthNames[targetMonthNames.length - 1];
+      const currentAlloc = Number(nextManual[lastMonth]) || 0;
+      nextManual[lastMonth] = String(currentAlloc + remainingToDistribute);
+    }
+
+    setManualMonthAmounts(nextManual);
+  }
+
+  function openPaymentModal() {
+    const initialAmount = String(netDueAfterWallet);
     setPayForm({
-      amount: String(netDueAfterWallet),
+      amount: initialAmount,
       method: "CASH",
       referenceNo: "",
       notes: selectedMonths.length > 0 ? `Fees for ${selectedMonths.join(", ")}` : "Fee Payment",
     });
+    distributeAmountToManualMonths(initialAmount);
     setShowPaymentModal(true);
   }
 
@@ -1284,7 +1312,10 @@ export function FeeCollectionClient({
                   allocationMode === "FIFO" ? "bg-white text-stone-900 shadow-xs" : "text-stone-500")}>
                 Oldest First (FIFO Auto)
               </button>
-              <button onClick={() => setAllocationMode("MANUAL")}
+              <button onClick={() => {
+                  setAllocationMode("MANUAL");
+                  distributeAmountToManualMonths(payForm.amount || String(currentDueAmount));
+                }}
                 className={cn("py-1.5 text-center font-bold rounded-md transition-all",
                   allocationMode === "MANUAL" ? "bg-white text-stone-900 shadow-xs" : "text-stone-500")}>
                 Manual Month-Wise
@@ -1326,8 +1357,7 @@ export function FeeCollectionClient({
                     const val = e.target.value;
                     setPayForm(f => ({ ...f, amount: val }));
                     if (allocationMode === "MANUAL") {
-                      // Reset manual split if user overrides in manual mode
-                      setManualMonthAmounts({});
+                      distributeAmountToManualMonths(val);
                     }
                   }} className="font-bold text-sm h-9 mt-1" />
                 </div>

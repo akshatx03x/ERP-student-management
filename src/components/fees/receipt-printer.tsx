@@ -55,8 +55,8 @@ export async function printReceipt(data: FeeReceiptData): Promise<void> {
         ${styles}
         <style>
           @page {
-            size: A4 portrait;
-            margin: 5mm;
+            size: A4 portrait !important;
+            margin: 6mm 5mm !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -70,6 +70,7 @@ export async function printReceipt(data: FeeReceiptData): Promise<void> {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             width: 100% !important;
+            line-height: normal !important;
           }
           .receipt-print-canvas {
             display: flex !important;
@@ -186,8 +187,8 @@ export async function printBulkReceipts(receipts: FeeReceiptData[]): Promise<voi
         ${styles}
         <style>
           @page {
-            size: A4 portrait;
-            margin: 5mm;
+            size: A4 portrait !important;
+            margin: 6mm 5mm !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -201,6 +202,7 @@ export async function printBulkReceipts(receipts: FeeReceiptData[]): Promise<voi
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             width: 100% !important;
+            line-height: normal !important;
           }
           .bulk-receipt-unit {
             display: flex !important;
