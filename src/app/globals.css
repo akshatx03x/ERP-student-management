@@ -95,12 +95,13 @@ body {
     padding: 0 !important;
     width: 100% !important;
     height: auto !important;
+    min-height: auto !important;
     overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* 1. Hide non-printable controls and UI chrome */
+  /* 1. Hide non-printable navigation, sidebar, headers, popups UI chrome, and buttons */
   .no-print,
   .no-print *,
   nav,
@@ -110,23 +111,29 @@ body {
   .sidebar,
   .erp-header,
   .sidebar-trigger,
-  button:not(.allow-print) {
+  button:not(.allow-print),
+  .print\:hidden {
     display: none !important;
   }
 
-  /* 2. When printing a modal (receipt or printable-area), hide surrounding screen elements */
+  /* 2. When printing a target container or modal, hide surrounding screen siblings */
   body:has(.fee-receipt-print-wrapper) > *:not(:has(.fee-receipt-print-wrapper)),
   body:has(.printable-area) > *:not(:has(.printable-area)),
-  body:has(.print-preview-area) > *:not(:has(.print-preview-area)) {
+  body:has(.print-preview-area) > *:not(:has(.print-preview-area)),
+  body:has(.print-modal-backdrop) > *:not(:has(.print-modal-backdrop)) {
     display: none !important;
   }
 
-  /* 3. Reset modal overlays so printable content flows naturally */
+  /* 3. Reset modal overlays, backdrops, and fixed height scroll containers */
   div:has(.fee-receipt-print-wrapper),
   div:has(.printable-area),
-  div:has(.print-preview-area) {
+  div:has(.print-preview-area),
+  div:has(.print-modal-backdrop),
+  .print-modal-backdrop,
+  .print-modal-panel,
+  .print-modal-scroll {
     position: static !important;
-    background: transparent !important;
+    background: #ffffff !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     box-shadow: none !important;
@@ -139,15 +146,17 @@ body {
     height: auto !important;
     overflow: visible !important;
     inset: auto !important;
+    display: block !important;
   }
 
   .fee-receipt-print-wrapper,
   .printable-area,
-  .print-preview-area {
+  .print-preview-area,
+  #report-card-print {
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     background: #ffffff !important;
     box-shadow: none !important;
@@ -155,6 +164,32 @@ body {
     border-radius: 0 !important;
     display: block !important;
     visibility: visible !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* 4. Ensure accordions and hidden printable content are visible on print */
+  .printable-area [data-state='closed'],
+  .printable-area .accordion-content,
+  .printable-area .print-expand {
+    display: block !important;
+    height: auto !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* 5. Page breaks and table behavior */
+  .page-break,
+  .break-before-page {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .keep-together,
+  .avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .print-only {

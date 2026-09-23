@@ -169,7 +169,7 @@ export function FinanceDashboardClient({ initialData }: { initialData: InitialDa
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 printable-area">
       {/* ── FILTER HEADER BAR ── */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-4 print:hidden">
         <div className="flex flex-wrap items-center gap-3">

@@ -32,7 +32,7 @@ export function ReportExportButton({ title, data, filename = "financial_report" 
   };
 
   return (
-    <div className="flex items-center gap-2 print:hidden">
+    <div className="flex items-center gap-2 print:hidden no-print">
       <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2 text-xs">
         <Download className="w-3.5 h-3.5" /> Export CSV
       </Button>

@@ -12,8 +12,10 @@
 
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/server/lib/prisma";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { seedRoleDefaults } from "@/server/permissions/guard";
+
+type UserWithAccounts = Prisma.UserGetPayload<{ include: { accounts: true } }>;
 
 const DEVELOPER_EMAIL = "developer@vidyanjali.edu.in";
 const PRINCIPAL_EMAIL = "principal@vidyanjali.edu.in";
@@ -121,7 +123,7 @@ export async function seedSystemAccounts() {
     }
 
     // 2. Ensure Primary Principal Account exists and has valid credentials & username/PIN
-    let primaryPrincipal = await prisma.user.findFirst({
+    let primaryPrincipal: UserWithAccounts | null = await prisma.user.findFirst({
       where: { email: PRINCIPAL_EMAIL },
       include: { accounts: true },
     });
@@ -130,7 +132,11 @@ export async function seedSystemAccounts() {
       primaryPrincipal = await prisma.user.findFirst({
         where: { role: Role.PRINCIPAL, username: "Principal" },
         include: { accounts: true },
-      }) || await prisma.user.findFirst({
+      });
+    }
+
+    if (!primaryPrincipal) {
+      primaryPrincipal = await prisma.user.findFirst({
         where: { role: Role.PRINCIPAL },
         include: { accounts: true },
       });

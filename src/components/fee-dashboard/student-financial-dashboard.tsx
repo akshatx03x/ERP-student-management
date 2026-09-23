@@ -63,7 +63,7 @@ export function StudentFinancialDashboard({ profile }: DashboardProps) {
   ];
 
   return (
-    <div className="space-y-4 font-sans text-stone-900 bg-stone-50/50 p-1 rounded-xl">
+    <div className="space-y-4 font-sans text-stone-900 bg-stone-50/50 p-1 rounded-xl printable-area">
       {/* ── HEADER: STUDENT PROFILE SUMMARY BAR ── */}
       <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-2xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -108,7 +108,7 @@ export function StudentFinancialDashboard({ profile }: DashboardProps) {
       </div>
 
       {/* ── TAB NAVIGATION BAR ── */}
-      <div className="bg-white border border-stone-200 rounded-xl p-1 shadow-2xs">
+      <div className="bg-white border border-stone-200 rounded-xl p-1 shadow-2xs no-print">
         <div className="flex flex-wrap items-center gap-1 border-b border-stone-200 pb-1 text-xs">
           {tabs.map((tab) => {
             const Icon = tab.icon;

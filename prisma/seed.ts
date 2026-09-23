@@ -129,6 +129,8 @@ async function main() {
     });
   }
 
+  const defaultPinHash = "a98b814b7d2fc3f59076c9fcd5e11716:2b55febbd4fc0eab01e000236b9f7aabad2854c0ab92a10e30c5fad3dbcd6a6c7d9e33b912db021b9fa780d047aed333e71fbe0cccf9340e2067fa75af63ef7c";
+
   const existing = await prisma.user.findFirst({
     where: { OR: [{ email }, { staffProfileId: staff.id }] },
   });
@@ -142,6 +144,8 @@ async function main() {
         role: Role.PRINCIPAL,
         isActive: true,
         mustChangePassword: false,
+        username: "Principal",
+        pinHash: defaultPinHash,
         schoolId: school.id,
         staffProfileId: staff.id,
         accounts: {
@@ -159,6 +163,9 @@ async function main() {
       where: { id: existing.id },
       data: {
         role: Role.PRINCIPAL,
+        email,
+        username: "Principal",
+        pinHash: existing.pinHash ?? defaultPinHash,
         schoolId: school.id,
         staffProfileId: staff.id,
         isActive: true,

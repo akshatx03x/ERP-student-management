@@ -1643,7 +1643,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   onClick={() => {
                     window.print();
                   }}
-                  className="bg-emerald-650 hover:bg-emerald-600 text-grey-400 font-bold h-8 text-xs"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs"
                 >
                   Print / Save PDF
                 </Button>
@@ -1656,10 +1656,13 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               @media print {
                 html, body {
                   height: auto !important;
+                  min-height: auto !important;
                   overflow: visible !important;
                   position: static !important;
+                  background: white !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
                 }
-                /* Hide everything else */
                 body > *:not(.print-modal-backdrop) {
                   display: none !important;
                 }
@@ -1667,9 +1670,9 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   display: none !important;
                 }
                 .print-modal-backdrop {
-                  position: absolute !important;
-                  left: 0 !important;
-                  top: 0 !important;
+                  position: static !important;
+                  left: auto !important;
+                  top: auto !important;
                   width: 100% !important;
                   height: auto !important;
                   background: none !important;
@@ -1682,7 +1685,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 }
                 .print-modal-panel {
                   width: 100% !important;
-                  max-width: none !important;
+                  max-width: 100% !important;
                   height: auto !important;
                   border: none !important;
                   box-shadow: none !important;
@@ -1697,14 +1700,17 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   margin: 0 !important;
                   display: block !important;
                   background: white !important;
+                  height: auto !important;
+                  max-height: none !important;
                 }
                 #report-card-print {
                   border: none !important;
                   box-shadow: none !important;
                   margin: 0 auto !important;
-                  padding: 10mm !important;
-                  width: 297mm !important;
-                  height: 210mm !important;
+                  padding: 5mm !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  height: auto !important;
                   box-sizing: border-box !important;
                   background: white !important;
                   color: black !important;
@@ -1714,7 +1720,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               }
               @page {
                 size: A4 landscape;
-                margin: 0;
+                margin: 5mm;
               }
             ` }} />
 
@@ -1754,7 +1760,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   onClick={() => {
                     window.print();
                   }}
-                  className="bg-emerald-650 hover:bg-emerald-600 text-grey-500 font-bold h-8 text-xs flex items-center gap-1.5"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs flex items-center gap-1.5"
                 >
                   {isPrintingLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Print Class ({multiReportData.length})
@@ -1768,10 +1774,13 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               @media print {
                 html, body {
                   height: auto !important;
+                  min-height: auto !important;
                   overflow: visible !important;
                   position: static !important;
+                  background: white !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
                 }
-                /* Hide everything else */
                 body > *:not(.print-modal-backdrop) {
                   display: none !important;
                 }
@@ -1779,9 +1788,9 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   display: none !important;
                 }
                 .print-modal-backdrop {
-                  position: absolute !important;
-                  left: 0 !important;
-                  top: 0 !important;
+                  position: static !important;
+                  left: auto !important;
+                  top: auto !important;
                   width: 100% !important;
                   height: auto !important;
                   background: none !important;
@@ -1794,7 +1803,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 }
                 .print-modal-panel {
                   width: 100% !important;
-                  max-width: none !important;
+                  max-width: 100% !important;
                   height: auto !important;
                   border: none !important;
                   box-shadow: none !important;
@@ -1809,14 +1818,17 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   margin: 0 !important;
                   display: block !important;
                   background: white !important;
+                  height: auto !important;
+                  max-height: none !important;
                 }
                 #report-card-print {
                   border: none !important;
                   box-shadow: none !important;
                   margin: 0 auto !important;
-                  padding: 10mm !important;
-                  width: 297mm !important;
-                  height: 210mm !important;
+                  padding: 5mm !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  height: auto !important;
                   box-sizing: border-box !important;
                   background: white !important;
                   color: black !important;
@@ -1826,7 +1838,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               }
               @page {
                 size: A4 landscape;
-                margin: 0;
+                margin: 5mm;
               }
             ` }} />
 
