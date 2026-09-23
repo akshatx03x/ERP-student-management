@@ -11,6 +11,7 @@ import {
   uploadDocumentAction,
   deleteDocumentAction,
 } from "@/server/actions/platform.actions";
+import { getFriendlyErrorMessage } from "@/lib/action-client";
 
 type Student = { id: string; fullName: string };
 type Doc = {
@@ -42,7 +43,7 @@ export function DocumentsClient({ students }: { students: Student[] }) {
   function onFile(file: File | null) {
     if (!file || !studentId) return;
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("Max 5MB");
+      toast.error("Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
       return;
     }
     const isImage = file.type.startsWith("image/");
@@ -53,7 +54,7 @@ export function DocumentsClient({ students }: { students: Student[] }) {
         const bytes = new Uint8Array(buffer);
         let binary = "";
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-        await uploadDocumentAction({
+        const res = await uploadDocumentAction({
           ownerType: "STUDENT",
           ownerId: studentId,
           type: type as "OTHER" | "BIRTH_CERTIFICATE" | "AADHAAR" | "PHOTO" | "TRANSFER_CERTIFICATE" | "MEDICAL_CERTIFICATE",
@@ -61,10 +62,14 @@ export function DocumentsClient({ students }: { students: Student[] }) {
           mimeType: file.type || "application/octet-stream",
           base64: btoa(binary),
         });
+        if (res && "success" in res && !res.success) {
+          toast.error(res.error || "Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
+          return;
+        }
         toast.success("Uploaded");
         load();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
+        toast.error(getFriendlyErrorMessage(e, "Failed to upload document"));
       } finally {
         setIsUploading(false);
       }

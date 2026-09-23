@@ -82,6 +82,7 @@ export function FeeCollectionClient({
   currentSessionId,
   initialStudentId,
   returnTo,
+  returnLabel,
 }: {
   classes?: ClassRow[];
   students: StudentItem[];
@@ -89,6 +90,7 @@ export function FeeCollectionClient({
   currentSessionId: string | null;
   initialStudentId?: string | null;
   returnTo?: string | null;
+  returnLabel?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [selectedSessionId, setSelectedSessionId] = useState<string>(currentSessionId ?? sessions[0]?.id ?? "");
@@ -239,7 +241,12 @@ export function FeeCollectionClient({
         if (selectedStudentId) loadProfile(selectedStudentId);
         cb?.();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Action failed");
+        const rawErr = e instanceof Error ? e.message : "Action failed";                              
+        const cleanErr =
+          rawErr.includes("Server Components render") || rawErr.includes("omitted in production")
+            ? "An unexpected error occurred while processing payment. Please check server logs for details."
+            : rawErr;
+        toast.error(cleanErr, { duration: 5000 });
       }
     });
   }
@@ -429,6 +436,9 @@ export function FeeCollectionClient({
         selectedStudentFeeIds: selectedStudentFeeIds.length > 0 ? selectedStudentFeeIds : undefined,
         allocations: payloadAllocations,
       });
+      if (!result?.success) {
+        throw new Error(result?.error || "Failed to record payment");
+      }
       setShowPaymentModal(false);
       if (result?.paymentId) {
         const r = await getReceiptAction(result.paymentId);
@@ -549,17 +559,20 @@ export function FeeCollectionClient({
             href={returnTo}
             className="inline-flex items-center gap-2 font-bold text-indigo-700 hover:text-indigo-900 transition-colors bg-white px-3 py-1.5 rounded-lg border border-indigo-200 shadow-2xs hover:bg-indigo-50"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Pending Dues Report
+            <ArrowLeft className="w-4 h-4" /> {returnLabel || (returnTo.includes("class-wise-status") ? "Back to Class-Wise Fee Status" : "Back to Pending Dues Report")}
           </Link>
           <span className="text-stone-500 font-medium hidden sm:inline">
             Direct Cashier Workstation Access
           </span>
         </div>
       )}
-      <div className="max-w-[1550px] w-full mx-auto bg-stone-50 rounded-2xl border border-stone-200 shadow-md overflow-hidden grid grid-cols-[420px_1fr] h-[calc(100vh-185px)] text-sm">
+      <div className={cn(
+        "max-w-[1550px] w-full mx-auto bg-stone-50 rounded-2xl border border-stone-200 shadow-md overflow-hidden grid grid-cols-[420px_1fr] text-sm",
+        returnTo ? "h-[calc(100vh-17rem)]" : "h-[calc(100vh-13.5rem)]"
+      )}>
         
         {/* LEFT COLUMN: STUDENT DETAIL & PAYMENT ACTION DRAWER */}
-      <div className="bg-white border-r border-stone-200 flex flex-col overflow-y-auto">
+      <div className="bg-white border-r border-stone-200 flex flex-col h-full min-h-0 overflow-y-auto">
         <div className="p-4 border-b border-stone-200 bg-white z-20 space-y-3">
           <div className="flex items-center justify-between">
             <Label className="text-xs font-bold text-stone-500 uppercase tracking-widest block">Student Search & Filter</Label>
@@ -933,7 +946,7 @@ export function FeeCollectionClient({
       </div>
 
       {/* RIGHT COLUMN: MONTH-WISE BILLING MATRIX */}
-      <div className="flex flex-col overflow-hidden bg-white">
+      <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-white">
         <div className="border-b border-stone-200 px-6 py-4 bg-stone-50 flex justify-between items-center shrink-0">
           <div>
             <h3 className="font-extrabold text-stone-900 text-sm">Month-wise Billing Ledger Card</h3>
@@ -962,7 +975,7 @@ export function FeeCollectionClient({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 relative">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 p-5 relative overflow-hidden">
           {profileLoading && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center text-stone-500 z-30 transition-all">
               <div className="w-9 h-9 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -976,10 +989,10 @@ export function FeeCollectionClient({
               <p className="text-xs text-stone-400 mt-1">Select a student on the left panel to load the month-wise fee matrix</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 space-y-4">
               {/* Linked siblings banner */}
               {profile.siblings && profile.siblings.length > 0 ? (
-                <div className="border border-stone-200 bg-stone-50/40 rounded-xl p-4 space-y-3 shadow-2xs">
+                <div className="shrink-0 border border-stone-200 bg-stone-50/40 rounded-xl p-4 space-y-3 shadow-2xs">
                   <div className="flex items-center gap-2 border-b border-stone-200 pb-2">
                     <Users className="w-4.5 h-4.5 text-indigo-650" />
                     <div>
@@ -1031,19 +1044,19 @@ export function FeeCollectionClient({
                 </div>
               ) : null}
 
-              <div className="border border-stone-200 rounded-xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                  <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase text-[10px] sticky top-0 z-10">
+              <div className="flex-1 min-h-0 border border-stone-200 rounded-xl overflow-auto shadow-2xs">
+                <table className="w-full text-left text-sm border-collapse min-w-[980px]">
+                  <thead className="sticky top-0 z-10 bg-stone-50 border-b border-stone-200 shadow-2xs">
+                  <tr className="bg-stone-50 text-stone-500 font-bold uppercase text-[10px]">
                     <th className="py-3 px-4 w-12 text-center">Select</th>
-                    <th className="py-3 px-4">Month</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Total Charged</th>
-                    <th className="py-3 px-4 text-right">Paid Amount</th>
-                    <th className="py-3 px-4 text-right">Late Fine</th>
-                    <th className="py-3 px-4 text-right">Outstanding</th>
-                    <th className="py-3 px-4 text-center">Receipts</th>
-                    <th className="py-3 px-4 text-right">Collected By</th>
+                    <th className="py-3 px-4 min-w-[120px]">Month</th>
+                    <th className="py-3 px-4 min-w-[90px]">Status</th>
+                    <th className="py-3 px-4 text-right min-w-[110px]">Total Charged</th>
+                    <th className="py-3 px-4 text-right min-w-[100px]">Paid Amount</th>
+                    <th className="py-3 px-4 text-right min-w-[90px]">Late Fine</th>
+                    <th className="py-3 px-4 text-right min-w-[110px]">Outstanding</th>
+                    <th className="py-3 px-4 text-center min-w-[100px]">Receipts</th>
+                    <th className="py-3 px-4 text-right min-w-[140px] whitespace-nowrap">Collected By</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-150">
@@ -1113,7 +1126,7 @@ export function FeeCollectionClient({
                             ) : "—"}
                           </td>
                           <td
-                            className="py-3 px-4 text-right text-[10px] font-semibold text-stone-500"
+                            className="py-3 px-4 text-right text-[10px] font-semibold text-stone-500 min-w-[140px] whitespace-nowrap"
                             title={collectors.join(", ") || undefined}
                             onClick={() => toggleMonth(m.month)}
                           >

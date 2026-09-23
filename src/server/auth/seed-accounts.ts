@@ -18,6 +18,7 @@ import { seedRoleDefaults } from "@/server/permissions/guard";
 const DEVELOPER_EMAIL = "developer@vidyanjali.edu.in";
 const PRINCIPAL_EMAIL = "principal@vidyanjali.edu.in";
 const SEED_PASSWORD = "vidyanjalierp@890";
+const SEED_PIN = "0396";
 
 async function createSystemUser(params: {
   email: string;
@@ -28,6 +29,7 @@ async function createSystemUser(params: {
 }) {
   const { email, name, role, designation, schoolId } = params;
   const hashedPassword = await hashPassword(SEED_PASSWORD);
+  const hashedPin = role === Role.PRINCIPAL ? await hashPassword(SEED_PIN) : null;
   const employeeCode = role === Role.DEVELOPER ? "SYS-DEV" : "SYS-PRINCIPAL";
 
   return prisma.$transaction(async (tx) => {
@@ -52,6 +54,8 @@ async function createSystemUser(params: {
         isActive: true,
         mustChangePassword: false,
         loginIdentifier: email,
+        username: role === Role.PRINCIPAL ? "Principal" : null,
+        pinHash: hashedPin,
         staffProfileId: staff.id,
         accounts: {
           create: {
@@ -80,6 +84,7 @@ export async function seedSystemAccounts() {
     }
 
     const hashedPassword = await hashPassword(SEED_PASSWORD);
+    const defaultPinHash = await hashPassword(SEED_PIN);
 
     // 1. Ensure Developer Account exists and has valid credentials
     const developerUser = await prisma.user.findFirst({
@@ -102,116 +107,72 @@ export async function seedSystemAccounts() {
         where: { id: developerUser.id },
         data: { isActive: true, role: Role.DEVELOPER },
       });
-      await prisma.account.deleteMany({
-        where: { userId: developerUser.id, providerId: "credential" },
-      });
-      await prisma.account.create({
-        data: {
-          userId: developerUser.id,
-          accountId: DEVELOPER_EMAIL,
-          providerId: "credential",
-          password: hashedPassword,
-        },
-      });
+      if (developerUser.accounts.length === 0) {
+        await prisma.account.create({
+          data: {
+            userId: developerUser.id,
+            accountId: DEVELOPER_EMAIL,
+            providerId: "credential",
+            password: hashedPassword,
+          },
+        });
+      }
       console.log("[seed] Developer credentials verified ✓");
     }
 
-    // 2. Ensure Primary Principal Account (principal@vidyanjali.edu.in) exists and has valid credentials
-    const primaryPrincipal = await prisma.user.findFirst({
+    // 2. Ensure Primary Principal Account exists and has valid credentials & username/PIN
+    let primaryPrincipal = await prisma.user.findFirst({
       where: { email: PRINCIPAL_EMAIL },
       include: { accounts: true },
     });
 
     if (!primaryPrincipal) {
-      // Check if there is an existing principal user with a legacy email (e.g. vidhyanjali / .edu)
-      const legacyPrincipal = await prisma.user.findFirst({
-        where: {
-          role: Role.PRINCIPAL,
-          NOT: { email: PRINCIPAL_EMAIL },
-        },
+      primaryPrincipal = await prisma.user.findFirst({
+        where: { role: Role.PRINCIPAL, username: "Principal" },
+        include: { accounts: true },
+      }) || await prisma.user.findFirst({
+        where: { role: Role.PRINCIPAL },
+        include: { accounts: true },
       });
+    }
 
-      if (legacyPrincipal) {
-        console.log(`[seed] Updating legacy principal (${legacyPrincipal.email}) to ${PRINCIPAL_EMAIL}...`);
-        await prisma.user.update({
-          where: { id: legacyPrincipal.id },
-          data: {
-            email: PRINCIPAL_EMAIL,
-            loginIdentifier: PRINCIPAL_EMAIL,
-            isActive: true,
-            role: Role.PRINCIPAL,
-          },
-        });
-        await prisma.account.deleteMany({
-          where: { userId: legacyPrincipal.id, providerId: "credential" },
-        });
-        await prisma.account.create({
-          data: {
-            userId: legacyPrincipal.id,
-            accountId: PRINCIPAL_EMAIL,
-            providerId: "credential",
-            password: hashedPassword,
-          },
-        });
-        console.log("[seed] Principal account updated and verified ✓");
-      } else {
-        console.log("[seed] Creating Principal system account...");
-        await createSystemUser({
-          email: PRINCIPAL_EMAIL,
-          name: "Principal",
-          role: Role.PRINCIPAL,
-          designation: "School Principal",
-          schoolId: school.id,
-        });
-        console.log("[seed] Principal account created ✓");
-      }
+    if (!primaryPrincipal) {
+      console.log("[seed] Creating Principal system account...");
+      await createSystemUser({
+        email: PRINCIPAL_EMAIL,
+        name: "Principal",
+        role: Role.PRINCIPAL,
+        designation: "School Principal",
+        schoolId: school.id,
+      });
+      console.log("[seed] Principal account created ✓");
     } else {
+      const existingPrincipalUsernameOwner = await prisma.user.findFirst({
+        where: { username: "Principal" },
+      });
+      const canSetUsername = !existingPrincipalUsernameOwner || existingPrincipalUsernameOwner.id === primaryPrincipal.id;
+
       await prisma.user.update({
         where: { id: primaryPrincipal.id },
         data: {
           isActive: true,
           role: Role.PRINCIPAL,
-          loginIdentifier: PRINCIPAL_EMAIL,
+          ...(canSetUsername && !primaryPrincipal.username ? { username: "Principal" } : {}),
+          ...(!primaryPrincipal.pinHash ? { pinHash: defaultPinHash } : {}),
         },
       });
-      await prisma.account.deleteMany({
-        where: { userId: primaryPrincipal.id, providerId: "credential" },
-      });
-      await prisma.account.create({
-        data: {
-          userId: primaryPrincipal.id,
-          accountId: PRINCIPAL_EMAIL,
-          providerId: "credential",
-          password: hashedPassword,
-        },
-      });
+
+      if (primaryPrincipal.accounts.length === 0) {
+        await prisma.account.create({
+          data: {
+            userId: primaryPrincipal.id,
+            accountId: primaryPrincipal.email,
+            providerId: "credential",
+            password: hashedPassword,
+          },
+        });
+      }
       console.log("[seed] Principal credentials verified ✓");
-    }
-
-    // 3. Also update password for any other Principal users in the system (e.g. alternate logins)
-    const otherPrincipals = await prisma.user.findMany({
-      where: {
-        role: Role.PRINCIPAL,
-        NOT: { email: PRINCIPAL_EMAIL },
-      },
-    });
-
-    for (const alt of otherPrincipals) {
-      await prisma.user.update({
-        where: { id: alt.id },
-        data: { isActive: true },
-      });
-      await prisma.account.deleteMany({
-        where: { userId: alt.id, providerId: "credential" },
-      });
-      await prisma.account.create({
-        data: {
-          userId: alt.id,
-          accountId: alt.email,
-          providerId: "credential",
-          password: hashedPassword,
-        },
-      });
     }
 
     console.log("[seed] All system accounts synchronized and verified.");

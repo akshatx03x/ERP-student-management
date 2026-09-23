@@ -16,26 +16,34 @@ import type {
   TCStatusActionInput,
 } from "@/server/validators/tc.validator";
 
+import { safeAction } from "@/server/lib/action-response";
+
 export async function listTCsAction(input?: ListTCsInput) {
   return listTransferCertificates(input);
 }
 
 export async function generateTCAction(input: GenerateTCInput) {
-  const result = await createTransferCertificateDraft(input);
-  revalidatePath("/students/tc");
-  return result;
+  return safeAction("generateTCAction", async () => {
+    const result = await createTransferCertificateDraft(input);
+    revalidatePath("/students/tc");
+    return result;
+  }, "Failed to generate TC draft");
 }
 
 export async function updateTCAction(input: UpdateTCInput) {
-  const result = await updateTransferCertificateDraft(input);
-  revalidatePath("/students/tc");
-  return result;
+  return safeAction("updateTCAction", async () => {
+    const result = await updateTransferCertificateDraft(input);
+    revalidatePath("/students/tc");
+    return result;
+  }, "Failed to save TC changes");
 }
 
 export async function executeTCStatusActionAction(input: TCStatusActionInput) {
-  const result = await executeTCStatusAction(input);
-  revalidatePath("/students/tc");
-  return result;
+  return safeAction("executeTCStatusActionAction", async () => {
+    const result = await executeTCStatusAction(input);
+    revalidatePath("/students/tc");
+    return result;
+  }, "Failed to update TC status");
 }
 
 export async function getTCDetailAction(tcId: string) {

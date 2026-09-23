@@ -16,6 +16,7 @@ import { uploadDocumentAction } from "@/server/actions/platform.actions";
 import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
 import { ContactOwner, DocumentOwnerType } from "@prisma/client";
 import { toDateInputValue, parseDateInput } from "@/lib/utils";
+import { getFriendlyErrorMessage } from "@/lib/action-client";
 
 // Modal Component Helper
 function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -124,7 +125,7 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
     extraFields?: Record<string, any>,
   ) => {
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("File size must be less than 5MB");
+      toast.error("Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
       return;
     }
     setIsUploading(true);
@@ -144,10 +145,17 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
           base64: splitBase64,
         });
 
+        if (doc && "success" in doc && !doc.success) {
+          toast.error(doc.error || "Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
+          return;
+        }
+
+        const docId = (doc as any).id || (doc as any).data?.id;
+
         // 2. Persist the document URL on the student / guardian record
         const actionPayload = {
           id: student.id,
-          [field]: `/api/documents/${doc.id}`,
+          [field]: `/api/documents/${docId}`,
           ...extraFields,
         };
         await updateStudentAction(actionPayload);
@@ -155,7 +163,7 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
         toast.success("Photo uploaded successfully");
         router.refresh();
       } catch (err: any) {
-        toast.error(err.message || "Failed to upload photo");
+        toast.error(getFriendlyErrorMessage(err, "Failed to upload photo"));
       } finally {
         setIsUploading(false);
       }

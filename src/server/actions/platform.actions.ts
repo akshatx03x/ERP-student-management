@@ -28,6 +28,7 @@ import {
 } from "@/server/services/notice.service";
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
+import { safeAction, MAX_IMAGE_FILE_SIZE_BYTES } from "@/server/lib/action-response";
 import { schoolIdFromUser } from "@/server/lib/helpers";
 import type {
   CreateExamTypeInput,
@@ -89,17 +90,22 @@ export async function uploadDocumentAction(input: {
   mimeType: string;
   base64: string;
 }) {
-  const data = Buffer.from(input.base64, "base64");
-  const r = await uploadDocument({
-    ownerType: input.ownerType,
-    ownerId: input.ownerId,
-    type: input.type,
-    fileName: input.fileName,
-    mimeType: input.mimeType,
-    data,
-  });
-  revalidatePath("/documents");
-  return r;
+  return safeAction("uploadDocumentAction", async () => {
+    const data = Buffer.from(input.base64, "base64");
+    if (data.byteLength > MAX_IMAGE_FILE_SIZE_BYTES) {
+      throw new Error("Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
+    }
+    const r = await uploadDocument({
+      ownerType: input.ownerType,
+      ownerId: input.ownerId,
+      type: input.type,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      data,
+    });
+    revalidatePath("/documents");
+    return r;
+  }, "Failed to upload document");
 }
 export async function deleteDocumentAction(id: string) {
   await deleteDocument(id);

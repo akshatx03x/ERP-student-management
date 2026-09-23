@@ -11,9 +11,9 @@ import { FeeCollectionClient } from "./fee-collection-client";
 export default async function FeeCollectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ student?: string; returnTo?: string }>;
+  searchParams: Promise<{ student?: string; returnTo?: string; returnLabel?: string }>;
 }) {
-  const { student: initialStudentId, returnTo } = await searchParams;
+  const { student: initialStudentId, returnTo, returnLabel } = await searchParams;
   const { user } = await requirePermission("fee.view");
 
   if (user.role === "STUDENT") {
@@ -112,6 +112,7 @@ export default async function FeeCollectionPage({
         currentSessionId={current?.id ?? null}
         initialStudentId={initialStudentId ?? null}
         returnTo={returnTo ?? null}
+        returnLabel={returnLabel ?? null}
       />
     </div>
   );

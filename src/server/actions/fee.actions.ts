@@ -68,12 +68,21 @@ export async function listPaymentsAction(input?: Parameters<typeof listPayments>
 }
 
 export async function recordPaymentAction(input: RecordPaymentInput) {
-  const r = await recordFamilyPayment(input);
-  revalidatePath("/fees");
-  revalidatePath("/families");
-  revalidatePath(`/families/${input.familyId}`);
-  revalidatePath("/students");
-  return { success: true, paymentId: r.payment.id };
+  try {
+    const r = await recordFamilyPayment(input);
+    revalidatePath("/fees");
+    revalidatePath("/families");
+    revalidatePath(`/families/${input.familyId}`);
+    revalidatePath("/students");
+    return { success: true, paymentId: r.payment.id };
+  } catch (err: any) {
+    console.error("[recordPaymentAction] Error:", err);
+    return {
+      success: false,
+      paymentId: null,
+      error: err?.message || "Failed to record payment. Please check your data or try again.",
+    };
+  }
 }
 
 export async function getReceiptAction(paymentId: string) {

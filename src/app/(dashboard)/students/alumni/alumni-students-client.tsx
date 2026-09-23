@@ -180,7 +180,7 @@ export function AlumniStudentsClient({
                             Re-activate
                           </Button>
                           <Link
-                            href={`/students/${s.id}`}
+                            href={`/students/${s.id}?from=alumni&returnTo=${encodeURIComponent("/students/alumni")}&returnLabel=${encodeURIComponent("Back to Alumni")}`}
                             className="inline-flex items-center gap-1 rounded bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
                           >
                             <Eye className="w-3.5 h-3.5" /> View Profile

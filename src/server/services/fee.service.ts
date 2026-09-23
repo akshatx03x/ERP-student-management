@@ -266,7 +266,7 @@ export async function generateStudentMonthlyLedgerInTx(
     throw new Error("Student not found");
   }
   if (student.status !== "ACTIVE") {
-    throw new Error(`Cannot generate fee ledger for ${student.status.toLowerCase()} student`);
+    return { generated: 0, structureId: null };
   }
 
   // 2. Validate academic session
@@ -1355,6 +1355,7 @@ export async function getStudentFeeLedger(studentId: string, requestedSessionId?
       id: true,
       fullName: true,
       admissionNo: true,
+      status: true,
       familyId: true,
       enrollments: {
         include: { class: true, section: true, session: true },
@@ -1371,7 +1372,7 @@ export async function getStudentFeeLedger(studentId: string, requestedSessionId?
   const sessionId = requestedSessionId || enrollment?.sessionId;
 
   // Auto-sync ledger check: ensure student's ledger contains class structure & active optional fees
-  if (enrollment && sessionId) {
+  if (enrollment && sessionId && student.status === "ACTIVE") {
     try {
       await prisma.$transaction(async (tx) => {
         await generateStudentMonthlyLedgerInTx(tx, {

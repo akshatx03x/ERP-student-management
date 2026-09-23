@@ -5,9 +5,19 @@ import { listFeeHeads } from "@/server/services/fee.service";
 import { ClassWiseStatusClient } from "./class-wise-status-client";
 import { PageHeader } from "@/components/shared/states";
 
-export default async function ClassWiseStatusPage() {
+export default async function ClassWiseStatusPage(props: {
+  searchParams?: Promise<{
+    session?: string;
+    class?: string;
+    section?: string;
+    month?: string;
+    status?: string;
+    search?: string;
+  }>;
+}) {
   await requirePermission("fee.view");
 
+  const searchParams = props.searchParams ? await props.searchParams : {};
   const [sessions, currentSession, classes, heads] = await Promise.all([
     listSessions({ pageSize: 50 }),
     getCurrentSession(),
@@ -34,7 +44,7 @@ export default async function ClassWiseStatusPage() {
           description="Operational workspace to inspect individual class fee records, monthly ledgers, payment statuses and dues"
         />
       </div>
-      <ClassWiseStatusClient metaData={metaData} />
+      <ClassWiseStatusClient metaData={metaData} initialFilters={searchParams} />
     </div>
   );
 }

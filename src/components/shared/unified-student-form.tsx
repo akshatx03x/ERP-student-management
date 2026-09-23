@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
+import { toast } from "sonner";
 
 export type GuardianItem = {
   id: string;
@@ -291,7 +292,7 @@ export function UnifiedStudentForm({
                     const file = e.target.files?.[0];
                     if (file) {
                       if (file.size > 5 * 1024 * 1024) {
-                        alert("Please select an image smaller than 5MB.");
+                        toast.error("Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
                         return;
                       }
                       setIsPhotoLoading(true);

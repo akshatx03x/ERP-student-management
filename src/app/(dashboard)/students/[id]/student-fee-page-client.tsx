@@ -9,7 +9,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { getReceiptAction } from "@/server/actions/fee.actions";
 import { toast } from "sonner";
 import {
-  Edit3, Eye, Users,
+  Edit3, Eye, Users, ArrowLeft,
   Receipt, Tag, RotateCcw, AlertCircle, Printer, Download, X, CheckSquare, Square
 } from "lucide-react";
 import { IdCardPrintButton } from "./id-card-print-button";
@@ -90,6 +90,9 @@ export function StudentFeePageClient({
   userRole,
   branding,
   selectedSessionId,
+  from,
+  returnTo,
+  returnLabel,
 }: {
   student: {
     id: string;
@@ -132,6 +135,9 @@ export function StudentFeePageClient({
   userRole: string;
   branding: any;
   selectedSessionId?: string | null;
+  from?: string | null;
+  returnTo?: string | null;
+  returnLabel?: string | null;
 }) {
   const router = useRouter();
   const [activityTab, setActivityTab] = useState<ActivityTab>("transactions");
@@ -278,23 +284,76 @@ export function StudentFeePageClient({
     { key: "transactions", label: "Transactions", icon: <Receipt className="w-3 h-3" />, count: paymentHistory.length },
   ];
 
+  const isFromFormer = from === "former" || returnTo?.includes("/students/former") || student.status === "LEFT";
+  const isFromAlumni = from === "alumni" || returnTo?.includes("/students/alumni");
+  const isFromRetained = from === "retained" || returnTo?.includes("/students/retained");
+  const isFromClassWiseStatus = from === "class-wise-status" || returnTo?.includes("/fees/class-wise-status");
+
+  let backUrl: string | null = null;
+  let backLabel = "Back";
+  let parentLabel = "Students";
+  let parentUrl = "/students";
+
+  if (isFromFormer) {
+    backUrl = returnTo || "/students/former";
+    backLabel = returnLabel || "Back to Former Students";
+    parentLabel = "Former Students";
+    parentUrl = backUrl;
+  } else if (isFromAlumni) {
+    backUrl = returnTo || "/students/alumni";
+    backLabel = returnLabel || "Back to Alumni";
+    parentLabel = "Alumni";
+    parentUrl = backUrl;
+  } else if (isFromRetained) {
+    backUrl = returnTo || "/students/retained";
+    backLabel = returnLabel || "Back to Retained Students";
+    parentLabel = "Retained Students";
+    parentUrl = backUrl;
+  } else if (isFromClassWiseStatus) {
+    backUrl = returnTo || "/fees/class-wise-status";
+    backLabel = returnLabel || "Back to Class-Wise Fee Status";
+    parentLabel = "Class-Wise Fee Status";
+    parentUrl = backUrl;
+  } else if (returnTo) {
+    backUrl = returnTo;
+    backLabel = returnLabel || "Back";
+    parentLabel = returnLabel || "Back";
+    parentUrl = returnTo;
+  }
+
+  const detailsQuery = new URLSearchParams();
+  if (from) detailsQuery.set("from", from);
+  if (returnTo) detailsQuery.set("returnTo", returnTo);
+  if (returnLabel) detailsQuery.set("returnLabel", returnLabel);
+  const detailsHref = `/students/${student.id}/details${detailsQuery.toString() ? `?${detailsQuery.toString()}` : ""}`;
+
   return (
     <div className="space-y-4 text-sm">
 
       {/* ── TOPBAR ── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <Link href="/students" className="text-xs text-stone-500 hover:text-stone-700 font-medium">
-            Students
-          </Link>
-          <span className="text-stone-300 text-xs">›</span>
-          <span className="text-xs font-bold text-stone-900">{student.fullName}</span>
-          <Badge
-            variant={student.status === "ACTIVE" ? "success" : "secondary"}
-            className="text-[9px] h-5 px-2 font-bold rounded ml-1"
-          >
-            {student.status}
-          </Badge>
+        <div className="flex items-center gap-3">
+          {backUrl && (
+            <Link
+              href={backUrl}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors shadow-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> {backLabel}
+            </Link>
+          )}
+          <div className="flex items-center gap-2">
+            <Link href={parentUrl} className="text-xs text-stone-500 hover:text-stone-700 font-medium">
+              {parentLabel}
+            </Link>
+            <span className="text-stone-300 text-xs">›</span>
+            <span className="text-xs font-bold text-stone-900">{student.fullName}</span>
+            <Badge
+              variant={student.status === "ACTIVE" ? "success" : "secondary"}
+              className="text-[9px] h-5 px-2 font-bold rounded ml-1"
+            >
+              {student.status}
+            </Badge>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -325,7 +384,7 @@ export function StudentFeePageClient({
           {!isStudentSelf && (
             <div className="flex items-center gap-2">
               <Link
-                href={`/students/${student.id}/details`}
+                href={detailsHref}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors shadow-xs"
               >
                 <Eye className="w-3.5 h-3.5" /> View More

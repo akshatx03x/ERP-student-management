@@ -12,10 +12,10 @@ export default async function StudentDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sessionId?: string }>;
+  searchParams: Promise<{ sessionId?: string; from?: string; returnTo?: string; returnLabel?: string }>;
 }) {
   const { id } = await params;
-  const { sessionId: selectedSessionId } = (await searchParams) || {};
+  const { sessionId: selectedSessionId, from, returnTo, returnLabel } = (await searchParams) || {};
 
   const { user } = await requirePermission("student.view");
   const schoolId = schoolIdFromUser(user);
@@ -207,6 +207,9 @@ export default async function StudentDetailPage({
       userRole={user.role}
       branding={branding}
       selectedSessionId={currentEnrollment?.sessionId ?? selectedSessionId ?? null}
+      from={from ?? null}
+      returnTo={returnTo ?? null}
+      returnLabel={returnLabel ?? null}
     />
   );
 }

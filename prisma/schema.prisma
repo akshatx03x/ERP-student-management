@@ -70,6 +70,8 @@ model User {
   isActive                    Boolean                @default(true)
   mustChangePassword          Boolean                @default(false)
   loginIdentifier             String?
+  username                    String?                @unique
+  pinHash                     String?
   schoolId                    String?
   staffProfileId              String?                @unique
   studentId                   String?                @unique

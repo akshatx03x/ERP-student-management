@@ -24,7 +24,11 @@ import {
   updateUserCredentialsAction,
 } from "@/server/actions/settings.actions";
 import { uploadDocumentAction } from "@/server/actions/platform.actions";
+import { changePrincipalPinAction } from "@/server/actions/pin-settings.actions";
+import { authClient } from "@/lib/auth-client";
 import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
+import { getFriendlyErrorMessage } from "@/lib/action-client";
+import { KeyRound, Lock } from "lucide-react";
 import type { PermissionGroup, PermissionPreset, PermissionKey } from "@/config/permissions";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -272,7 +276,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-type Tab = "branding" | "staff" | "users";
+type Tab = "branding" | "staff" | "users" | "security";
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -369,6 +373,83 @@ export function SettingsClient({
   const [permTarget, setPermTarget] = useState<UserRow | null>(null);
   const [overrideMap, setOverrideMap] = useState<Record<string, boolean>>({});
   const [loadingPerms, setLoadingPerms] = useState(false);
+
+  // Security / PIN & Password State
+  const [pinForm, setPinForm] = useState({
+    currentPin: "",
+    newPin: "",
+    confirmPin: "",
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  async function handleChangePin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!/^\d{4}$/.test(pinForm.newPin)) {
+      toast.error("New PIN must contain exactly 4 digits.");
+      return;
+    }
+    if (pinForm.newPin !== pinForm.confirmPin) {
+      toast.error("New PIN and Confirm PIN do not match.");
+      return;
+    }
+
+    setIsChangingPin(true);
+    try {
+      const res = await changePrincipalPinAction({
+        currentPin: pinForm.currentPin,
+        newPin: pinForm.newPin,
+        confirmPin: pinForm.confirmPin,
+      });
+
+      if (res.success === false) {
+        toast.error(res.error || "Failed to update PIN.");
+      } else {
+        toast.success("PIN updated successfully! You can now log in with your new 4-digit PIN.");
+        setPinForm({ currentPin: "", newPin: "", confirmPin: "" });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update PIN.");
+    } finally {
+      setIsChangingPin(false);
+    }
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (passwordForm.newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters.");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("New password and Confirm password do not match.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const result = await authClient.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+
+      if (result.error) {
+        toast.error(result.error.message || "Failed to update password.");
+      } else {
+        toast.success("Password updated successfully! Next time log in using your new password.");
+        setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      }
+    } catch {
+      toast.error("Failed to update password.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
 
   const handleTogglePerm = useCallback((key: string, val: boolean) => {
     setOverrideMap((m) => ({ ...m, [key]: val }));
@@ -596,6 +677,7 @@ export function SettingsClient({
     ...(isAdminView ? [{ id: "users" as Tab, label: "User Management" }] : []),
     { id: "branding", label: "School Branding" },
     { id: "staff", label: "Staff Profiles" },
+    { id: "security", label: "Security & Credentials" },
   ];
 
   return (
@@ -825,7 +907,7 @@ export function SettingsClient({
                       const file = e.target.files?.[0];
                       if (!file) return;
                       if (file.size > 5 * 1024 * 1024) {
-                        toast.error("Logo must be less than 5MB");
+                        toast.error("Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
                         return;
                       }
                       setIsLogoUploading(true);
@@ -845,10 +927,15 @@ export function SettingsClient({
                             mimeType: file.type || "image/png",
                             base64: btoa(binary),
                           });
-                          setForm((f) => ({ ...f, logoDocumentId: doc.id }));
+                          if (doc && "success" in doc && !doc.success) {
+                            toast.error(doc.error || "Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
+                            return;
+                          }
+                          const docId = (doc as any).id || (doc as any).data?.id;
+                          setForm((f) => ({ ...f, logoDocumentId: docId }));
                           toast.success("Logo uploaded");
-                        } catch {
-                          toast.error("Failed to upload logo");
+                        } catch (err) {
+                          toast.error(getFriendlyErrorMessage(err, "Failed to upload logo"));
                         } finally {
                           setIsLogoUploading(false);
                         }
@@ -1038,6 +1125,120 @@ export function SettingsClient({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── TAB: SECURITY & CREDENTIALS ──────────────────────────────────── */}
+      {activeTab === "security" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Change PIN Card */}
+          <Card className="border border-stone-200 shadow-xs">
+            <CardHeader className="border-b border-stone-100 bg-stone-50/50 pb-4">
+              <CardTitle className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <KeyRound className="w-4.5 h-4.5 text-amber-600" /> Principal 4-Digit PIN
+              </CardTitle>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Update your 4-digit PIN for quick Principal workstation access
+              </p>
+            </CardHeader>
+            <CardContent className="pt-5 space-y-4">
+              <form onSubmit={handleChangePin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="currentPin">Current PIN</Label>
+                  <Input
+                    id="currentPin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="••••"
+                    value={pinForm.currentPin}
+                    onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="newPin">New 4-Digit PIN *</Label>
+                  <Input
+                    id="newPin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="••••"
+                    required
+                    value={pinForm.newPin}
+                    onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                  />
+                  <p className="text-[11px] text-stone-400">Must be exactly 4 numeric digits (e.g. 0396)</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPin">Confirm New PIN *</Label>
+                  <Input
+                    id="confirmPin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="••••"
+                    required
+                    value={pinForm.confirmPin}
+                    onChange={(e) => setPinForm({ ...pinForm, confirmPin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                  />
+                </div>
+                <Button type="submit" disabled={isChangingPin || pinForm.newPin.length !== 4} className="w-full bg-stone-900 text-white font-bold">
+                  {isChangingPin ? "Updating PIN..." : "Save New PIN"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Change Password Card */}
+          <Card className="border border-stone-200 shadow-xs">
+            <CardHeader className="border-b border-stone-100 bg-stone-50/50 pb-4">
+              <CardTitle className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <Lock className="w-4.5 h-4.5 text-indigo-600" /> Change Account Password
+              </CardTitle>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Update your login password for Email & Password authentication
+              </p>
+            </CardHeader>
+            <CardContent className="pt-5 space-y-4">
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="currentPassword">Current Password *</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    required
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="newPassword">New Password *</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    minLength={6}
+                    required
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword">Confirm New Password *</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    minLength={6}
+                    required
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  />
+                </div>
+                <Button type="submit" disabled={isChangingPassword} className="w-full bg-stone-900 text-white font-bold">
+                  {isChangingPassword ? "Updating Password..." : "Save New Password"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* ── MODAL: CREATE USER ───────────────────────────────────────────── */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo, Fragment } from "react";
+import { useState, useTransition, useMemo, Fragment, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -62,23 +62,62 @@ interface MetaData {
   activeSessionId: string;
 }
 
-export function ClassWiseStatusClient({ metaData }: { metaData: MetaData }) {
+export interface InitialFilters {
+  session?: string;
+  class?: string;
+  section?: string;
+  month?: string;
+  status?: string;
+  search?: string;
+}
+
+export function ClassWiseStatusClient({
+  metaData,
+  initialFilters,
+}: {
+  metaData: MetaData;
+  initialFilters?: InitialFilters;
+}) {
   const [isPending, startTransition] = useTransition();
 
   // Loading Step state
-  const [sessionId, setSessionId] = useState(metaData.activeSessionId);
-  const [classId, setClassId] = useState("");
-  const [sectionId, setSectionId] = useState("");
+  const [sessionId, setSessionId] = useState(initialFilters?.session || metaData.activeSessionId);
+  const [classId, setClassId] = useState(initialFilters?.class || "");
+  const [sectionId, setSectionId] = useState(initialFilters?.section || "");
 
   // Table Data & Filters state
   const [reportData, setReportData] = useState<{ items: StudentRow[]; total: number } | null>(null);
-  const [month, setMonth] = useState("");
-  const [status, setStatus] = useState("");
+  const [month, setMonth] = useState(initialFilters?.month || "");
+  const [status, setStatus] = useState(initialFilters?.status || "");
   const [feeHeadId, setFeeHeadId] = useState("");
   const [pendingOnly, setPendingOnly] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialFilters?.search || "");
   const [page, setPage] = useState(1);
   const pageSize = 20;
+
+  // Auto-fetch if initial classId is provided (e.g. returning from Fee Collection)
+  useEffect(() => {
+    const targetClassId = initialFilters?.class;
+    if (targetClassId) {
+      startTransition(async () => {
+        try {
+          const res = await getClassWiseFeeStatusReportAction({
+            sessionId: initialFilters?.session || metaData.activeSessionId,
+            classId: targetClassId,
+            sectionId: initialFilters?.section || undefined,
+            month: initialFilters?.month || undefined,
+            status: initialFilters?.status || undefined,
+            search: initialFilters?.search || undefined,
+            page: 1,
+            pageSize,
+          });
+          setReportData(res as any);
+        } catch (err: any) {
+          toast.error("Failed to load records: " + err.message);
+        }
+      });
+    }
+  }, [initialFilters, metaData.activeSessionId]);
 
   // Accordion row expansion
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
@@ -468,7 +507,9 @@ export function ClassWiseStatusClient({ metaData }: { metaData: MetaData }) {
                             </td>
                             <td className="p-3 text-center print:hidden">
                               <Link
-                                href={`/fees?student=${encodeURIComponent(row.studentId)}`}
+                                href={`/fees?student=${encodeURIComponent(row.studentId)}&returnTo=${encodeURIComponent(
+                                  `/fees/class-wise-status?session=${encodeURIComponent(sessionId)}&class=${encodeURIComponent(classId)}${sectionId ? `&section=${encodeURIComponent(sectionId)}` : ""}${month ? `&month=${encodeURIComponent(month)}` : ""}${status ? `&status=${encodeURIComponent(status)}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`
+                                )}&returnLabel=${encodeURIComponent("Back to Class-Wise Fee Status")}`}
                                 className="inline-flex h-7 items-center rounded-md border border-indigo-200 bg-indigo-50 px-2.5 text-[10px] font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
                               >
                                 Fee Collection

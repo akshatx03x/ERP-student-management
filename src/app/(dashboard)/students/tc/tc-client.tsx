@@ -20,6 +20,7 @@ import {
 } from "@/server/actions/tc.actions";
 import { TransferCertificateDocument } from "@/components/tc/transfer-certificate-document";
 import { printTC } from "@/components/tc/tc-printer";
+import { getFriendlyErrorMessage } from "@/lib/action-client";
 
 // ─── Component Types ─────────────────────────────────────────────────────────
 
@@ -228,7 +229,7 @@ export function TCClient({
     if (!selectedStudent) return;
     startTransition(async () => {
       try {
-        await generateTCAction({
+        const res = await generateTCAction({
           studentId: selectedStudent.id,
           sessionId: selectedSessionId,
           classId: selectedClassId,
@@ -238,10 +239,14 @@ export function TCClient({
           remarks: tcForm.remarks,
           dateOfIssue: new Date(tcForm.dateOfIssue),
         });
+        if (res && "success" in res && !res.success) {
+          toast.error(res.error || "Failed to generate TC draft");
+          return;
+        }
         toast.success("Draft Transfer Certificate created successfully");
         loadStudentTC(selectedStudent.id);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to generate TC draft");
+        toast.error(getFriendlyErrorMessage(err, "Failed to generate TC draft"));
       }
     });
   };
@@ -251,17 +256,21 @@ export function TCClient({
     if (!activeTC) return;
     startTransition(async () => {
       try {
-        await updateTCAction({
+        const res = await updateTCAction({
           tcId: activeTC.id,
           attendance: tcForm.attendance,
           conduct: tcForm.conduct,
           remarks: tcForm.remarks,
           dateOfIssue: new Date(tcForm.dateOfIssue),
         });
+        if (res && "success" in res && !res.success) {
+          toast.error(res.error || "Failed to save changes");
+          return;
+        }
         toast.success("Changes saved to draft");
         loadStudentTC(activeTC.studentId);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to save changes");
+        toast.error(getFriendlyErrorMessage(err, "Failed to save changes"));
       }
     });
   };
@@ -280,7 +289,11 @@ export function TCClient({
 
     startTransition(async () => {
       try {
-        await executeTCStatusActionAction({ tcId: targetId, action });
+        const res = await executeTCStatusActionAction({ tcId: targetId, action });
+        if (res && "success" in res && !res.success) {
+          toast.error(res.error || "Action failed");
+          return;
+        }
         toast.success(`Action "${action}" executed successfully`);
         
         // Refresh local views
@@ -293,7 +306,7 @@ export function TCClient({
         }
         fetchRegisterList();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Action failed");
+        toast.error(getFriendlyErrorMessage(err, "Action failed"));
       }
     });
   };

@@ -190,7 +190,7 @@ export function EditStudentForm({
                 const file = e.target.files?.[0];
                 if (file) {
                   if (file.size > 5 * 1024 * 1024) {
-                    alert("Please select an image smaller than 5MB.");
+                    toast.error("Image upload failed: image size exceeds the 5 MB limit. Please choose a smaller image.");
                     return;
                   }
                   setIsPhotoLoading(true);

@@ -414,8 +414,8 @@ export function TransferCertificateDocument({
         <TCRow number="9" label="PEN NO." value={student.penId || "NA"} />
         <TCRow
           number="10"
-          label="Last class studied & Result"
-          value={`${currentClassFormatted} , ${(academic.resultOutcome || "PROMOTED").toUpperCase()}`}
+          label="Last class studied"
+          value={currentClassFormatted}
         />
         <TCRow
           number="11"
@@ -425,7 +425,7 @@ export function TransferCertificateDocument({
         <TCRow
           number="12"
           label="Attendance in last Academic year"
-          value={tc.attendance || "120 / 218"}
+          value={tc.attendance || "198 / 218"}
         />
         <TCRow
           number="13"

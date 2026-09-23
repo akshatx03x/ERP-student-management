@@ -183,7 +183,7 @@ export function RetainedStudentsClient({
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <Link
-                          href={`/students/${s.id}`}
+                          href={`/students/${s.id}?from=retained&returnTo=${encodeURIComponent("/students/retained")}&returnLabel=${encodeURIComponent("Back to Retained Students")}`}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100 hover:bg-stone-200/70 border border-stone-200 px-3 py-1.5 text-[11px] font-semibold text-stone-700 transition-colors"
                         >
                           <Eye className="w-3.5 h-3.5" /> View Profile

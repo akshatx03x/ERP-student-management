@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
       "@radix-ui/react-toast",
       "@radix-ui/react-tooltip",
     ],
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
   },
   output: "standalone",
   eslint: {

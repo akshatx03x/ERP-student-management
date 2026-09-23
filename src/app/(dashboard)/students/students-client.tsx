@@ -743,9 +743,9 @@ export function StudentsClient({
             variant="outline"
             disabled={pending}
             onClick={() => setIsBulkReceiptOpen(true)}
-            className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-bold"
+            className=" text-grey-700 hover:bg-emerald-50 font-bold"
           >
-            🧾 Bulk Receipts
+            Bulk Receipts
           </Button>
         </div>
       </div>
