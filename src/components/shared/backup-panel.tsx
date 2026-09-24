@@ -381,7 +381,9 @@ export function BackupPanel({
 
         // Step 3: Fetch the generated backup file blob
         setBackupStep("downloading");
-        const res = await fetch(`/api/backup/download?id=${encodeURIComponent(backup.id)}`);
+        const res = await fetch(`/api/backup/download?id=${encodeURIComponent(backup.id)}`, {
+          credentials: "same-origin",
+        });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Download failed" }));
           throw new Error((err as { error?: string }).error ?? "Download failed");
@@ -395,10 +397,10 @@ export function BackupPanel({
           const base64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => {
-              const resStr = reader.result as string;
+              const resStr = (reader.result as string) || "";
               resolve(resStr.includes(",") ? resStr.split(",")[1] : resStr);
             };
-            reader.onerror = reject;
+            reader.onerror = () => reject(new Error("Failed to process backup file for saving"));
             reader.readAsDataURL(blob);
           });
 

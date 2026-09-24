@@ -118,7 +118,7 @@ export const appConfig: AppConfig = {
       dbFilePath: (() => {
         const url = resolveDatabaseUrl();
         if (url.startsWith("file:")) {
-          return url.replace(/^file:/, "");
+          return url.replace(/^file:\/{0,3}/, "").replace(/^file:/, "");
         }
         return path.join(baseDir, "data", "school.db");
       })(),

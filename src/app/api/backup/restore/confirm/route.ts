@@ -72,7 +72,10 @@ export async function POST(request: NextRequest) {
   const tempDir = appConfig.offlinePaths.tempDir;
   const resolvedTempPath = path.resolve(tempDbPath);
   const resolvedTempDir = path.resolve(tempDir);
-  if (!resolvedTempPath.startsWith(resolvedTempDir)) {
+  const isWin = process.platform === "win32";
+  const p1 = isWin ? resolvedTempPath.toLowerCase() : resolvedTempPath;
+  const p2 = isWin ? resolvedTempDir.toLowerCase() : resolvedTempDir;
+  if (!p1.startsWith(p2)) {
     return NextResponse.json(
       { error: "Invalid tempDbPath: path is outside the allowed temp directory." },
       { status: 400 },

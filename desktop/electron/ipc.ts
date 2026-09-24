@@ -58,24 +58,31 @@ export function registerIpcHandlers(): void {
 
   // Channel 6: Native Save File Dialog
   ipcMain.handle("dialog:save-file", async (_evt: any, payload?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => {
-    const focusedWin = BrowserWindow.getFocusedWindow();
-    const result = await dialog.showSaveDialog(focusedWin!, {
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+    const options = {
       title: "Save ERP Backup",
       defaultPath: payload?.defaultPath || "school_erp_backup.erpbackup",
       filters: payload?.filters || [
         { name: "ERP Backup (*.erpbackup)", extensions: ["erpbackup"] },
         { name: "All Files", extensions: ["*"] },
       ],
-    });
+    };
+    const result = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
     return result;
   });
 
   // Channel 7: Save Buffer to Disk
-  ipcMain.handle("file:save-buffer", async (_evt: any, payload: { targetPath: string; bufferBase64: string }) => {
-    if (!payload?.targetPath || !payload?.bufferBase64) {
-      throw new Error("Invalid payload: targetPath and bufferBase64 are required");
+  ipcMain.handle("file:save-buffer", async (_evt: any, payload: { targetPath: string; bufferBase64?: string; buffer?: Uint8Array }) => {
+    if (!payload?.targetPath || (!payload?.bufferBase64 && !payload?.buffer)) {
+      throw new Error("Invalid payload: targetPath and buffer data are required");
     }
-    const buffer = Buffer.from(payload.bufferBase64, "base64");
+    const buffer = payload.buffer
+      ? Buffer.from(payload.buffer)
+      : Buffer.from(payload.bufferBase64!, "base64");
+    const dir = require("path").dirname(payload.targetPath);
+    if (!fs.existsSync(dir)) {
+      await fs.promises.mkdir(dir, { recursive: true });
+    }
     await fs.promises.writeFile(payload.targetPath, buffer);
     return { success: true, filePath: payload.targetPath };
   });

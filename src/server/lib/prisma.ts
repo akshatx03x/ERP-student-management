@@ -157,6 +157,21 @@ export async function ensureSqlitePragmas(client: PrismaClient = globalForPrisma
   }
 }
 
+// Disconnect and release SQLite database handles cleanly
+export async function disconnectPrisma(): Promise<void> {
+  console.log("[Prisma] Disconnecting Prisma instances and closing SQLite connections...");
+  if (globalForPrisma.prismaInstance) {
+    try {
+      await globalForPrisma.prismaInstance.$disconnect();
+    } catch (e) {
+      console.warn("[Prisma] Error disconnecting base instance:", e);
+    }
+    globalForPrisma.prismaInstance = undefined;
+    globalForPrisma.extendedInstance = undefined;
+    isPragmaApplied = false;
+  }
+}
+
 // Recreate connections cleanly
 export async function recreatePrismaInstance(): Promise<void> {
   console.log("[Prisma] Recreating Prisma instances and destroying cached connections...");

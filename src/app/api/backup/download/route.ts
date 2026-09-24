@@ -35,10 +35,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing backup id parameter" }, { status: 400 });
   }
 
-  // ── List and find matching backup ─────────────────────────────────────────
+  // ── Find matching backup ──────────────────────────────────────────────────
   const provider = getBackupProvider();
-  const backups = await provider.listBackups();
-  const backup = backups.find((b) => b.id === id || b.filename === id);
+  let backup = await provider.getBackupById(id);
+  if (!backup) {
+    const backups = await provider.listBackups();
+    backup = backups.find((b) => b.id === id || b.filename === id) ?? null;
+  }
 
   if (!backup) {
     return NextResponse.json({ error: "Backup not found" }, { status: 404 });
