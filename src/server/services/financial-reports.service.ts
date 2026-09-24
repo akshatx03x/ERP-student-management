@@ -1779,22 +1779,38 @@ export async function getReceiptRegister(filters: ReceiptRegisterFilters = {}) {
       : {}),
     ...(filters.paymentMethod ? { method: filters.paymentMethod as any } : {}),
     ...(filters.receiptNo ? { receiptNo: { contains: filters.receiptNo.trim() } } : {}),
-    // Class/section filter via allocations → studentFee → student → enrollments
+    // Class/section/session filter via allocations → studentFee OR direct student → enrollments
     ...(filters.classId || filters.sectionId || filters.sessionId
       ? {
           allocations: {
             some: {
-              studentFee: {
-                ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
-                student: {
-                  enrollments: {
-                    some: {
-                      ...(filters.classId ? { classId: filters.classId } : {}),
-                      ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+              OR: [
+                {
+                  studentFee: {
+                    ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                    student: {
+                      enrollments: {
+                        some: {
+                          ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                          ...(filters.classId ? { classId: filters.classId } : {}),
+                          ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+                        },
+                      },
                     },
                   },
                 },
-              },
+                {
+                  student: {
+                    enrollments: {
+                      some: {
+                        ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                        ...(filters.classId ? { classId: filters.classId } : {}),
+                        ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+                      },
+                    },
+                  },
+                },
+              ],
             },
           },
         }
@@ -1819,7 +1835,18 @@ export async function getReceiptRegister(filters: ReceiptRegisterFilters = {}) {
         },
         allocations: {
           include: {
-            student: { select: { id: true, fullName: true, admissionNo: true } },
+            student: {
+              select: {
+                id: true,
+                fullName: true,
+                admissionNo: true,
+                enrollments: {
+                  orderBy: { createdAt: "desc" },
+                  take: 1,
+                  include: { class: { select: { name: true } }, section: { select: { name: true } } },
+                },
+              },
+            },
             studentFee: {
               include: {
                 feeHead: { select: { name: true } },
@@ -1855,7 +1882,7 @@ export async function getReceiptRegister(filters: ReceiptRegisterFilters = {}) {
     p.allocations.forEach((a) => {
       const s = a.studentFee?.student ?? a.student;
       if (s && !studentsMap.has(s.fullName)) {
-        const enrollment = a.studentFee?.student?.enrollments?.[0];
+        const enrollment = a.studentFee?.student?.enrollments?.[0] ?? a.student?.enrollments?.[0];
         studentsMap.set(s.fullName, {
           id: a.studentId,
           name: s.fullName,
@@ -1867,11 +1894,19 @@ export async function getReceiptRegister(filters: ReceiptRegisterFilters = {}) {
 
     const students = Array.from(studentsMap.values());
 
+    // Receipt display amount calculation:
+    // If payment amount > 0, use payment amount.
+    // Else if allocated fee total > 0 (e.g. wallet settlement), use total allocated fee value.
+    // Otherwise 0.
+    const paymentAmount = decimalToNumber(p.amount);
+    const totalAllocated = p.allocations.reduce((sum, a) => sum + decimalToNumber(a.amount), 0);
+    const displayAmount = paymentAmount > 0 ? paymentAmount : (totalAllocated > 0 ? totalAllocated : 0);
+
     return {
       id: p.id,
       receiptNo: p.receiptNo,
       paidAt: p.paidAt,
-      amount: decimalToNumber(p.amount),
+      amount: displayAmount,
       method: p.method as string,
       referenceNo: p.referenceNo,
       notes: p.notes,
@@ -1916,26 +1951,33 @@ export async function getCashBook(filters: CashBookFilters = {}) {
       where: { family: { schoolId }, createdAt: { lt: startDate } },
       select: { type: true, amount: true },
     }),
-    prisma.cashBookEntry.aggregate({
+    prisma.cashBookEntry.findMany({
       where: { schoolId, date: { lt: startDate }, isVoided: false },
-      _sum: { amount: true },
+      select: { entryType: true, amount: true },
     }),
   ]);
 
-  // All fee payments are credits; advance tx varies; cash book entries vary
+  // All fee payments are credits; advance tx refunds are debits; cash book entries add/subtract
   let openingBalance = decimalToNumber(priorPayments._sum.amount ?? 0);
   priorAdvanceTx.forEach((tx) => {
     const amt = decimalToNumber(tx.amount);
-    if (tx.type === "CREDIT_FROM_PAYMENT" || tx.type === "CREDIT_NOTE_ADJUSTMENT") {
-      // wallet top-ups are internal, not cash-in, skip
-    } else if (tx.type === "MANUAL_REFUND") {
+    if (tx.type === "MANUAL_REFUND") {
       openingBalance -= amt; // cash refund is an outflow
     }
   });
-  // CashBook entries — income types add, expense types subtract
-  // We'll handle this in the summary computation
+
+  priorCashBook.forEach((e) => {
+    const amt = decimalToNumber(e.amount);
+    if (e.entryType === "MISC_INCOME" || e.entryType === "OTHER_INCOME") {
+      openingBalance += amt;
+    } else {
+      openingBalance -= amt;
+    }
+  });
 
   // ── Fetch transactions for the selected period ──────────────────────────
+  // Note: Exclude CREDIT_FROM_PAYMENT from advanceTx to prevent double counting
+  // with feePayments (which already represents the incoming cash).
   const [feePayments, advanceTx, cashEntries] = await Promise.all([
     prisma.familyPayment.findMany({
       where: { family: { schoolId }, paidAt: { gte: startDate, lte: endDate } },
@@ -1953,7 +1995,7 @@ export async function getCashBook(filters: CashBookFilters = {}) {
       where: {
         family: { schoolId },
         createdAt: { gte: startDate, lte: endDate },
-        type: { in: ["MANUAL_REFUND", "CREDIT_FROM_PAYMENT"] },
+        type: "MANUAL_REFUND",
       },
       orderBy: { createdAt: "asc" },
       include: {
@@ -2004,16 +2046,15 @@ export async function getCashBook(filters: CashBookFilters = {}) {
   });
 
   advanceTx.forEach((tx) => {
-    const isCredit = tx.type === "CREDIT_FROM_PAYMENT";
     rows.push({
       id: tx.id,
       date: tx.createdAt,
       voucherNo: null,
-      transactionType: isCredit ? "Wallet Deposit" : "Refund",
+      transactionType: "Refund",
       description: tx.reason,
       remarks: tx.remarks,
-      credit: isCredit ? decimalToNumber(tx.amount) : 0,
-      debit: isCredit ? 0 : decimalToNumber(tx.amount),
+      credit: 0,
+      debit: decimalToNumber(tx.amount),
       recordedBy: tx.recordedBy?.name ?? null,
       sourceType: "WALLET_TX",
     });
@@ -2444,3 +2485,335 @@ export async function getWalletDetail(familyId: string) {
     })),
   };
 }
+
+// ── 6. TOTAL TRANSACTIONS REGISTER (COMBO OF RECEIPT, CASHBOOK, AND WALLET) ──
+export interface TotalTransactionsFilters {
+  page?: number;
+  pageSize?: number;
+  startDate?: Date;
+  endDate?: Date;
+  search?: string;
+  registerType?: "ALL" | "RECEIPT" | "CASHBOOK" | "WALLET";
+  paymentMethod?: string;
+  sessionId?: string;
+  classId?: string;
+  sectionId?: string;
+}
+
+export interface TotalTransactionItem {
+  id: string;
+  date: Date;
+  register: "RECEIPT" | "CASHBOOK" | "WALLET";
+  transactionType: string;
+  referenceNo: string;
+  partyName: string;
+  details?: string | null;
+  paymentMethod: string;
+  amount: number;
+  flow: "INFLOW" | "OUTFLOW";
+  status: string;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  notes?: string | null;
+  recordedBy?: string | null;
+}
+
+export async function getTotalTransactionsRegister(filters: TotalTransactionsFilters = {}) {
+  const user = await requirePermission("fee.view");
+  const schoolId = schoolIdFromUser(user.user as any);
+  const { page, pageSize } = parsePagination(filters.page, filters.pageSize ?? 20);
+
+  const startDate = filters.startDate ? new Date(filters.startDate) : undefined;
+  const endDate = filters.endDate ? new Date(filters.endDate) : undefined;
+  const search = filters.search?.trim();
+  const searchLower = search?.toLowerCase();
+  const registerType = filters.registerType ?? "ALL";
+
+  // Fetch overall system aggregates in parallel:
+  const [walletAgg, pendingFeeAgg] = await Promise.all([
+    prisma.familyAdvanceWallet.aggregate({
+      where: { family: { schoolId } },
+      _sum: { balance: true },
+    }),
+    prisma.studentFee.aggregate({
+      where: {
+        student: { schoolId },
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const totalInWallet = decimalToNumber(walletAgg._sum.balance ?? 0);
+  const totalPendingFees = decimalToNumber(pendingFeeAgg._sum.amount ?? 0);
+
+  // Determine which registers to fetch
+  const fetchReceipts = registerType === "ALL" || registerType === "RECEIPT";
+  const fetchCashbook = registerType === "ALL" || registerType === "CASHBOOK";
+  const fetchWallet = registerType === "ALL" || registerType === "WALLET";
+
+  const paymentWhere: Prisma.FamilyPaymentWhereInput = {
+    family: {
+      schoolId,
+      ...(search ? buildUniversalFamilySearch(search) : {}),
+    },
+    ...(startDate || endDate
+      ? { paidAt: { ...(startDate ? { gte: startDate } : {}), ...(endDate ? { lte: endDate } : {}) } }
+      : {}),
+    ...(filters.paymentMethod ? { method: filters.paymentMethod as any } : {}),
+    ...(filters.classId || filters.sectionId || filters.sessionId
+      ? {
+          allocations: {
+            some: {
+              OR: [
+                {
+                  studentFee: {
+                    ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                    student: {
+                      enrollments: {
+                        some: {
+                          ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                          ...(filters.classId ? { classId: filters.classId } : {}),
+                          ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+                        },
+                      },
+                    },
+                  },
+                },
+                {
+                  student: {
+                    enrollments: {
+                      some: {
+                        ...(filters.sessionId ? { sessionId: filters.sessionId } : {}),
+                        ...(filters.classId ? { classId: filters.classId } : {}),
+                        ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        }
+      : {}),
+  };
+
+  const cashbookWhere: Prisma.CashBookEntryWhereInput = {
+    schoolId,
+    ...(startDate || endDate
+      ? { date: { ...(startDate ? { gte: startDate } : {}), ...(endDate ? { lte: endDate } : {}) } }
+      : {}),
+    ...(search
+      ? {
+          OR: [
+            { voucherNo: { contains: search } },
+            { description: { contains: search } },
+            { remarks: { contains: search } },
+          ],
+        }
+      : {}),
+  };
+
+  const walletWhere: Prisma.AdvanceTransactionWhereInput = {
+    family: {
+      schoolId,
+      ...(search ? buildUniversalFamilySearch(search) : {}),
+    },
+    ...(startDate || endDate
+      ? { createdAt: { ...(startDate ? { gte: startDate } : {}), ...(endDate ? { lte: endDate } : {}) } }
+      : {}),
+  };
+
+  const [receipts, cashEntries, walletTx] = await Promise.all([
+    fetchReceipts
+      ? prisma.familyPayment.findMany({
+          where: paymentWhere,
+          orderBy: { paidAt: "desc" },
+          take: 500,
+          include: {
+            recordedBy: { select: { name: true } },
+            family: { select: { fatherName: true, primaryPhone: true } },
+            allocations: {
+              take: 1,
+              include: {
+                student: {
+                  select: {
+                    fullName: true,
+                    admissionNo: true,
+                    enrollments: {
+                      take: 1,
+                      orderBy: { createdAt: "desc" },
+                      include: { class: { select: { name: true } }, section: { select: { name: true } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+      : [],
+    fetchCashbook
+      ? prisma.cashBookEntry.findMany({
+          where: cashbookWhere,
+          orderBy: { date: "desc" },
+          take: 500,
+          include: { recordedBy: { select: { name: true } } },
+        })
+      : [],
+    fetchWallet
+      ? prisma.advanceTransaction.findMany({
+          where: walletWhere,
+          orderBy: { createdAt: "desc" },
+          take: 500,
+          include: {
+            family: { select: { fatherName: true, primaryPhone: true } },
+            targetStudent: { select: { fullName: true, admissionNo: true } },
+            recordedBy: { select: { name: true } },
+          },
+        })
+      : [],
+  ]);
+
+  const items: TotalTransactionItem[] = [];
+
+  // Transform Receipts
+  receipts.forEach((p) => {
+    const student = p.allocations[0]?.student;
+    const studentName = student?.fullName ?? p.family?.fatherName ?? "—";
+    const classSec = student?.enrollments[0]
+      ? `${student.enrollments[0].class.name}-${student.enrollments[0].section.name}`
+      : undefined;
+    items.push({
+      id: p.id,
+      date: p.paidAt,
+      register: "RECEIPT",
+      transactionType: "Fee Collection",
+      referenceNo: p.receiptNo,
+      partyName: studentName,
+      details: classSec ? `Class: ${classSec}` : `Phone: ${p.family?.primaryPhone ?? "—"}`,
+      paymentMethod: p.method,
+      amount: decimalToNumber(p.amount),
+      flow: "INFLOW",
+      status: "COMPLETED",
+      notes: p.notes,
+      recordedBy: p.recordedBy?.name ?? "System",
+    });
+  });
+
+  // Transform Cashbook
+  const creditTypes = ["MISC_INCOME", "OTHER_INCOME"];
+  cashEntries.forEach((c) => {
+    const isCredit = creditTypes.includes(c.entryType);
+    items.push({
+      id: c.id,
+      date: c.date,
+      register: "CASHBOOK",
+      transactionType: c.entryType.replace(/_/g, " "),
+      referenceNo: c.voucherNo ?? "CB-" + c.id.slice(0, 6).toUpperCase(),
+      partyName: "Cashbook Record",
+      details: c.description,
+      paymentMethod: "CASH",
+      amount: decimalToNumber(c.amount),
+      flow: isCredit ? "INFLOW" : "OUTFLOW",
+      status: c.isVoided ? "VOIDED" : "ACTIVE",
+      notes: c.remarks,
+      recordedBy: c.recordedBy?.name ?? "System",
+    });
+  });
+
+  // Transform Wallet
+  const walletInflows = ["CREDIT_FROM_PAYMENT", "CREDIT_NOTE_ADJUSTMENT"];
+  const WALLET_LABELS: Record<string, string> = {
+    CREDIT_FROM_PAYMENT: "Wallet Advance Deposit",
+    CREDIT_NOTE_ADJUSTMENT: "Wallet Credit Adjustment",
+    DEBIT_FEE_SETTLEMENT: "Wallet Fee Settlement",
+    MANUAL_REFUND: "Wallet Refund to Parent",
+    MANUAL_ADJUSTMENT: "Wallet Manual Adjustment",
+  };
+  walletTx.forEach((tx) => {
+    const isInflow = walletInflows.includes(tx.type);
+    const studentName = tx.targetStudent?.fullName;
+    const fatherName = tx.family?.fatherName ?? "Parent";
+    items.push({
+      id: tx.id,
+      date: tx.createdAt,
+      register: "WALLET",
+      transactionType: WALLET_LABELS[tx.type] ?? tx.type.replace(/_/g, " "),
+      referenceNo: "WT-" + tx.id.slice(0, 8).toUpperCase(),
+      partyName: fatherName + (studentName ? ` (${studentName})` : ""),
+      details: tx.reason ?? "Wallet Tx",
+      paymentMethod: tx.type === "CREDIT_FROM_PAYMENT" ? "CASH / ONLINE" : "WALLET",
+      amount: decimalToNumber(tx.amount),
+      flow: isInflow ? "INFLOW" : "OUTFLOW",
+      status: "COMPLETED",
+      balanceBefore: decimalToNumber(tx.balanceBefore),
+      balanceAfter: decimalToNumber(tx.balanceAfter),
+      notes: tx.remarks,
+      recordedBy: tx.recordedBy?.name ?? "System",
+    });
+  });
+
+  // Global sort descending by date
+  items.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  // Additional in-memory filtering if search query exists and wasn't fully matched in DB
+  let filteredItems = items;
+  if (searchLower) {
+    filteredItems = items.filter((item) =>
+      item.referenceNo.toLowerCase().includes(searchLower) ||
+      item.partyName.toLowerCase().includes(searchLower) ||
+      item.transactionType.toLowerCase().includes(searchLower) ||
+      (item.details && item.details.toLowerCase().includes(searchLower)) ||
+      (item.notes && item.notes.toLowerCase().includes(searchLower))
+    );
+  }
+
+  // Aggregate summary metrics
+  let totalReceiptsAmount = 0;
+  let totalCashbookInflow = 0;
+  let totalCashbookOutflow = 0;
+  let totalWalletCredits = 0;
+  let totalWalletDebits = 0;
+
+  filteredItems.forEach((item) => {
+    if (item.register === "RECEIPT") {
+      totalReceiptsAmount += item.amount;
+    } else if (item.register === "CASHBOOK") {
+      if (item.flow === "INFLOW") totalCashbookInflow += item.amount;
+      else if (item.status !== "VOIDED") totalCashbookOutflow += item.amount;
+    } else if (item.register === "WALLET") {
+      if (item.flow === "INFLOW") totalWalletCredits += item.amount;
+      else totalWalletDebits += item.amount;
+    }
+  });
+
+  const totalTransactionCount = filteredItems.length;
+  const totalTransactionVolume = filteredItems.reduce((acc, curr) => acc + curr.amount, 0);
+
+  // Paginate items
+  const startIndex = (page - 1) * pageSize;
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + pageSize);
+
+  return {
+    items: paginatedItems,
+    total: totalTransactionCount,
+    page,
+    pageSize,
+    summary: {
+      totalTransactionCount,
+      totalTransactionVolume,
+      totalReceiptsAmount,
+      totalInWallet,
+      totalPendingFees,
+      totalCashbookInflow,
+      totalCashbookOutflow,
+      cashbookNet: totalCashbookInflow - totalCashbookOutflow,
+      totalWalletCredits,
+      totalWalletDebits,
+      receiptsCount: receipts.length,
+      cashbookCount: cashEntries.length,
+      walletCount: walletTx.length,
+    },
+  };
+}
+

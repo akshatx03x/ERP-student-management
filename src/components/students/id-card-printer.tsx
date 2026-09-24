@@ -5,8 +5,8 @@ import ReactDOM from "react-dom/client";
 import { IDCard, StudentProps, BrandingProps } from "./id-card";
 import { jsPDF } from "jspdf";
 
-const CARD_WIDTH_MM = 52;  // 5.2 cm
-const CARD_HEIGHT_MM = 84; // 8.4 cm
+const CARD_WIDTH_MM = 53.25;  // 53.25 mm
+const CARD_HEIGHT_MM = 86;     // 86 mm
 
 function getPrintIframe(id = "erp-isolated-id-card-iframe"): HTMLIFrameElement {
   let iframe = document.getElementById(id) as HTMLIFrameElement | null;
@@ -29,7 +29,7 @@ function getPrintIframe(id = "erp-isolated-id-card-iframe"): HTMLIFrameElement {
 
 /**
  * Prints a single ID card using an isolated iframe.
- * Preserves the exact 52mm x 84mm (5.2cm x 8.4cm) dimensions.
+ * Preserves the exact 53.25mm x 86mm dimensions.
  */
 export async function printSingleIDCard(
   student: StudentProps,
@@ -57,8 +57,8 @@ export async function printSingleIDCard(
         ${styles}
         <style>
           @page {
-            size: A4 portrait !important;
-            margin: 8mm !important;
+            size: 53.25mm 86mm !important;
+            margin: 0 !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -74,7 +74,7 @@ export async function printSingleIDCard(
             display: flex !important;
             justify-content: center !important;
             align-items: flex-start !important;
-            padding-top: 5mm !important;
+            padding-top: 0 !important;
             line-height: normal !important;
           }
           .id-card-single-canvas {
@@ -166,8 +166,8 @@ export async function printBulkIDCards(
             line-height: normal !important;
           }
           .bulk-landscape-page {
-            width: 277mm !important;
-            height: 186mm !important;
+            width: 281mm !important;
+            height: 180mm !important;
             display: grid !important;
             grid-template-columns: repeat(5, ${CARD_WIDTH_MM}mm) !important;
             grid-template-rows: repeat(2, ${CARD_HEIGHT_MM}mm) !important;
@@ -340,10 +340,10 @@ export async function downloadBulkIDCardsPDF(
 
   // 10 cards per page (5 columns x 2 rows)
   const cardsPerPage = 10;
-  const xMargin = 11.5; // (297 - (5*52 + 4*3.5)) / 2 = 11.5mm
-  const yMargin = 19;   // (210 - (2*84 + 1*4)) / 2 = 19mm
   const xGap = 3.5;
   const yGap = 4;
+  const xMargin = (297 - (5 * CARD_WIDTH_MM + 4 * xGap)) / 2; // (297 - 280.25) / 2 = 8.375mm
+  const yMargin = (210 - (2 * CARD_HEIGHT_MM + 1 * yGap)) / 2; // (210 - 176) / 2 = 17mm
 
   try {
     for (let i = 0; i < students.length; i++) {

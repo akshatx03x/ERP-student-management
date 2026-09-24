@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,27 +32,52 @@ type AlumniStudent = {
     remarks?: string | null;
   } | null;
   enrollments: Array<{
-    class: { name: string };
-    section: { name: string };
+    id?: string;
+    class: { id: string; name: string };
+    section: { id: string; name: string };
     session: { id: string; name: string };
+    status?: string;
   }>;
 };
 
 type SessionRow = {
   id: string;
   name: string;
+  isCurrent?: boolean;
 };
+
+type ClassRow = {
+  id: string;
+  name: string;
+  sections?: Array<{ id: string; name: string }>;
+};
+
+function getGraduationEnrollment(student: AlumniStudent) {
+  if (!student.enrollments || student.enrollments.length === 0) return null;
+  const gradMatch = student.enrollments.find((e) => e.status === "GRADUATED");
+  return gradMatch || student.enrollments[0];
+}
 
 export function AlumniStudentsClient({
   students,
-  sessions,
+  sessions = [],
+  classes = [],
 }: {
   students: AlumniStudent[];
   sessions: SessionRow[];
+  classes?: ClassRow[];
 }) {
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string>("ALL");
+  const [selectedClassId, setSelectedClassId] = useState<string>("ALL");
+  const [selectedSectionId, setSelectedSectionId] = useState<string>("ALL");
+
+  const activeSections = useMemo(() => {
+    if (selectedClassId === "ALL" || !selectedClassId) return [];
+    const cls = classes.find((c) => c.id === selectedClassId);
+    return cls?.sections ?? [];
+  }, [classes, selectedClassId]);
 
   function handleReactivate(studentId: string, studentName: string) {
     if (!confirm(`Are you sure you want to re-activate ${studentName}? This will restore their active status and enrollment.`)) return;
@@ -67,25 +92,38 @@ export function AlumniStudentsClient({
     });
   }
 
-  const filtered = students.filter((s) => {
-    // Session filter
-    if (selectedSessionId !== "ALL") {
-      const lastEnr = s.enrollments[0];
-      if (lastEnr?.session?.id !== selectedSessionId) return false;
-    }
+  const filtered = useMemo(() => {
+    return students.filter((s) => {
+      const gradEnr = getGraduationEnrollment(s);
 
-    // Search filter
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      const matchName = s.fullName.toLowerCase().includes(q);
-      const matchAdm = s.admissionNo.toLowerCase().includes(q);
-      const matchFather = s.family?.fatherName?.toLowerCase().includes(q);
-      const matchMother = s.family?.motherName?.toLowerCase().includes(q);
-      const matchPhone = s.family?.primaryPhone?.includes(q) || s.family?.secondaryPhone?.includes(q);
-      return matchName || matchAdm || matchFather || matchMother || matchPhone;
-    }
-    return true;
-  });
+      // Session filter
+      if (selectedSessionId !== "ALL" && gradEnr?.session?.id !== selectedSessionId) {
+        return false;
+      }
+
+      // Class filter
+      if (selectedClassId !== "ALL" && gradEnr?.class?.id !== selectedClassId) {
+        return false;
+      }
+
+      // Section filter
+      if (selectedSectionId !== "ALL" && gradEnr?.section?.id !== selectedSectionId) {
+        return false;
+      }
+
+      // Search filter
+      if (search.trim()) {
+        const q = search.toLowerCase().trim();
+        const matchName = s.fullName.toLowerCase().includes(q);
+        const matchAdm = s.admissionNo.toLowerCase().includes(q);
+        const matchFather = s.family?.fatherName?.toLowerCase().includes(q);
+        const matchMother = s.family?.motherName?.toLowerCase().includes(q);
+        const matchPhone = s.family?.primaryPhone?.includes(q) || s.family?.secondaryPhone?.includes(q);
+        return matchName || matchAdm || matchFather || matchMother || matchPhone;
+      }
+      return true;
+    });
+  }, [students, selectedSessionId, selectedClassId, selectedSectionId, search]);
 
   return (
     <Card className="shadow-sm">
@@ -96,22 +134,50 @@ export function AlumniStudentsClient({
             Directory of students who successfully completed their education and graduated from the school.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             placeholder="Search name, adm no, parents, phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full sm:w-64 h-8 text-xs"
+            className="w-full sm:w-60 h-8 text-xs"
           />
           <select
             value={selectedSessionId}
             onChange={(e) => setSelectedSessionId(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="ALL">All Graduation Sessions</option>
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.name} {s.isCurrent ? "(Current)" : ""}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedClassId}
+            onChange={(e) => {
+              setSelectedClassId(e.target.value);
+              setSelectedSectionId("ALL");
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="ALL">All Classes</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedSectionId}
+            onChange={(e) => setSelectedSectionId(e.target.value)}
+            disabled={!selectedClassId || selectedClassId === "ALL"}
+            className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+          >
+            <option value="ALL">All Sections</option>
+            {activeSections.map((sec) => (
+              <option key={sec.id} value={sec.id}>
+                {sec.name}
               </option>
             ))}
           </select>
@@ -137,7 +203,7 @@ export function AlumniStudentsClient({
               </thead>
               <tbody className="divide-y">
                 {filtered.map((s) => {
-                  const lastEnr = s.enrollments[0];
+                  const lastEnr = getGraduationEnrollment(s);
                   return (
                     <tr key={s.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-medium">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ type RetainedStudent = {
   } | null;
   enrollments: Array<{
     class: { id: string; name: string };
-    section: { name: string };
+    section: { id: string; name: string };
     session: { id: string; name: string };
     status: string;
   }>;
@@ -37,6 +37,7 @@ type SessionRow = {
 type ClassRow = {
   id: string;
   name: string;
+  sections?: Array<{ id: string; name: string }>;
 };
 
 export function RetainedStudentsClient({
@@ -51,14 +52,22 @@ export function RetainedStudentsClient({
   const [search, setSearch] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string>("ALL");
   const [selectedClassId, setSelectedClassId] = useState<string>("ALL");
+  const [selectedSectionId, setSelectedSectionId] = useState<string>("ALL");
+
+  const activeSections = useMemo(() => {
+    if (selectedClassId === "ALL" || !selectedClassId) return [];
+    const cls = classes.find((c) => c.id === selectedClassId);
+    return cls?.sections ?? [];
+  }, [classes, selectedClassId]);
 
   const filtered = students.filter((s) => {
-    // Session & Class filter
+    // Session & Class & Section filter
     const hasRetainedEnrollmentMatching = s.enrollments.some((e) => {
       const isRetained = e.status === "RETAINED";
       const sessionMatch = selectedSessionId === "ALL" || e.session.id === selectedSessionId;
       const classMatch = selectedClassId === "ALL" || e.class.id === selectedClassId;
-      return isRetained && sessionMatch && classMatch;
+      const sectionMatch = selectedSectionId === "ALL" || e.section.id === selectedSectionId;
+      return isRetained && sessionMatch && classMatch && sectionMatch;
     });
 
     if (!hasRetainedEnrollmentMatching) return false;
@@ -106,13 +115,29 @@ export function RetainedStudentsClient({
           </select>
           <select
             value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
+            onChange={(e) => {
+              setSelectedClassId(e.target.value);
+              setSelectedSectionId("ALL");
+            }}
             className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="ALL">All Classes</option>
             {classes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedSectionId}
+            onChange={(e) => setSelectedSectionId(e.target.value)}
+            disabled={!selectedClassId || selectedClassId === "ALL"}
+            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+          >
+            <option value="ALL">All Sections</option>
+            {activeSections.map((sec) => (
+              <option key={sec.id} value={sec.id}>
+                {sec.name}
               </option>
             ))}
           </select>
@@ -138,8 +163,14 @@ export function RetainedStudentsClient({
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {filtered.map((s) => {
-                  // Find first enrollment that is retained, or fallback to latest
-                  const retainedEnr = s.enrollments.find((e) => e.status === "RETAINED") || s.enrollments[0];
+                  // Find first enrollment that matches current filters or is retained, or fallback to latest
+                  const retainedEnr = s.enrollments.find((e) => {
+                    const isRetained = e.status === "RETAINED";
+                    const sessionMatch = selectedSessionId === "ALL" || e.session.id === selectedSessionId;
+                    const classMatch = selectedClassId === "ALL" || e.class.id === selectedClassId;
+                    const sectionMatch = selectedSectionId === "ALL" || e.section.id === selectedSectionId;
+                    return isRetained && sessionMatch && classMatch && sectionMatch;
+                  }) || s.enrollments.find((e) => e.status === "RETAINED") || s.enrollments[0];
                   return (
                     <tr key={s.id} className="hover:bg-stone-50/50 transition-colors">
                       <td className="px-5 py-3.5 font-medium">

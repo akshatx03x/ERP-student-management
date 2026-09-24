@@ -428,8 +428,8 @@ export function BulkIDCardModal({
                   <div
                     key={s.id}
                     style={{
-                      width: `${52 * zoom}mm`,
-                      height: `${84 * zoom}mm`,
+                      width: `${53.25 * zoom}mm`,
+                      height: `${86 * zoom}mm`,
                       display: "flex",
                       alignItems: "flex-start",
                       justifyContent: "flex-start",
@@ -440,8 +440,8 @@ export function BulkIDCardModal({
                       branding={previewBranding as unknown as BrandingProps}
                       selectedSessionId={selectedSessionId}
                       zoom={zoom}
-                      cardWidth={52}
-                      cardHeight={84}
+                      cardWidth={53.25}
+                      cardHeight={86}
                     />
                   </div>
                 ))}

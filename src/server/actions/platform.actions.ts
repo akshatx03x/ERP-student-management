@@ -29,7 +29,7 @@ import {
 import { prisma } from "@/server/lib/prisma";
 import { requirePermission } from "@/server/permissions/guard";
 import { safeAction, MAX_IMAGE_FILE_SIZE_BYTES } from "@/server/lib/action-response";
-import { schoolIdFromUser } from "@/server/lib/helpers";
+import { schoolIdFromUser, decimalToNumber } from "@/server/lib/helpers";
 import type {
   CreateExamTypeInput,
   CreateExamInput,
@@ -150,7 +150,20 @@ export async function listAuditLogsAction(input?: { page?: number; pageSize?: nu
 export async function getReportsSummaryAction() {
   const { user } = await requirePermission("report.view");
   const schoolId = schoolIdFromUser(user);
-  const [students, attendance, feesCollected, pendingFees, admissions] = await Promise.all([
+
+  const [
+    students,
+    attendance,
+    feesCollected,
+    pendingFees,
+    admissions,
+    walletAgg,
+    cashbookCount,
+    walletTxCount,
+    recentPayments,
+    recentCashbook,
+    recentWallet,
+  ] = await Promise.all([
     prisma.student.count({ where: { schoolId, status: "ACTIVE" } }),
     prisma.attendanceRecord.groupBy({
       by: ["status"],
@@ -174,13 +187,93 @@ export async function getReportsSummaryAction() {
       where: { session: { schoolId } },
       _count: true,
     }),
+    prisma.familyAdvanceWallet.aggregate({
+      where: { family: { schoolId } },
+      _sum: { balance: true },
+    }),
+    prisma.cashBookEntry.count({
+      where: { schoolId, isVoided: false },
+    }),
+    prisma.advanceTransaction.count({
+      where: { family: { schoolId } },
+    }),
+    prisma.familyPayment.findMany({
+      where: { family: { schoolId } },
+      orderBy: { paidAt: "desc" },
+      take: 8,
+      include: {
+        family: { select: { fatherName: true } },
+        allocations: { take: 1, include: { student: { select: { fullName: true } } } },
+      },
+    }),
+    prisma.cashBookEntry.findMany({
+      where: { schoolId, isVoided: false },
+      orderBy: { date: "desc" },
+      take: 8,
+    }),
+    prisma.advanceTransaction.findMany({
+      where: { family: { schoolId } },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: {
+        family: { select: { fatherName: true } },
+        targetStudent: { select: { fullName: true } },
+      },
+    }),
   ]);
+
+  const recentTransactions = [
+    ...recentPayments.map((p) => ({
+      id: p.id,
+      date: p.paidAt,
+      register: "RECEIPT" as const,
+      type: "Fee Collection",
+      ref: p.receiptNo,
+      party: p.allocations[0]?.student?.fullName ?? p.family?.fatherName ?? "—",
+      method: p.method,
+      amount: decimalToNumber(p.amount),
+      flow: "INFLOW" as const,
+    })),
+    ...recentCashbook.map((c) => ({
+      id: c.id,
+      date: c.date,
+      register: "CASHBOOK" as const,
+      type: c.entryType.replace(/_/g, " "),
+      ref: c.voucherNo ?? "CB-" + c.id.slice(0, 6).toUpperCase(),
+      party: c.description || "Cashbook Record",
+      method: "CASH",
+      amount: decimalToNumber(c.amount),
+      flow: ["MISC_INCOME", "OTHER_INCOME"].includes(c.entryType) ? ("INFLOW" as const) : ("OUTFLOW" as const),
+    })),
+    ...recentWallet.map((w) => ({
+      id: w.id,
+      date: w.createdAt,
+      register: "WALLET" as const,
+      type: w.type.replace(/_/g, " "),
+      ref: "WT-" + w.id.slice(0, 8).toUpperCase(),
+      party: w.family?.fatherName ?? "Wallet Parent",
+      method: w.type === "CREDIT_FROM_PAYMENT" ? "CASH / ONLINE" : "WALLET",
+      amount: decimalToNumber(w.amount),
+      flow: ["CREDIT_FROM_PAYMENT", "CREDIT_NOTE_ADJUSTMENT"].includes(w.type) ? ("INFLOW" as const) : ("OUTFLOW" as const),
+    })),
+  ]
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, 10);
+
+  const totalTransactionCount = feesCollected._count + cashbookCount + walletTxCount;
+  const totalInWallet = decimalToNumber(walletAgg._sum.balance ?? 0);
+  const totalFeesCollected = Number(feesCollected._sum.amount ?? 0);
+  const totalPendingFees = Number(pendingFees._sum.amount ?? 0);
+
   return {
     students,
     attendance,
-    feesCollected: Number(feesCollected._sum.amount ?? 0),
+    feesCollected: totalFeesCollected,
     paymentCount: feesCollected._count,
-    pendingFees: Number(pendingFees._sum.amount ?? 0),
+    pendingFees: totalPendingFees,
+    totalInWallet,
+    totalTransactionCount,
     admissions,
+    recentTransactions,
   };
 }

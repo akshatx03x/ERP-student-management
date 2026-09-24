@@ -24,11 +24,13 @@ import {
   getRefundRegister,
   getWalletRegister,
   getWalletDetail,
+  getTotalTransactionsRegister,
   ReceiptRegisterFilters,
   CashBookFilters,
   DiscountRegisterFilters,
   RefundRegisterFilters,
   WalletRegisterFilters,
+  TotalTransactionsFilters,
 } from "@/server/services/financial-reports.service";
 import {
   addCashBookEntry,
@@ -113,6 +115,10 @@ export async function getWalletRegisterAction(filters?: WalletRegisterFilters) {
 
 export async function getWalletDetailAction(familyId: string) {
   return getWalletDetail(familyId);
+}
+
+export async function getTotalTransactionsRegisterAction(filters?: TotalTransactionsFilters) {
+  return getTotalTransactionsRegister(filters);
 }
 
 // ── Cash Book manual entry actions ────────────────────────────────────────────

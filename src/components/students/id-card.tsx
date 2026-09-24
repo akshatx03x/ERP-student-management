@@ -43,8 +43,8 @@ export interface IDCardProps {
   zoom?: number;
   className?: string;
   id?: string;
-  cardWidth?: number; // default 52mm (5.2cm)
-  cardHeight?: number; // default 84mm (8.4cm)
+  cardWidth?: number; // default 53.25mm
+  cardHeight?: number; // default 86mm
 }
 
 // ── School Crest Emblem SVG ─────────────────────────────────────────────────
@@ -116,8 +116,8 @@ export function IDCard({
   zoom = 1,
   className = "",
   id,
-  cardWidth = 52, // 5.2 cm
-  cardHeight = 84, // 8.4 cm
+  cardWidth = 53.25, // 53.25 mm
+  cardHeight = 86, // 86 mm
 }: IDCardProps) {
   // Resolve active enrollment
   const enrollment =

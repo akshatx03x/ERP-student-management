@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import {
   Search, Download, FileText, Landmark, Wallet, RotateCcw,
-  Tag, ChevronDown, ChevronRight, Plus, Ban, Loader2,
+  Tag, ChevronDown, ChevronRight, Plus, Ban, Loader2, Layers,
   ChevronsLeft, ChevronLeft, ChevronRight as ChevronRightIcon, ChevronsRight,
 } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ import {
   getRefundRegisterAction,
   getWalletRegisterAction,
   getWalletDetailAction,
+  getTotalTransactionsRegisterAction,
   addCashBookEntryAction,
   voidCashBookEntryAction,
 } from "@/server/actions/financial-reports.actions";
@@ -33,9 +34,10 @@ interface Props {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-type TabId = "receipt" | "cashbook" | "discount" | "refund" | "wallet";
+type TabId = "total_transactions" | "receipt" | "cashbook" | "discount" | "refund" | "wallet";
 
 const TABS: { id: TabId; label: string; icon: any }[] = [
+  { id: "total_transactions", label: "Total Transactions", icon: Layers },
   { id: "receipt", label: "Receipt Register", icon: FileText },
   { id: "cashbook", label: "Cash Book", icon: Landmark },
   { id: "discount", label: "Discount Register", icon: Tag },
@@ -124,7 +126,7 @@ function Pagination({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>("receipt");
+  const [activeTab, setActiveTab] = useState<TabId>("total_transactions");
   const [isPending, startTransition] = useTransition();
 
   // ── Filter state shared across tabs ──────────────────────────────────────
@@ -135,12 +137,14 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [registerTypeFilter, setRegisterTypeFilter] = useState<"ALL" | "RECEIPT" | "CASHBOOK" | "WALLET">("ALL");
   const [page, setPage] = useState(1);
 
   // Get sections for selected class
   const sections = classes.find((c) => c.id === classId)?.sections ?? [];
 
   // ── Data state per tab ────────────────────────────────────────────────────
+  const [totalTransactionsData, setTotalTransactionsData] = useState<any>(null);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [cashBookData, setCashBookData] = useState<any>(null);
   const [discountData, setDiscountData] = useState<any>(null);
@@ -171,6 +175,14 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
 
   const searchDebounce = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Helper for local YYYY-MM-DD ─────────────────────────────────────────────
+  function toLocalYMD(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   // ── Load data whenever filters / tab / page changes ───────────────────────
   const loadData = useCallback(() => {
     const filters = {
@@ -178,15 +190,21 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
       classId: classId || undefined,
       sectionId: sectionId || undefined,
       search: search.trim() || undefined,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(`${endDate}T23:59:59`) : undefined,
+      startDate: startDate ? new Date(`${startDate}T00:00:00`) : undefined,
+      endDate: endDate ? new Date(`${endDate}T23:59:59.999`) : undefined,
       paymentMethod: paymentMethod || undefined,
       page,
       pageSize: 20,
     };
 
     startTransition(async () => {
-      if (activeTab === "receipt") {
+      if (activeTab === "total_transactions") {
+        const d = await getTotalTransactionsRegisterAction({
+          ...filters,
+          registerType: registerTypeFilter,
+        });
+        setTotalTransactionsData(d);
+      } else if (activeTab === "receipt") {
         const d = await getReceiptRegisterAction(filters);
         setReceiptData(d);
       } else if (activeTab === "cashbook") {
@@ -203,12 +221,12 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
         setWalletData(d);
       }
     });
-  }, [activeTab, sessionId, classId, sectionId, search, startDate, endDate, paymentMethod, page]);
+  }, [activeTab, sessionId, classId, sectionId, search, startDate, endDate, paymentMethod, registerTypeFilter, page]);
 
   // Load on tab/page change immediately
   useEffect(() => {
     loadData();
-  }, [activeTab, page]);
+  }, [activeTab, page, registerTypeFilter]);
 
   // Debounce for filter changes
   useEffect(() => {
@@ -218,7 +236,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
       else loadData();
     }, 350);
     return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
-  }, [search, sessionId, classId, sectionId, startDate, endDate, paymentMethod]);
+  }, [search, sessionId, classId, sectionId, startDate, endDate, paymentMethod, registerTypeFilter]);
 
   function switchTab(tab: TabId) {
     setActiveTab(tab);
@@ -234,7 +252,13 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
     let body = "";
     let filename = "report.csv";
 
-    if (activeTab === "receipt" && receiptData?.items) {
+    if (activeTab === "total_transactions" && totalTransactionsData?.items) {
+      header = "Date,Register,Type,Reference No,Party / Student,Details,Payment Method,Flow,Amount,Status,Recorded By,Notes\n";
+      body = totalTransactionsData.items.map((t: any) =>
+        `"${formatDate(t.date)}","${t.register}","${t.transactionType}","${t.referenceNo}","${(t.partyName ?? "").replace(/"/g, '""')}","${(t.details ?? "").replace(/"/g, '""')}","${t.paymentMethod}","${t.flow}",${t.amount},"${t.status}","${t.recordedBy ?? ""}","${(t.notes ?? "").replace(/"/g, '""')}"`
+      ).join("\n");
+      filename = "total-transactions-combo-register.csv";
+    } else if (activeTab === "receipt" && receiptData?.items) {
       header = "Date,Receipt No,Method,Student(s),Class,Parent,Amount,Status,Remarks,Collected By\n";
       body = receiptData.items.map((r: any) =>
         `"${formatDate(r.paidAt)}","${r.receiptNo}","${r.method}","${r.students.map((s: any) => s.name).join("; ")}","${r.students[0]?.classSection ?? ""}","${r.family?.fatherName ?? ""}",${r.amount},"${r.status}","${(r.notes ?? "").replace(/"/g, '""')}","${r.recordedBy?.name ?? ""}"`
@@ -329,21 +353,22 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
   function setDatePreset(preset: "today" | "yesterday" | "thisMonth") {
     const now = new Date();
     if (preset === "today") {
-      const d = now.toISOString().slice(0, 10);
+      const d = toLocalYMD(now);
       setStartDate(d); setEndDate(d);
     } else if (preset === "yesterday") {
       const y = new Date(now); y.setDate(y.getDate() - 1);
-      const d = y.toISOString().slice(0, 10);
+      const d = toLocalYMD(y);
       setStartDate(d); setEndDate(d);
     } else if (preset === "thisMonth") {
-      const s = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-      const e = now.toISOString().slice(0, 10);
+      const s = toLocalYMD(new Date(now.getFullYear(), now.getMonth(), 1));
+      const e = toLocalYMD(now);
       setStartDate(s); setEndDate(e);
     }
     setPage(1);
   }
 
-  const currentData = activeTab === "receipt" ? receiptData
+  const currentData = activeTab === "total_transactions" ? totalTransactionsData
+    : activeTab === "receipt" ? receiptData
     : activeTab === "cashbook" ? cashBookData
     : activeTab === "discount" ? discountData
     : activeTab === "refund" ? refundData
@@ -404,7 +429,7 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, adm no, parents, phone…"
+              placeholder="Search name, adm no, parents, phone, receipt…"
               className="pl-8 h-8 text-xs bg-white rounded-lg border-stone-300"
             />
           </div>
@@ -426,8 +451,8 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
             />
           </div>
 
-          {/* Date presets — only for cash-book and refund */}
-          {(activeTab === "cashbook" || activeTab === "refund") && (
+          {/* Date presets — for total_transactions, cash-book and refund */}
+          {(activeTab === "total_transactions" || activeTab === "cashbook" || activeTab === "refund") && (
             <div className="flex gap-1">
               {(["today", "yesterday", "thisMonth"] as const).map((p) => (
                 <button
@@ -441,8 +466,8 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
             </div>
           )}
 
-          {/* Session filter — receipt, discount, wallet */}
-          {(activeTab === "receipt" || activeTab === "discount" || activeTab === "wallet") && sessions.length > 0 && (
+          {/* Session filter — total_transactions, receipt, discount, wallet */}
+          {(activeTab === "total_transactions" || activeTab === "receipt" || activeTab === "discount" || activeTab === "wallet") && sessions.length > 0 && (
             <select
               value={sessionId}
               onChange={(e) => { setSessionId(e.target.value); setPage(1); }}
@@ -456,44 +481,110 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
           )}
 
           {/* Class filter */}
-          {activeTab !== "cashbook" && activeTab !== "refund" && (
+          {(activeTab === "total_transactions" || activeTab === "receipt" || activeTab === "discount" || activeTab === "wallet") && classes.length > 0 && (
             <select
               value={classId}
               onChange={(e) => { setClassId(e.target.value); setSectionId(""); setPage(1); }}
               className="h-8 px-2 text-xs border border-stone-300 rounded-lg bg-white text-stone-700"
             >
               <option value="">All Classes</option>
-              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
             </select>
           )}
 
           {/* Section filter */}
-          {activeTab !== "cashbook" && activeTab !== "refund" && classId && sections.length > 0 && (
+          {(activeTab === "total_transactions" || activeTab === "receipt" || activeTab === "discount" || activeTab === "wallet") && sections.length > 0 && (
             <select
               value={sectionId}
               onChange={(e) => { setSectionId(e.target.value); setPage(1); }}
               className="h-8 px-2 text-xs border border-stone-300 rounded-lg bg-white text-stone-700"
             >
               <option value="">All Sections</option>
-              {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
             </select>
           )}
 
-          {/* Payment method — receipt only */}
-          {activeTab === "receipt" && (
+          {/* Payment Method filter */}
+          {(activeTab === "total_transactions" || activeTab === "receipt" || activeTab === "cashbook") && (
             <select
               value={paymentMethod}
               onChange={(e) => { setPaymentMethod(e.target.value); setPage(1); }}
               className="h-8 px-2 text-xs border border-stone-300 rounded-lg bg-white text-stone-700"
             >
-              <option value="">All Methods</option>
-              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
+              <option value="">All Payment Methods</option>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>{METHOD_LABELS[m] ?? m}</option>
+              ))}
             </select>
           )}
 
           {isPending && <Loader2 className="w-4 h-4 animate-spin text-stone-400 ml-1" />}
         </div>
 
+        {/* ── TOTAL TRANSACTIONS SUMMARY BAR ───────────────────────────── */}
+        {activeTab === "total_transactions" && totalTransactionsData?.summary && (
+          <div className="border-b border-stone-200 bg-stone-50/50 px-5 py-3 shrink-0 space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+              <div className="bg-white p-2.5 rounded-xl border border-stone-200 flex flex-col shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Total Transactions</span>
+                <span className="text-base font-bold text-stone-900 mt-0.5">{totalTransactionsData.summary.totalTransactionCount.toLocaleString()}</span>
+                <span className="text-[10px] text-stone-500 font-mono mt-0.5">{formatCurrency(totalTransactionsData.summary.totalTransactionVolume)}</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-emerald-200/70 bg-emerald-50/30 flex flex-col shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Fees Collected</span>
+                <span className="text-base font-bold text-emerald-700 mt-0.5">{formatCurrency(totalTransactionsData.summary.totalReceiptsAmount)}</span>
+                <span className="text-[10px] text-emerald-600/80 font-semibold mt-0.5">{totalTransactionsData.summary.receiptsCount} receipts</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-indigo-200/70 bg-indigo-50/30 flex flex-col shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Amount in Wallet</span>
+                <span className="text-base font-bold text-indigo-700 mt-0.5">{formatCurrency(totalTransactionsData.summary.totalInWallet)}</span>
+                <span className="text-[10px] text-indigo-600/80 font-semibold mt-0.5">{totalTransactionsData.summary.walletCount} wallet txns</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-rose-200/70 bg-rose-50/30 flex flex-col shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Fees Pending</span>
+                <span className="text-base font-bold text-rose-700 mt-0.5">{formatCurrency(totalTransactionsData.summary.totalPendingFees)}</span>
+                <span className="text-[10px] text-rose-600/80 font-semibold mt-0.5">Outstanding fees</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-amber-200/70 bg-amber-50/30 flex flex-col shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Cashbook Inflow</span>
+                <span className="text-base font-bold text-amber-800 mt-0.5">{formatCurrency(totalTransactionsData.summary.totalCashbookInflow)}</span>
+                <span className="text-[10px] text-amber-700/80 font-semibold mt-0.5">Out: {formatCurrency(totalTransactionsData.summary.totalCashbookOutflow)}</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-stone-200 flex flex-col shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Cashbook Net</span>
+                <span className={cn("text-base font-bold mt-0.5", totalTransactionsData.summary.cashbookNet >= 0 ? "text-emerald-700" : "text-rose-700")}>
+                  {formatCurrency(totalTransactionsData.summary.cashbookNet)}
+                </span>
+                <span className="text-[10px] text-stone-500 font-semibold mt-0.5">{totalTransactionsData.summary.cashbookCount} records</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 pt-1 text-xs">
+              <span className="text-stone-400 font-bold uppercase text-[10px] mr-1">Filter Register:</span>
+              {(["ALL", "RECEIPT", "CASHBOOK", "WALLET"] as const).map((reg) => (
+                <button
+                  key={reg}
+                  onClick={() => { setRegisterTypeFilter(reg); setPage(1); }}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all border",
+                    registerTypeFilter === reg
+                      ? "bg-stone-900 text-white border-stone-900 shadow-xs"
+                      : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
+                  )}
+                >
+                  {reg === "ALL" ? `All Registers (${totalTransactionsData.summary.totalTransactionCount})` :
+                   reg === "RECEIPT" ? `Receipt Register (${totalTransactionsData.summary.receiptsCount})` :
+                   reg === "CASHBOOK" ? `Cash Book (${totalTransactionsData.summary.cashbookCount})` :
+                   `Wallet Register (${totalTransactionsData.summary.walletCount})`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {/* ── CASH BOOK SUMMARY BAR ─────────────────────────────────────── */}
         {activeTab === "cashbook" && cashBookData?.summary && (
           <div className="border-b border-stone-200 bg-stone-50/30 px-5 py-2.5 shrink-0 flex flex-wrap gap-x-6 gap-y-1 text-xs">
@@ -516,6 +607,63 @@ export function ReportsClient({ sessions, classes, currentSessionId }: Props) {
 
         {/* ── TABLE AREA ────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto">
+
+          {/* ══ TOTAL TRANSACTIONS (COMBO REGISTER) ════════════════════════════ */}
+          {activeTab === "total_transactions" && (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase text-[10px] sticky top-0 z-10">
+                  <th className="py-3 px-4">Date & Time</th>
+                  <th className="py-3 px-4">Register</th>
+                  <th className="py-3 px-4">Type / Category</th>
+                  <th className="py-3 px-4">Reference No</th>
+                  <th className="py-3 px-4">Party / Student</th>
+                  <th className="py-3 px-4">Method</th>
+                  <th className="py-3 px-4 text-right">Inflow (+)</th>
+                  <th className="py-3 px-4 text-right">Outflow (-)</th>
+                  <th className="py-3 px-4">Recorded By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {!totalTransactionsData ? (
+                  <tr><td colSpan={9} className="p-8 text-center text-stone-400">Loading combo transactions…</td></tr>
+                ) : totalTransactionsData.items.length === 0 ? (
+                  <tr><td colSpan={9} className="p-8 text-center text-stone-400">No transactions found across registers</td></tr>
+                ) : (
+                  totalTransactionsData.items.map((item: any) => (
+                    <tr key={`${item.register}-${item.id}`} className={cn("hover:bg-stone-50/40", item.status === "VOIDED" && "opacity-40 line-through")}>
+                      <td className="py-2.5 px-4 text-stone-500 whitespace-nowrap">{formatDate(item.date)}</td>
+                      <td className="py-2.5 px-4 whitespace-nowrap">
+                        <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold border",
+                          item.register === "RECEIPT" ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
+                          item.register === "CASHBOOK" ? "bg-amber-50 text-amber-800 border-amber-200" :
+                          "bg-indigo-50 text-indigo-800 border-indigo-200"
+                        )}>
+                          {item.register === "RECEIPT" ? "Receipt" : item.register === "CASHBOOK" ? "Cash Book" : "Wallet"}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 font-medium text-stone-800">{item.transactionType}</td>
+                      <td className="py-2.5 px-4 font-mono font-bold text-stone-700">{item.referenceNo}</td>
+                      <td className="py-2.5 px-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-stone-800 truncate max-w-[180px]" title={item.partyName}>{item.partyName}</span>
+                          {item.details && <span className="text-[10px] text-stone-400 truncate max-w-[180px]">{item.details}</span>}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4"><MethodBadge method={item.paymentMethod} /></td>
+                      <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-700">
+                        {item.flow === "INFLOW" ? `+${formatCurrency(item.amount)}` : "—"}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono font-bold text-rose-700">
+                        {item.flow === "OUTFLOW" ? `-${formatCurrency(item.amount)}` : "—"}
+                      </td>
+                      <td className="py-2.5 px-4 text-stone-500">{item.recordedBy ?? "System"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
 
           {/* ══ RECEIPT REGISTER ════════════════════════════════════════ */}
           {activeTab === "receipt" && (

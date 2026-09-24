@@ -233,11 +233,11 @@ export function FeeCollectionClient({
     loadProfile(s.id, selectedSessionId);
   }
 
-  function runAction(fn: () => Promise<unknown>, msg: string, cb?: () => void) {
+  function runAction(fn: () => Promise<unknown>, msg: string, cb?: () => void, toastOptions?: any) {
     startTransition(async () => {
       try {
         await fn();
-        toast.success(msg);
+        toast.success(msg, toastOptions);
         if (selectedStudentId) loadProfile(selectedStudentId);
         cb?.();
       } catch (e) {
@@ -330,7 +330,7 @@ export function FeeCollectionClient({
   }
 
   function openPaymentModal() {
-    const initialAmount = String(netDueAfterWallet);
+    const initialAmount = (netDueAfterWallet <= 0 && selectedMonths.length === 0) ? "" : String(netDueAfterWallet);
     setPayForm({
       amount: initialAmount,
       method: "CASH",
@@ -352,6 +352,11 @@ export function FeeCollectionClient({
   function handlePayment() {
     if (!profile) return;
     const amt = Number(payForm.amount) || 0;
+
+    if (!useWalletApplied && amt <= 0) {
+      toast.error("Please enter a valid payment amount greater than 0.");
+      return;
+    }
 
     // Map allocations based on mode
     let payloadAllocations: Array<{ studentId: string; studentFeeId: string | null; amount: number }> = [];
@@ -472,7 +477,11 @@ export function FeeCollectionClient({
         const r = await getReceiptAction(result.paymentId);
         setReceiptSnapshot(r.snapshot);
       }
-    }, "Payment collected and allocated successfully");
+    }, "Payment collected successfully", undefined, {
+      className: "!py-1.5 !px-3 !text-xs !min-h-0 !h-auto !max-w-xs font-semibold rounded-lg shadow-sm border border-emerald-200",
+      style: { padding: "6px 12px", fontSize: "12px", lineHeight: "1.2" },
+      duration: 2500,
+    });
   }
 
   function handleDiscount() {

@@ -6,7 +6,7 @@ import { AdmissionsClient } from "./admissions-client";
 
 export default async function AdmissionsPage() {
   const [admissions, classes, sessions, current] = await Promise.all([
-    listAdmissions({ pageSize: 50 }),
+    listAdmissions({ pageSize: 500 }),
     listClasses({ pageSize: 50 }),
     listSessions({ pageSize: 20 }),
     getCurrentSession(),

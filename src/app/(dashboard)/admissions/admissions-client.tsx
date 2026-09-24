@@ -27,11 +27,11 @@ type Admission = {
   photoUrl?: string | null;
   fatherName?: string | null;
   motherName?: string | null;
-  appliedClass: { name: string };
-  session: { name: string };
+  appliedClass: { id?: string; name: string };
+  session: { id: string; name: string; isCurrent?: boolean };
 };
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
-type Session = { id: string; name: string };
+type Session = { id: string; name: string; isCurrent?: boolean };
 
 type MatchedFamily = {
   id: string;
@@ -54,6 +54,7 @@ export function AdmissionsClient({
 }) {
   const [activeTab, setActiveTab] = useState<"form" | "approvals">("form");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">("ALL");
+  const [selectedSessionFilter, setSelectedSessionFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [pending, startTransition] = useTransition();
@@ -70,6 +71,7 @@ export function AdmissionsClient({
 
   const filteredAdmissions = useMemo(() => {
     return admissions.filter((a) => {
+      if (selectedSessionFilter !== "ALL" && a.session?.id !== selectedSessionFilter) return false;
       if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
@@ -81,7 +83,7 @@ export function AdmissionsClient({
       }
       return true;
     });
-  }, [admissions, statusFilter, searchQuery]);
+  }, [admissions, selectedSessionFilter, statusFilter, searchQuery]);
 
   async function handleUnifiedSubmit(formState: UnifiedFormState) {
     const phoneTrimmed = formState.phone.trim();
@@ -277,6 +279,18 @@ export function AdmissionsClient({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full sm:w-60 h-8 text-xs"
               />
+              <select
+                value={selectedSessionFilter}
+                onChange={(e) => setSelectedSessionFilter(e.target.value)}
+                className="h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="ALL">All Sessions</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.isCurrent || s.id === currentSessionId ? "(Current)" : ""}
+                  </option>
+                ))}
+              </select>
               <div className="inline-flex rounded-md border bg-muted/50 p-0.5 text-xs">
                 <button
                   type="button"

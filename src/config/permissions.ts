@@ -393,7 +393,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { title: "Former Students", href: "/students/former", resource: "student", icon: "UserMinus" },
       { title: "Alumni", href: "/students/alumni", resource: "student", icon: "Award" },
       { title: "Retained Students", href: "/students/retained", resource: "student", icon: "UserX" },
-      { title: "Transfer Certificates", href: "/students/tc", resource: "student", icon: "FileText" },
+      { title: "Transfer Certificates", href: "/students/tc", resource: "student", icon: "FileBadge" },
       { title: "Classes", href: "/classes", resource: "class", icon: "School" },
     ],
   },
