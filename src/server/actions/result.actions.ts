@@ -17,6 +17,10 @@ import {
   generateMarksTemplate,
   validateMarksImport,
   importClassMarks,
+  bulkPublishClassResults,
+  bulkUnpublishClassResults,
+  publishStudentResult,
+  unpublishStudentResult,
 } from "@/server/services/result.service";
 import { SubjectType, ExamPublishStatus, ResultOutcome, ResultStatus } from "@prisma/client";
 
@@ -141,8 +145,17 @@ export async function saveStudentMarksAction(input: {
     resultDate?: Date | null;
   } | null;
   reason?: string;
-}) {
-  return saveStudentMarks(input);
+}): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const res = await saveStudentMarks(input);
+    return { success: true, data: res };
+  } catch (error: any) {
+    console.error("[saveStudentMarksAction Error]", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to save student marks",
+    };
+  }
 }
 
 export async function generateMarksTemplateAction(input: {
@@ -180,3 +193,72 @@ export async function importClassMarksAction(input: {
 }) {
   return importClassMarks(input);
 }
+
+export async function bulkPublishClassResultsAction(input: {
+  classId: string;
+  sectionId?: string | null;
+  sessionId: string;
+}): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const res = await bulkPublishClassResults(input);
+    return { success: true, count: res.count };
+  } catch (error: any) {
+    console.error("[bulkPublishClassResultsAction Error]", error);
+    return {
+      success: false,
+      count: 0,
+      error: error instanceof Error ? error.message : "Failed to bulk publish results",
+    };
+  }
+}
+
+export async function bulkUnpublishClassResultsAction(input: {
+  classId: string;
+  sectionId?: string | null;
+  sessionId: string;
+}): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const res = await bulkUnpublishClassResults(input);
+    return { success: true, count: res.count };
+  } catch (error: any) {
+    console.error("[bulkUnpublishClassResultsAction Error]", error);
+    return {
+      success: false,
+      count: 0,
+      error: error instanceof Error ? error.message : "Failed to bulk unpublish results",
+    };
+  }
+}
+
+export async function publishStudentResultAction(
+  studentId: string,
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await publishStudentResult(studentId, sessionId);
+    return { success: true };
+  } catch (error: any) {
+    console.error("[publishStudentResultAction Error]", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to publish result",
+    };
+  }
+}
+
+export async function unpublishStudentResultAction(
+  studentId: string,
+  sessionId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await unpublishStudentResult(studentId, sessionId);
+    return { success: true };
+  } catch (error: any) {
+    console.error("[unpublishStudentResultAction Error]", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to unpublish result",
+    };
+  }
+}
+

@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { 
   User, Camera, Upload, X, ExternalLink, ShieldAlert, Phone, MapPin, 
-  HeartPulse, Bus, School, Award, Edit2, Trash2, Eye, AlertCircle 
+  HeartPulse, Bus, School, Award, Edit2, Trash2, Eye, AlertCircle,
+  FileText, Printer, CheckCircle2
 } from "lucide-react";
+import { ReportCard, calculateReportCardTotals, parseExcludedSubjectIds } from "@/components/results/report-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +60,16 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
   const [formData, setFormData] = useState<any>({});
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showReportCardModal, setShowReportCardModal] = useState(false);
+
+  const isPublished = Boolean(
+    marksData?.isPublished ||
+    marksData?.termResult?.status === "PUBLISHED" ||
+    marksData?.termResult?.status === "COMPLETED"
+  );
+  const hasTermResult = Boolean(marksData?.termResult);
+  const excludedIds = parseExcludedSubjectIds(marksData?.termResult?.principalRemarks);
+  const totals = marksData ? calculateReportCardTotals(marksData, excludedIds) : null;
 
   // Extract Guardians
   const fatherGuardian = student.family?.guardians?.find((g: any) => g.gender === "MALE") || 
@@ -458,64 +471,108 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
         </CardContent>
       </Card>
 
-      {/* 3. ACADEMIC PERFORMANCE (DEEP-LINKED EXAMS STATUS) */}
-      <Card className="border-stone-200 shadow-sm bg-white">
-        <CardHeader className="bg-stone-50/50 border-b py-3.5">
-          <CardTitle className="text-sm uppercase font-extrabold text-stone-500 tracking-wider flex items-center gap-1.5">
-            <Award className="w-4 h-4 text-indigo-650" /> Academic Exam Outlines
+      {/* 3. ACADEMIC ASSESSMENT REPORT CARD */}
+      <Card className="border-stone-200 shadow-sm bg-white overflow-hidden">
+        <CardHeader className="bg-stone-50/50 border-b py-3.5 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm uppercase font-extrabold text-stone-700 tracking-wider flex items-center gap-1.5">
+            <Award className="w-4 h-4 text-indigo-650" /> Annual Assessment Report 2025-26
           </CardTitle>
+          {isPublished ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Published
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+              Unpublished Draft
+            </span>
+          )}
         </CardHeader>
-        <CardContent className="p-4">
-          {marksData && marksData.exams && marksData.exams.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-3">
-              {marksData.exams.map((ex: any) => {
-                const hasResult = ex.subjects.some((es: any) =>
-                  marksData?.markEntries?.some((me: any) => me.examSubjectId === es.examSubjectId)
-                );
-                
-                return (
-                  <div key={ex.id} className="border border-stone-200 rounded-xl p-4 flex flex-col justify-between hover:border-stone-300 transition-all bg-stone-50/30">
-                    <div>
-                      <h4 className="font-extrabold text-stone-900 text-sm">{ex.name}</h4>
-                      <p className="text-[11px] text-stone-500 font-semibold mt-1">
-                        Class: {academicClass?.name || "—"} &bull; Term {ex.term}
-                      </p>
-                      <p className="text-[10px] text-stone-400 font-mono mt-0.5">
-                        Session: {currentSession?.name || "—"}
-                      </p>
-                    </div>
- 
-                    <div className="mt-4 flex items-center justify-between border-t pt-3">
-                      <div>
-                        <span className="block text-[10px] uppercase font-bold text-stone-400">Exam Status</span>
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase ${
-                          hasResult ? "text-emerald-700" : "text-stone-500"
-                        }`}>
-                          {hasResult ? "Result Available" : "No Result Available"}
-                        </span>
-                      </div>
- 
-                      {hasResult && (
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          className="h-7 text-sm font-bold gap-1 text-indigo-650 border-indigo-200 hover:bg-indigo-50/40"
-                          onClick={() => {
-                            router.push(`/results?studentId=${student.id}&classId=${academicClass?.id || ""}&sectionId=${classSection?.id || ""}`);
-                          }}
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View Result
-                        </Button>
-                      )}
-                    </div>
+        <CardContent className="p-5 space-y-4">
+          {isPublished || hasTermResult ? (
+            <div className="bg-stone-50/80 border border-stone-200 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="space-y-1">
+                <h4 className="font-extrabold text-stone-900 text-base font-serif tracking-wide">
+                  VIDYANJALI PUBLIC SCHOOL
+                </h4>
+                <p className="text-xs text-stone-500 font-medium">
+                  Annual Assessment Report 2025-26 &bull; Class: {academicClass?.name || "—"} {classSection?.name ? `(${classSection.name})` : ""}
+                </p>
+                <div className="flex flex-wrap items-center gap-4 pt-2 text-xs">
+                  <div>
+                    <span className="text-stone-400 font-semibold">Grand Total: </span>
+                    <span className="font-bold text-stone-900">{totals?.finalGrandTotal ?? "—"} / {totals?.finalMaxPossible ?? "—"}</span>
                   </div>
-                );
-              })}
+                  <div>
+                    <span className="text-stone-400 font-semibold">Percentage: </span>
+                    <span className="font-bold text-indigo-700">{totals?.finalPct ? `${totals.finalPct}%` : "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-stone-400 font-semibold">Final Grade: </span>
+                    <span className="font-bold text-emerald-700">{totals?.finalGrade ?? "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-stone-400 font-semibold">Outcome: </span>
+                    <span className="font-extrabold text-stone-900 uppercase">{marksData?.termResult?.resultOutcome || "PASS"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  onClick={() => setShowReportCardModal(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-8 flex items-center gap-1.5"
+                >
+                  <Eye className="w-3.5 h-3.5" /> View Report Card
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowReportCardModal(true);
+                    setTimeout(() => window.print(), 350);
+                  }}
+                  className="border-stone-300 font-bold text-xs h-8 flex items-center gap-1.5 text-stone-700 hover:bg-stone-50"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="text-center py-6">
               <span className="block text-stone-300 text-2xl">📝</span>
-              <p className="text-sm font-bold text-stone-400 mt-1">No Results Published Yet</p>
+              <p className="text-sm font-bold text-stone-400 mt-1">
+                Annual Result has not been published yet.
+              </p>
+            </div>
+          )}
+
+          {/* Exam Outlines */}
+          {marksData && marksData.exams && marksData.exams.length > 0 && (
+            <div className="pt-2">
+              <h5 className="text-[11px] font-extrabold text-stone-400 uppercase tracking-wider mb-2">Individual Examination Details</h5>
+              <div className="grid gap-3 md:grid-cols-3">
+                {marksData.exams.map((ex: any) => {
+                  const hasResult = ex.subjects.some((es: any) =>
+                    marksData?.markEntries?.some((me: any) => me.examSubjectId === es.examSubjectId)
+                  );
+                  
+                  return (
+                    <div key={ex.id} className="border border-stone-200 rounded-lg p-3 flex flex-col justify-between bg-stone-50/40">
+                      <div>
+                        <h4 className="font-bold text-stone-900 text-xs">{ex.name}</h4>
+                        <p className="text-[10px] text-stone-400 mt-0.5">
+                          Term {ex.term} &bull; {currentSession?.name || "—"}
+                        </p>
+                      </div>
+                      <div className="mt-2.5 flex items-center justify-between border-t border-stone-200/60 pt-2 text-[10px]">
+                        <span className="text-stone-400 font-semibold">Status:</span>
+                        <span className={`font-bold uppercase ${hasResult ? "text-emerald-700" : "text-stone-400"}`}>
+                          {hasResult ? "Evaluated" : "Pending"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>
@@ -1534,6 +1591,110 @@ export function StudentProfileClient({ student, marksData }: ProfileClientProps)
 
       {isUploading && (
         <ImageUploadOverlay fullScreen label="Uploading photo, please wait…" />
+      )}
+
+      {/* ══ STUDENT REPORT CARD VIEW & PRINT MODAL ════════════════════════ */}
+      {showReportCardModal && marksData && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-6 overflow-hidden print-modal-backdrop">
+          <div className="bg-white w-full h-full md:rounded-2xl max-w-6xl md:h-[95vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden print-modal-panel">
+            <div className="bg-stone-50 px-6 py-4 border-b border-stone-200 flex justify-between items-center shrink-0 no-print">
+              <div>
+                <h3 className="font-extrabold text-stone-900 text-sm">Annual Assessment Report Card</h3>
+                <p className="text-stone-500 text-xs mt-0.5 font-medium">{student.fullName} &bull; Vidyanjali Public School</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setShowReportCardModal(false)}>Close</Button>
+                <Button
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print / Save PDF
+                </Button>
+              </div>
+            </div>
+
+            <style dangerouslySetInnerHTML={{
+              __html: `
+              @media print {
+                html, body {
+                  height: auto !important;
+                  min-height: auto !important;
+                  overflow: visible !important;
+                  position: static !important;
+                  background: white !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                body > *:not(.print-modal-backdrop):not(:has(.print-modal-backdrop)) {
+                  display: none !important;
+                }
+                .no-print, .no-print * {
+                  display: none !important;
+                }
+                .print-modal-backdrop {
+                  position: static !important;
+                  left: auto !important;
+                  top: auto !important;
+                  width: 100% !important;
+                  height: auto !important;
+                  background: none !important;
+                  backdrop-filter: none !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  display: block !important;
+                  z-index: auto !important;
+                  overflow: visible !important;
+                }
+                .print-modal-panel {
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  height: auto !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  background: white !important;
+                  display: block !important;
+                  border-radius: 0 !important;
+                  overflow: visible !important;
+                }
+                .print-modal-scroll {
+                  overflow: visible !important;
+                  padding: 0 !important;
+                  margin: 0 !important;
+                  display: block !important;
+                  background: white !important;
+                  height: auto !important;
+                  max-height: none !important;
+                }
+                #report-card-print {
+                  border: none !important;
+                  box-shadow: none !important;
+                  margin: 0 auto !important;
+                  padding: 2mm 3mm !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  max-height: 205mm !important;
+                  height: auto !important;
+                  box-sizing: border-box !important;
+                  background: white !important;
+                  color: black !important;
+                  page-break-after: avoid !important;
+                  break-after: avoid !important;
+                  overflow: hidden !important;
+                }
+              }
+              @page {
+                size: A4 landscape;
+                margin: 0;
+              }
+            ` }} />
+
+            <div className="flex-1 overflow-y-auto p-8 bg-stone-100 flex justify-center print-modal-scroll">
+              <ReportCard data={marksData} />
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

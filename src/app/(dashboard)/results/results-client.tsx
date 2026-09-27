@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Search, Plus, BookOpen, Settings, Layout, Edit, Ban, Loader2, Save,
-  CheckCircle, ShieldAlert, FileText, ChevronRight, X, Upload, Download, AlertTriangle
+  CheckCircle, ShieldAlert, FileText, ChevronRight, X, Upload, Download, AlertTriangle,
+  Send, Printer, RotateCcw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -27,7 +28,12 @@ import {
   generateMarksTemplateAction,
   validateMarksImportAction,
   importClassMarksAction,
+  bulkPublishClassResultsAction,
+  bulkUnpublishClassResultsAction,
+  publishStudentResultAction,
+  unpublishStudentResultAction,
 } from "@/server/actions/result.actions";
+import { ReportCard, parseExcludedSubjectIds, parseDualGrade } from "@/components/results/report-card";
 import { SubjectType, ExamPublishStatus, ResultOutcome, ResultStatus } from "@prisma/client";
 import { toast } from "sonner";
 
@@ -74,6 +80,15 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
   const [previewData, setPreviewData] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
+
+  // Bulk Publish / Unpublish state
+  const [showBulkPublishModal, setShowBulkPublishModal] = useState(false);
+  const [showBulkUnpublishModal, setShowBulkUnpublishModal] = useState(false);
+  const [isBulkPublishing, setIsBulkPublishing] = useState(false);
+
+  // Optional Subject Deselection state
+  const [excludedSubjectIds, setExcludedSubjectIds] = useState<string[]>([]);
+  const [previewExcludedSubjectIds, setPreviewExcludedSubjectIds] = useState<string[]>([]);
 
   // New Print Class Results popup state
   const [showPrintClassModal, setShowPrintClassModal] = useState(false);
@@ -487,6 +502,8 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     try {
       const data = await getStudentMarksDataAction(studentId, sessionId);
       setPreviewData(data);
+      const parsedExcluded = parseExcludedSubjectIds(data?.termResult?.principalRemarks);
+      setPreviewExcludedSubjectIds(parsedExcluded);
 
       const photoUrl = data.student.photoUrl;
       const logoId = data.schoolBranding?.logoDocumentId;
@@ -528,8 +545,19 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
   // ── 1. Marks Entry Grid Recalculations ──────────────────────────────────────
   const handleMarkChange = (examSubjectId: string, val: string) => {
-    const numVal = Math.min(100, Math.max(0, Number(val) || 0));
-    setEditingMarks((prev) => ({ ...prev, [examSubjectId]: numVal }));
+    if (val === "") {
+      setEditingMarks((prev) => {
+        const next = { ...prev };
+        delete next[examSubjectId];
+        return next;
+      });
+      return;
+    }
+    const numVal = Number(val);
+    setEditingMarks((prev) => ({
+      ...prev,
+      [examSubjectId]: isNaN(numVal) ? 0 : numVal,
+    }));
   };
 
   const handleKeyDown = (
@@ -599,8 +627,14 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
       const subTotal = t1Sum + t2Sum;
       const subMax = t1Max + t2Max;
+      const isExcluded = excludedSubjectIds.includes(sub.id);
+      const isAdditional = sub.type === "CO_SCHOLASTIC" ||
+        sub.name.toUpperCase().includes("GK") ||
+        sub.name.toUpperCase().includes("GENERAL KNOWLEDGE") ||
+        sub.name.toUpperCase().includes("DRAW") ||
+        sub.name.toUpperCase().includes("ART");
 
-      if (sub.type === "SCHOLASTIC") {
+      if (sub.type === "SCHOLASTIC" && !isAdditional && !isExcluded) {
         finalGrandTotal += subTotal;
         finalMaxPossible += subMax;
       }
@@ -620,6 +654,9 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
         name: sub.name,
         code: sub.code,
         type: sub.type,
+        isOptional: sub.isOptional,
+        isExcluded,
+        isAdditional,
         t1Total: t1Sum,
         t1Max,
         t2Total: t2Sum,
@@ -651,6 +688,23 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
 
   const calc = getCalculatedTotals();
 
+  const modalT1Exams = marksData?.exams?.filter((e: any) => e.term === 1) || [];
+  const modalT2Exams = marksData?.exams?.filter((e: any) => e.term === 2) || [];
+  const allModalExams = [...modalT1Exams, ...modalT2Exams];
+
+  const hasAnyValidationErrors = Boolean(
+    marksData &&
+    calc?.subjectsSummary?.some((sub: any) => {
+      if (sub.isExcluded) return false;
+      return allModalExams.some((ex: any) => {
+        const es = ex.subjects?.find((s: any) => s.subjectId === sub.id);
+        if (!es) return false;
+        const v = editingMarks[es.examSubjectId];
+        return v !== undefined && v !== null && (v as any) !== "" && (Number(v) > es.maxMarks || Number(v) < 0);
+      });
+    })
+  );
+
   // Load Single Student Marks Data
   const openMarksEntry = async (studentId: string) => {
     setActiveStudentId(studentId);
@@ -668,15 +722,26 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
       setEditingMarks(initialMarks);
       setModificationReason("");
 
+      // Parse excluded optional subjects
+      const excluded = parseExcludedSubjectIds(data.termResult?.principalRemarks);
+      setExcludedSubjectIds(excluded);
+
+      const gkParsed = parseDualGrade(data.termResult?.gkGrade);
+      const artParsed = parseDualGrade(data.termResult?.artGrade);
+
       setEditingTerm({
         workingDays: data.termResult?.workingDays ?? data.autoWorkingDays ?? "",
         presentDays: data.termResult?.presentDays ?? data.autoPresentDays ?? "",
-        remarksMid: data.termResult?.remarksMid ?? "",
-        remarksFinal: data.termResult?.remarksFinal ?? "",
+        remarksMid: data.termResult?.remarksMid ?? "Dear, Give attention towards your studies",
+        remarksFinal: data.termResult?.remarksFinal ?? "Promoted to Next Class",
         resultOutcome: data.termResult?.resultOutcome ?? "PASS",
         status: data.termResult?.status ?? "DRAFT",
         gkGrade: data.termResult?.gkGrade ?? "",
         artGrade: data.termResult?.artGrade ?? "",
+        gkGradeT1: gkParsed.t1 === "—" ? "" : gkParsed.t1,
+        gkGradeT2: gkParsed.t2 === "—" ? "" : gkParsed.t2,
+        artGradeT1: artParsed.t1 === "—" ? "" : artParsed.t1,
+        artGradeT2: artParsed.t2 === "—" ? "" : artParsed.t2,
         rank: data.termResult?.rank ?? "",
         resultDate: data.termResult?.resultDate ? new Date(data.termResult.resultDate).toISOString().split('T')[0] : "",
         principalRemarks: data.termResult?.principalRemarks ?? "",
@@ -689,36 +754,108 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     }
   };
 
-  const saveMarks = async () => {
+  const saveMarks = async (statusOverride?: ResultStatus) => {
     if (!activeStudentId) return;
+
+    // 1. Client-side validation: check for marks exceeding maxMarks or negative marks
+    if (marksData) {
+      for (const sub of marksData.subjects) {
+        if (excludedSubjectIds.includes(sub.id)) continue; // Skip validation for excluded optional subjects
+        for (const ex of marksData.exams) {
+          const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+          if (!es) continue;
+          const rawVal = editingMarks[es.examSubjectId];
+          if (rawVal !== undefined && rawVal !== null && (rawVal as any) !== "") {
+            const num = Number(rawVal);
+            if (isNaN(num)) {
+              toast.error(`Invalid marks entered for ${sub.name} in ${ex.name}.`);
+              return;
+            }
+            if (num < 0) {
+              toast.error(`Marks cannot be negative for ${sub.name} in ${ex.name}. Entered: ${num}`);
+              return;
+            }
+            if (num > es.maxMarks) {
+              toast.error(`Marks for ${sub.name} (${ex.name}) cannot exceed ${es.maxMarks}. You entered ${num}. Please correct before saving.`);
+              return;
+            }
+          }
+        }
+      }
+    }
+
     setMarksSaving(true);
 
-    const payloadMarks = Object.entries(editingMarks).map(([examSubjectId, val]) => ({
-      examSubjectId,
-      marksObtained: Number(val),
-    }));
+    const payloadMarks = Object.entries(editingMarks)
+      .filter(([esId, val]) => {
+        const examSubject = marksData?.exams?.flatMap((e: any) => e.subjects).find((es: any) => es.examSubjectId === esId);
+        if (examSubject && excludedSubjectIds.includes(examSubject.subjectId)) {
+          return false; // Don't save marks for deselected optional subjects
+        }
+        return val !== undefined && val !== null && (val as any) !== "" && !isNaN(Number(val));
+      })
+      .map(([examSubjectId, val]) => ({
+        examSubjectId,
+        marksObtained: Number(val),
+      }));
+
+    // Safe result date validation
+    let validResultDate: Date | null = null;
+    if (editingTerm.resultDate) {
+      const d = new Date(editingTerm.resultDate);
+      if (!isNaN(d.getTime())) {
+        validResultDate = d;
+      }
+    }
+
+    const targetStatus = statusOverride || (editingTerm.status as ResultStatus) || ResultStatus.DRAFT;
+
+    const gkFinal = (editingTerm.gkGradeT1 || editingTerm.gkGradeT2)
+      ? `${editingTerm.gkGradeT1 || ""}|${editingTerm.gkGradeT2 || ""}`
+      : editingTerm.gkGrade || null;
+
+    const artFinal = (editingTerm.artGradeT1 || editingTerm.artGradeT2)
+      ? `${editingTerm.artGradeT1 || ""}|${editingTerm.artGradeT2 || ""}`
+      : editingTerm.artGrade || null;
+
+    const principalRemarksPayload = JSON.stringify({
+      excludedSubjectIds,
+      text: editingTerm.principalRemarks || "",
+    });
 
     try {
-      await saveStudentMarksAction({
+      const res = await saveStudentMarksAction({
         studentId: activeStudentId,
         sessionId,
         marks: payloadMarks,
         termDetail: {
-          workingDays: editingTerm.workingDays ? Number(editingTerm.workingDays) : null,
-          presentDays: editingTerm.presentDays ? Number(editingTerm.presentDays) : null,
+          workingDays: editingTerm.workingDays !== "" && editingTerm.workingDays !== undefined && editingTerm.workingDays !== null && !isNaN(Number(editingTerm.workingDays))
+            ? Number(editingTerm.workingDays)
+            : null,
+          presentDays: editingTerm.presentDays !== "" && editingTerm.presentDays !== undefined && editingTerm.presentDays !== null && !isNaN(Number(editingTerm.presentDays))
+            ? Number(editingTerm.presentDays)
+            : null,
           remarksMid: editingTerm.remarksMid || null,
           remarksFinal: editingTerm.remarksFinal || null,
           resultOutcome: editingTerm.resultOutcome as ResultOutcome,
-          status: editingTerm.status as ResultStatus,
-          gkGrade: editingTerm.gkGrade || null,
-          artGrade: editingTerm.artGrade || null,
-          rank: editingTerm.rank ? Number(editingTerm.rank) : null,
-          resultDate: editingTerm.resultDate ? new Date(editingTerm.resultDate) : null,
-          principalRemarks: editingTerm.principalRemarks || null,
+          status: targetStatus,
+          gkGrade: gkFinal,
+          artGrade: artFinal,
+          rank: editingTerm.rank !== "" && editingTerm.rank !== undefined && editingTerm.rank !== null && !isNaN(Number(editingTerm.rank))
+            ? Number(editingTerm.rank)
+            : null,
+          resultDate: validResultDate,
+          principalRemarks: principalRemarksPayload,
         },
-        reason: modificationReason || undefined,
+        reason: modificationReason || "Result updated",
       });
-      toast.success("Marks saved successfully");
+
+      if (!res.success) {
+        toast.error(res.error || "Failed to save marks");
+        return;
+      }
+
+      toast.success(targetStatus === ResultStatus.COMPLETED ? "Marks finalized & saved successfully" : "Draft saved successfully");
       setShowMarksEntry(false);
       loadStudents();
     } catch (err: any) {
@@ -833,6 +970,102 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
     }
   };
 
+  const handleBulkPublish = async () => {
+    if (!classId || !sessionId) {
+      toast.error("Please select a class and session first");
+      return;
+    }
+    setIsBulkPublishing(true);
+    try {
+      const res = await bulkPublishClassResultsAction({
+        classId,
+        sectionId: sectionId && sectionId !== "" ? sectionId : undefined,
+        sessionId,
+      });
+      if (res.success) {
+        toast.success(`Successfully published results for ${res.count} students!`);
+        setShowBulkPublishModal(false);
+        loadStudents();
+      } else {
+        toast.error(res.error || "Failed to bulk publish results");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to bulk publish results");
+    } finally {
+      setIsBulkPublishing(false);
+    }
+  };
+
+  const handleBulkUnpublish = async () => {
+    if (!classId || !sessionId) {
+      toast.error("Please select a class and session first");
+      return;
+    }
+    setIsBulkPublishing(true);
+    try {
+      const res = await bulkUnpublishClassResultsAction({
+        classId,
+        sectionId: sectionId && sectionId !== "" ? sectionId : undefined,
+        sessionId,
+      });
+      if (res.success) {
+        toast.success(`Successfully unpublished results for ${res.count} students (reverted to Draft)!`);
+        setShowBulkUnpublishModal(false);
+        loadStudents();
+      } else {
+        toast.error(res.error || "Failed to bulk unpublish results");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to bulk unpublish results");
+    } finally {
+      setIsBulkPublishing(false);
+    }
+  };
+
+  const handlePublishStudent = async (studentId: string) => {
+    if (!sessionId) {
+      toast.error("Session is required");
+      return;
+    }
+    try {
+      const res = await publishStudentResultAction(studentId, sessionId);
+      if (res.success) {
+        toast.success("Result published successfully");
+        loadStudents();
+        if (showReportPreview && previewData?.student?.id === studentId) {
+          const updated = await getStudentMarksDataAction(studentId, sessionId);
+          setPreviewData(updated);
+        }
+      } else {
+        toast.error(res.error || "Failed to publish result");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to publish result");
+    }
+  };
+
+  const handleUnpublishStudent = async (studentId: string) => {
+    if (!sessionId) {
+      toast.error("Session is required");
+      return;
+    }
+    try {
+      const res = await unpublishStudentResultAction(studentId, sessionId);
+      if (res.success) {
+        toast.success("Result unpublished (reverted to Draft)");
+        loadStudents();
+        if (showReportPreview && previewData?.student?.id === studentId) {
+          const updated = await getStudentMarksDataAction(studentId, sessionId);
+          setPreviewData(updated);
+        }
+      } else {
+        toast.error(res.error || "Failed to unpublish result");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unpublish result");
+    }
+  };
+
   // ── UI Render ───────────────────────────────────────────────────────────────
   return (
     <>
@@ -856,12 +1089,48 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               </select>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (!classId) {
+                  toast.error("Please select a class first");
+                  return;
+                }
+                setShowBulkPublishModal(true);
+              }}
+              className="h-8 text-xs font-bold border-emerald-300 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100"
+            >
+              <Send className="w-3.5 h-3.5 mr-1" /> Bulk Publish
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (!classId) {
+                  toast.error("Please select a class first");
+                  return;
+                }
+                setShowBulkUnpublishModal(true);
+              }}
+              className="h-8 text-xs font-bold border-rose-300 text-rose-700 bg-rose-50/50 hover:bg-rose-100"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1" /> Bulk Unpublish
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPrintClassId(classId || classes[0]?.id || "");
+                setShowPrintClassModal(true);
+              }}
+              className="h-8 text-xs font-bold border-stone-300"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1" /> Bulk Print
+            </Button>
             <Button variant="outline" size="sm" onClick={openAddMarksImport} className="h-8 text-xs font-bold border-stone-300">
               <Upload className="w-3.5 h-3.5 mr-1" /> Add Marks
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { setPrintClassId(classId || classes[0]?.id || ""); setShowPrintClassModal(true); }} className="h-8 text-xs font-bold border-stone-300">
-              <FileText className="w-3.5 h-3.5 mr-1" /> Print Class Results
             </Button>
             <Button variant="outline" size="sm" onClick={openManageSubjects} className="h-8 text-xs font-bold border-stone-300">
               <BookOpen className="w-3.5 h-3.5 mr-1" /> Manage Subjects
@@ -905,7 +1174,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 <th className="py-3 px-6">Father Name</th>
                 <th className="py-3 px-6 w-36">Result Status</th>
                 <th className="py-3 px-6 w-36 text-center">Outcome</th>
-                <th className="py-3 px-6 w-32 text-right">Actions</th>
+                <th className="py-3 px-6 w-36 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -920,11 +1189,13 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     <td className="py-3 px-6 text-stone-600">{st.fatherName}</td>
                     <td className="py-3 px-6">
                       <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold border",
-                        st.status === "PUBLISHED" ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                          : st.status === "LOCKED" ? "bg-stone-100 text-stone-700 border-stone-200"
+                        (st.status === "PUBLISHED" || st.status === "COMPLETED")
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          : st.status === "LOCKED"
+                            ? "bg-stone-100 text-stone-700 border-stone-200"
                             : "bg-amber-50 text-amber-800 border-amber-200"
                       )}>
-                        {st.status}
+                        {st.status === "COMPLETED" ? "PUBLISHED" : st.status}
                       </span>
                     </td>
                     <td className="py-3 px-6 text-center">
@@ -934,7 +1205,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     </td>
                     <td className="py-3 px-6 text-right whitespace-nowrap">
                       {st.hasSavedMarks ? (
-                        <div className="flex justify-end gap-1 items-center h-7 text-[11px] font-bold select-none text-stone-500">
+                        <div className="flex justify-end gap-1.5 items-center h-7 text-[11px] font-bold select-none text-stone-500">
                           <button onClick={() => openMarksEntry(st.studentId)} className="hover:text-amber-600 transition-colors">Edit</button>
                           <span className="text-stone-300 font-normal">|</span>
                           <button onClick={() => openReportPreview(st.studentId)} className="hover:text-indigo-650 transition-colors">Preview</button>
@@ -946,12 +1217,23 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                             }, 600);
                           }} className="hover:text-emerald-650 transition-colors">Print</button>
                           <span className="text-stone-300 font-normal">|</span>
-                          <button onClick={async () => {
-                            await openReportPreview(st.studentId);
-                            setTimeout(() => {
-                              window.print();
-                            }, 600);
-                          }} className="hover:text-emerald-650 transition-colors">PDF</button>
+                          {(st.status === "PUBLISHED" || st.status === "COMPLETED") ? (
+                            <button
+                              onClick={() => handleUnpublishStudent(st.studentId)}
+                              className="text-rose-650 hover:text-rose-800 hover:underline transition-colors"
+                              title="Unpublish this result (revert to Draft)"
+                            >
+                              Unpublish
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handlePublishStudent(st.studentId)}
+                              className="text-emerald-650 hover:text-emerald-800 hover:underline transition-colors"
+                              title="Publish this student's result"
+                            >
+                              Publish
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <Button size="sm" onClick={() => openMarksEntry(st.studentId)} className="h-7 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg">
@@ -987,6 +1269,16 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 <div className="flex items-center justify-center h-48 text-stone-400 gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Loading data…</div>
               ) : (
                 <>
+                  {/* Validation Error Alert Banner */}
+                  {hasAnyValidationErrors && (
+                    <div className="bg-rose-50 border border-rose-300 text-rose-850 px-4 py-3 rounded-xl text-xs flex items-center gap-3 shadow-xs">
+                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                      <div className="flex-1 font-medium">
+                        <span className="font-bold text-rose-900">Marks exceed maximum allowed:</span> Some entered marks are higher than the exam maximum (highlighted in red with a warning badge). Please correct them before saving.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Grid Table */}
                   <div className="border border-stone-200 rounded-xl overflow-hidden shadow-xs">
                     <table className="w-full text-left text-xs border-collapse">
@@ -994,11 +1286,11 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                         <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase text-[9px]">
                           <th className="py-2.5 px-4 w-48 border-r border-stone-200">Subject</th>
                           {/* Term 1 Header */}
-                          <th colSpan={3} className="py-2.5 px-4 text-center bg-indigo-50/20 border-r border-stone-200 text-indigo-900">Term 1</th>
+                          <th colSpan={modalT1Exams.length || 1} className="py-2.5 px-4 text-center bg-indigo-50/20 border-r border-stone-200 text-indigo-900">Term 1</th>
                           <th className="py-2.5 px-2 text-center bg-indigo-50/30 border-r border-stone-200 w-20">T1 Total</th>
                           <th className="py-2.5 px-2 text-center bg-indigo-50/30 border-r border-stone-200 w-16">T1 Grade</th>
                           {/* Term 2 Header */}
-                          <th colSpan={3} className="py-2.5 px-4 text-center bg-emerald-50/20 border-r border-stone-200 text-emerald-900">Term 2</th>
+                          <th colSpan={modalT2Exams.length || 1} className="py-2.5 px-4 text-center bg-emerald-50/20 border-r border-stone-200 text-emerald-900">Term 2</th>
                           <th className="py-2.5 px-2 text-center bg-emerald-50/30 border-r border-stone-200 w-20">T2 Total</th>
                           <th className="py-2.5 px-2 text-center bg-emerald-50/30 border-r border-stone-200 w-16">T2 Grade</th>
                           {/* Final Summary Header */}
@@ -1009,15 +1301,35 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                         <tr className="bg-stone-50/50 border-b border-stone-200 text-[9px] font-bold text-stone-500">
                           <th className="py-2 px-4 border-r border-stone-200">Name (Code)</th>
                           {/* Term 1 Exams */}
-                          <th className="py-2 px-2 text-center border-r border-stone-200 w-20">UT-I (10)</th>
-                          <th className="py-2 px-2 text-center border-r border-stone-200 w-20">UT-II (10)</th>
-                          <th className="py-2 px-2 text-center border-r border-stone-200 w-20">Half Yearly (80)</th>
+                          {modalT1Exams.length > 0 ? (
+                            modalT1Exams.map((ex: any) => {
+                              const sampleEs = ex.subjects?.[0];
+                              const maxM = sampleEs ? sampleEs.maxMarks : (ex.maxMarks || "");
+                              return (
+                                <th key={ex.id} className="py-2 px-2 text-center border-r border-stone-200 min-w-20">
+                                  {ex.name} {maxM ? `(${maxM})` : ""}
+                                </th>
+                              );
+                            })
+                          ) : (
+                            <th className="py-2 px-2 text-center border-r border-stone-200 text-stone-400">—</th>
+                          )}
                           <th className="py-2 px-2 border-r border-stone-200 bg-stone-50"></th>
                           <th className="py-2 px-2 border-r border-stone-200 bg-stone-50"></th>
                           {/* Term 2 Exams */}
-                          <th className="py-2 px-2 text-center border-r border-stone-200 w-20">UT-III (10)</th>
-                          <th className="py-2 px-2 text-center border-r border-stone-200 w-20">UT-IV (10)</th>
-                          <th className="py-2 px-2 text-center border-r border-stone-200 w-20">Annual (80)</th>
+                          {modalT2Exams.length > 0 ? (
+                            modalT2Exams.map((ex: any) => {
+                              const sampleEs = ex.subjects?.[0];
+                              const maxM = sampleEs ? sampleEs.maxMarks : (ex.maxMarks || "");
+                              return (
+                                <th key={ex.id} className="py-2 px-2 text-center border-r border-stone-200 min-w-20">
+                                  {ex.name} {maxM ? `(${maxM})` : ""}
+                                </th>
+                              );
+                            })
+                          ) : (
+                            <th className="py-2 px-2 text-center border-r border-stone-200 text-stone-400">—</th>
+                          )}
                           <th className="py-2 px-2 border-r border-stone-200 bg-stone-50"></th>
                           <th className="py-2 px-2 border-r border-stone-200 bg-stone-50"></th>
                           {/* Final */}
@@ -1028,68 +1340,221 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                       </thead>
                       <tbody className="divide-y divide-stone-100">
                         {calc?.subjectsSummary.map((sub: any, rowIndex: number) => {
-                          // Find exam mapping ids for arrow key coordinates
-                          const t1Exams = marksData.exams.filter((e: any) => e.term === 1);
-                          const t2Exams = marksData.exams.filter((e: any) => e.term === 2);
-                          const orderedExams = [...t1Exams, ...t2Exams];
+                          const totalCols = allModalExams.length;
 
                           return (
-                            <tr key={sub.id} className="hover:bg-stone-50/20">
+                            <tr key={sub.id} className={cn("hover:bg-stone-50/20", sub.isExcluded && "bg-stone-100/50 opacity-70")}>
                               <td className="py-2 px-4 border-r border-stone-200 font-semibold text-stone-700">
-                                {sub.name} <span className="text-[10px] text-stone-400 font-mono">({sub.code})</span>
+                                <div className="flex items-center justify-between gap-1">
+                                  <div>
+                                    <span>{sub.name}</span> <span className="text-[10px] text-stone-400 font-mono">({sub.code})</span>
+                                    {sub.isOptional && (
+                                      <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                        Optional
+                                      </span>
+                                    )}
+                                  </div>
+                                  {sub.isOptional && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExcludedSubjectIds((prev) =>
+                                          prev.includes(sub.id)
+                                            ? prev.filter((id) => id !== sub.id)
+                                            : [...prev, sub.id]
+                                        );
+                                      }}
+                                      className={cn(
+                                        "px-2 py-0.5 rounded text-[10px] font-bold border transition-colors",
+                                        sub.isExcluded
+                                          ? "bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100"
+                                          : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                                      )}
+                                      title={sub.isExcluded ? "Click to include this optional subject in result" : "Click to deselect / exclude from result"}
+                                    >
+                                      {sub.isExcluded ? "Deselected ✗" : "Active ✓"}
+                                    </button>
+                                  )}
+                                </div>
                               </td>
 
-                              {/* Term 1 Input Cells */}
-                              {t1Exams.map((ex: any, colIdx: number) => {
-                                const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
-                                if (!es) return <td key={ex.id} className="py-2 px-2 text-center border-r border-stone-200 bg-stone-50/30 text-stone-400">—</td>;
-                                return (
-                                  <td key={ex.id} className="py-1 px-1 border-r border-stone-200">
+                              {sub.isExcluded ? (
+                                <td colSpan={totalCols + 5} className="py-2.5 px-4 text-center bg-stone-100/60 text-stone-400 italic font-medium">
+                                  Optional Subject Deselected — Not enrolled for this student (excluded from report card & grand total)
+                                </td>
+                              ) : sub.isAdditional ? (
+                                <>
+                                  {/* Colspan over Term 1 exam columns */}
+                                  <td colSpan={modalT1Exams.length} className="py-2 px-2 text-center text-stone-500 font-semibold italic text-[11px] bg-indigo-50/20 border-r border-stone-200">
+                                    Grade Only Assessment
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-bold text-stone-400 border-r border-stone-200 bg-indigo-50/10">
+                                    —
+                                  </td>
+                                  {/* Term 1 Grade Cell */}
+                                  <td className="py-1 px-1 text-center bg-indigo-50/30 border-r border-stone-200">
                                     <input
-                                      id={`cell-${rowIndex}-${colIdx}`}
-                                      type="number"
-                                      min="0"
-                                      max={es.maxMarks}
-                                      value={editingMarks[es.examSubjectId] ?? ""}
-                                      onChange={(e) => handleMarkChange(es.examSubjectId, e.target.value)}
-                                      onKeyDown={(e) => handleKeyDown(e, rowIndex, colIdx, calc.subjectsSummary.length, 6)}
-                                      className="w-full text-center h-7 border border-stone-200 rounded font-bold font-mono focus:border-indigo-500 focus:outline-none"
+                                      type="text"
+                                      maxLength={3}
+                                      value={
+                                        sub.name.toUpperCase().includes("GK")
+                                          ? (editingTerm.gkGradeT1 || "")
+                                          : (editingTerm.artGradeT1 || "")
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value.toUpperCase();
+                                        if (sub.name.toUpperCase().includes("GK")) {
+                                          setEditingTerm((t: any) => ({ ...t, gkGradeT1: val }));
+                                        } else {
+                                          setEditingTerm((t: any) => ({ ...t, artGradeT1: val }));
+                                        }
+                                      }}
+                                      placeholder="e.g. B"
+                                      className="w-full text-center h-7 rounded font-extrabold font-mono border-2 border-indigo-300 focus:border-indigo-600 bg-white text-indigo-900 uppercase text-xs"
                                     />
                                   </td>
-                                );
-                              })}
 
-                              <td className="py-2 px-2 text-center font-mono font-bold bg-indigo-50/10 border-r border-stone-200 text-stone-850">{sub.t1Total} <span className="text-[9px] text-stone-400">/{sub.t1Max}</span></td>
-                              <td className="py-2 px-2 text-center font-bold bg-indigo-50/10 border-r border-stone-200 text-indigo-700">{sub.t1Max > 0 ? sub.grade : "—"}</td>
-
-                              {/* Term 2 Input Cells */}
-                              {t2Exams.map((ex: any, colIdx: number) => {
-                                const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
-                                if (!es) return <td key={ex.id} className="py-2 px-2 text-center border-r border-stone-200 bg-stone-50/30 text-stone-400">—</td>;
-                                const actualColIndex = colIdx + 3; // Shift by 3 columns of Term 1
-                                return (
-                                  <td key={ex.id} className="py-1 px-1 border-r border-stone-200">
+                                  {/* Colspan over Term 2 exam columns */}
+                                  <td colSpan={modalT2Exams.length} className="py-2 px-2 text-center text-stone-500 font-semibold italic text-[11px] bg-indigo-50/20 border-r border-stone-200">
+                                    Grade Only Assessment
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-bold text-stone-400 border-r border-stone-200 bg-indigo-50/10">
+                                    —
+                                  </td>
+                                  {/* Term 2 Grade Cell */}
+                                  <td className="py-1 px-1 text-center bg-indigo-50/30 border-r border-stone-200">
                                     <input
-                                      id={`cell-${rowIndex}-${actualColIndex}`}
-                                      type="number"
-                                      min="0"
-                                      max={es.maxMarks}
-                                      value={editingMarks[es.examSubjectId] ?? ""}
-                                      onChange={(e) => handleMarkChange(es.examSubjectId, e.target.value)}
-                                      onKeyDown={(e) => handleKeyDown(e, rowIndex, actualColIndex, calc.subjectsSummary.length, 6)}
-                                      className="w-full text-center h-7 border border-stone-200 rounded font-bold font-mono focus:border-indigo-500 focus:outline-none"
+                                      type="text"
+                                      maxLength={3}
+                                      value={
+                                        sub.name.toUpperCase().includes("GK")
+                                          ? (editingTerm.gkGradeT2 || "")
+                                          : (editingTerm.artGradeT2 || "")
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value.toUpperCase();
+                                        if (sub.name.toUpperCase().includes("GK")) {
+                                          setEditingTerm((t: any) => ({ ...t, gkGradeT2: val }));
+                                        } else {
+                                          setEditingTerm((t: any) => ({ ...t, artGradeT2: val }));
+                                        }
+                                      }}
+                                      placeholder="e.g. D"
+                                      className="w-full text-center h-7 rounded font-extrabold font-mono border-2 border-indigo-300 focus:border-indigo-600 bg-white text-indigo-900 uppercase text-xs"
                                     />
                                   </td>
-                                );
-                              })}
 
-                              <td className="py-2 px-2 text-center font-mono font-bold bg-emerald-50/10 border-r border-stone-200 text-stone-850">{sub.t2Total} <span className="text-[9px] text-stone-400">/{sub.t2Max}</span></td>
-                              <td className="py-2 px-2 text-center font-bold bg-emerald-50/10 border-r border-stone-200 text-emerald-700">{sub.t2Max > 0 ? sub.grade : "—"}</td>
+                                  {/* Final columns */}
+                                  <td className="py-2 px-2 text-center border-r border-stone-200 font-mono text-stone-400 bg-stone-50/30">—</td>
+                                  <td className="py-2 px-2 text-center border-r border-stone-200 font-mono text-stone-400 bg-stone-50/30">—</td>
+                                  <td className="py-2 px-2 text-center font-extrabold text-indigo-700 bg-indigo-50/20 text-xs">
+                                    {sub.name.toUpperCase().includes("GK")
+                                      ? (editingTerm.gkGradeT2 || editingTerm.gkGradeT1 || "—")
+                                      : (editingTerm.artGradeT2 || editingTerm.artGradeT1 || "—")}
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  {/* Term 1 Input Cells */}
+                                  {modalT1Exams.map((ex: any, colIdx: number) => {
+                                    const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+                                    if (!es) return <td key={ex.id} className="py-2 px-2 text-center border-r border-stone-200 bg-stone-50/30 text-stone-400">—</td>;
+                                    const rawVal = editingMarks[es.examSubjectId];
+                                    const isExceeded = rawVal !== undefined && rawVal !== null && (rawVal as any) !== "" && Number(rawVal) > es.maxMarks;
+                                    const isNegative = rawVal !== undefined && rawVal !== null && (rawVal as any) !== "" && Number(rawVal) < 0;
+                                    const hasCellError = isExceeded || isNegative;
 
-                              {/* Final */}
-                              <td className="py-2 px-2 text-center font-mono font-bold bg-violet-50/10 border-r border-stone-200 text-stone-900">{sub.total} <span className="text-[9px] text-stone-450">/{sub.max}</span></td>
-                              <td className="py-2 px-2 text-center font-mono font-bold bg-violet-50/10 border-r border-stone-200 text-stone-700">{sub.max > 0 ? `${Math.round((sub.total / sub.max) * 100)}%` : "—"}</td>
-                              <td className="py-2 px-2 text-center font-bold bg-violet-50/10 text-violet-750">{sub.max > 0 ? sub.grade : "—"}</td>
+                                    return (
+                                      <td key={ex.id} className="py-1 px-1 border-r border-stone-200 align-top">
+                                        <input
+                                          id={`cell-${rowIndex}-${colIdx}`}
+                                          type="number"
+                                          min="0"
+                                          max={es.maxMarks}
+                                          value={rawVal !== undefined && rawVal !== null ? rawVal : ""}
+                                          onChange={(e) => handleMarkChange(es.examSubjectId, e.target.value)}
+                                          onKeyDown={(e) => handleKeyDown(e, rowIndex, colIdx, calc.subjectsSummary.length, totalCols)}
+                                          title={isExceeded ? `Entered mark (${rawVal}) exceeds maximum (${es.maxMarks})` : isNegative ? 'Cannot be negative' : `Max: ${es.maxMarks}`}
+                                          className={cn(
+                                            "w-full text-center h-7 rounded font-bold font-mono focus:outline-none transition-all",
+                                            hasCellError
+                                              ? "border-2 border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400 focus:border-rose-600 focus:ring-rose-500"
+                                              : "border border-stone-200 focus:border-indigo-500"
+                                          )}
+                                        />
+                                        {isExceeded && (
+                                          <span className="block text-[9px] text-rose-600 font-bold leading-none mt-0.5 text-center">
+                                            Max {es.maxMarks}
+                                          </span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+
+                                  <td className={cn(
+                                    "py-2 px-2 text-center font-mono font-bold bg-indigo-50/10 border-r border-stone-200",
+                                    sub.t1Total > sub.t1Max ? "text-rose-600" : "text-stone-850"
+                                  )}>
+                                    {sub.t1Total} <span className="text-[9px] text-stone-400">/{sub.t1Max}</span>
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-bold bg-indigo-50/10 border-r border-stone-200 text-indigo-700">{sub.t1Max > 0 ? sub.grade : "—"}</td>
+
+                                  {/* Term 2 Input Cells */}
+                                  {modalT2Exams.map((ex: any, colIdx: number) => {
+                                    const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
+                                    if (!es) return <td key={ex.id} className="py-2 px-2 text-center border-r border-stone-200 bg-stone-50/30 text-stone-400">—</td>;
+                                    const actualColIndex = colIdx + modalT1Exams.length;
+                                    const rawVal = editingMarks[es.examSubjectId];
+                                    const isExceeded = rawVal !== undefined && rawVal !== null && (rawVal as any) !== "" && Number(rawVal) > es.maxMarks;
+                                    const isNegative = rawVal !== undefined && rawVal !== null && (rawVal as any) !== "" && Number(rawVal) < 0;
+                                    const hasCellError = isExceeded || isNegative;
+
+                                    return (
+                                      <td key={ex.id} className="py-1 px-1 border-r border-stone-200 align-top">
+                                        <input
+                                          id={`cell-${rowIndex}-${actualColIndex}`}
+                                          type="number"
+                                          min="0"
+                                          max={es.maxMarks}
+                                          value={rawVal !== undefined && rawVal !== null ? rawVal : ""}
+                                          onChange={(e) => handleMarkChange(es.examSubjectId, e.target.value)}
+                                          onKeyDown={(e) => handleKeyDown(e, rowIndex, actualColIndex, calc.subjectsSummary.length, totalCols)}
+                                          title={isExceeded ? `Entered mark (${rawVal}) exceeds maximum (${es.maxMarks})` : isNegative ? 'Cannot be negative' : `Max: ${es.maxMarks}`}
+                                          className={cn(
+                                            "w-full text-center h-7 rounded font-bold font-mono focus:outline-none transition-all",
+                                            hasCellError
+                                              ? "border-2 border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400 focus:border-rose-600 focus:ring-rose-500"
+                                              : "border border-stone-200 focus:border-indigo-500"
+                                          )}
+                                        />
+                                        {isExceeded && (
+                                          <span className="block text-[9px] text-rose-600 font-bold leading-none mt-0.5 text-center">
+                                            Max {es.maxMarks}
+                                          </span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+
+                                  <td className={cn(
+                                    "py-2 px-2 text-center font-mono font-bold bg-emerald-50/10 border-r border-stone-200",
+                                    sub.t2Total > sub.t2Max ? "text-rose-600" : "text-stone-850"
+                                  )}>
+                                    {sub.t2Total} <span className="text-[9px] text-stone-400">/{sub.t2Max}</span>
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-bold bg-emerald-50/10 border-r border-stone-200 text-emerald-700">{sub.t2Max > 0 ? sub.grade : "—"}</td>
+
+                                  {/* Final */}
+                                  <td className={cn(
+                                    "py-2 px-2 text-center font-mono font-bold bg-violet-50/10 border-r border-stone-200",
+                                    sub.total > sub.max ? "text-rose-600" : "text-stone-900"
+                                  )}>
+                                    {sub.total} <span className="text-[9px] text-stone-450">/{sub.max}</span>
+                                  </td>
+                                  <td className="py-2 px-2 text-center font-mono font-bold bg-violet-50/10 border-r border-stone-200 text-stone-700">{sub.max > 0 ? `${Math.round((sub.total / sub.max) * 100)}%` : "—"}</td>
+                                  <td className="py-2 px-2 text-center font-bold bg-violet-50/10 text-violet-750">{sub.max > 0 ? sub.grade : "—"}</td>
+                                </>
+                              )}
                             </tr>
                           );
                         })}
@@ -1130,26 +1595,59 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-[10px] font-bold text-stone-500">GK Grade</Label>
-                          <Input
-                            value={editingTerm.gkGrade || ""}
-                            onChange={(e) => setEditingTerm((t: any) => ({ ...t, gkGrade: e.target.value }))}
-                            className="h-8 text-xs border-stone-300"
-                            placeholder="e.g. A, B"
-                          />
+                      {/* GK Grades if class has GK */}
+                      {marksData.subjects.some((s: any) => s.name.toUpperCase().includes("GK") || s.name.toUpperCase().includes("GENERAL KNOWLEDGE")) && (
+                        <div className="border border-stone-200 rounded-lg p-2.5 bg-white space-y-1.5">
+                          <Label className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block">G.K (General Knowledge) Grades</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[9px] text-stone-400">Term 1 Grade</Label>
+                              <Input
+                                value={editingTerm.gkGradeT1 || ""}
+                                onChange={(e) => setEditingTerm((t: any) => ({ ...t, gkGradeT1: e.target.value.toUpperCase() }))}
+                                className="h-7 text-xs border-stone-300 font-bold uppercase"
+                                placeholder="e.g. B"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[9px] text-stone-400">Term 2 Grade</Label>
+                              <Input
+                                value={editingTerm.gkGradeT2 || ""}
+                                onChange={(e) => setEditingTerm((t: any) => ({ ...t, gkGradeT2: e.target.value.toUpperCase() }))}
+                                className="h-7 text-xs border-stone-300 font-bold uppercase"
+                                placeholder="e.g. E"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-[10px] font-bold text-stone-500">Art & Activity</Label>
-                          <Input
-                            value={editingTerm.artGrade || ""}
-                            onChange={(e) => setEditingTerm((t: any) => ({ ...t, artGrade: e.target.value }))}
-                            className="h-8 text-xs border-stone-300"
-                            placeholder="e.g. A, B"
-                          />
+                      )}
+
+                      {/* DRAW Grades if class has DRAW */}
+                      {marksData.subjects.some((s: any) => s.name.toUpperCase().includes("DRAW") || s.name.toUpperCase().includes("ART")) && (
+                        <div className="border border-stone-200 rounded-lg p-2.5 bg-white space-y-1.5">
+                          <Label className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block">DRAW / Art Grades</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[9px] text-stone-400">Term 1 Grade</Label>
+                              <Input
+                                value={editingTerm.artGradeT1 || ""}
+                                onChange={(e) => setEditingTerm((t: any) => ({ ...t, artGradeT1: e.target.value.toUpperCase() }))}
+                                className="h-7 text-xs border-stone-300 font-bold uppercase"
+                                placeholder="e.g. B"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[9px] text-stone-400">Term 2 Grade</Label>
+                              <Input
+                                value={editingTerm.artGradeT2 || ""}
+                                onChange={(e) => setEditingTerm((t: any) => ({ ...t, artGradeT2: e.target.value.toUpperCase() }))}
+                                className="h-7 text-xs border-stone-300 font-bold uppercase"
+                                placeholder="e.g. B"
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Evaluation Status & Outcome */}
@@ -1192,23 +1690,62 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     </div>
 
                     {/* Remarks Input */}
-                    <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2 text-xs">
-                      <h4 className="font-bold text-xs text-stone-500 uppercase tracking-wider mb-2">Remarks</h4>
+                    <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-3 text-xs">
+                      <div className="flex justify-between items-center mb-1">
+                        <h4 className="font-bold text-xs text-stone-700 uppercase tracking-wider">Evaluation Remarks</h4>
+                        <span className="text-[10px] text-stone-400 font-medium">Click any statement to fill</span>
+                      </div>
                       <div>
-                        <Label className="text-[10px] font-bold text-stone-400 block mb-0.5">Remarks (Mid Term)</Label>
+                        <Label className="text-[10px] font-bold text-stone-600 block mb-1">Remarks (Mid Term Evaluation)</Label>
                         <Input
                           value={editingTerm.remarksMid}
                           onChange={(e) => setEditingTerm((t: any) => ({ ...t, remarksMid: e.target.value }))}
-                          className="h-8 text-xs border-stone-300"
+                          placeholder="e.g. Dear, Give attention towards your studies"
+                          className="h-8 text-xs border-stone-300 bg-white"
                         />
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {[
+                            "Dear, Give attention towards your studies",
+                            "Good performance, keep working hard.",
+                            "Needs to focus more on regular studies.",
+                            "Outstanding performance, keep it up!",
+                          ].map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setEditingTerm((t: any) => ({ ...t, remarksMid: s }))}
+                              className="text-[9px] px-2 py-0.5 rounded bg-white hover:bg-stone-100 border border-stone-300 text-stone-700 font-medium transition-colors shadow-2xs"
+                            >
+                              + {s}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-stone-400 block mb-0.5">Remarks (Final Term)</Label>
+                      <div className="pt-2 border-t border-stone-200">
+                        <Label className="text-[10px] font-bold text-stone-600 block mb-1">Remarks (Final Term Evaluation)</Label>
                         <Input
                           value={editingTerm.remarksFinal}
                           onChange={(e) => setEditingTerm((t: any) => ({ ...t, remarksFinal: e.target.value }))}
-                          className="h-8 text-xs border-stone-300"
+                          placeholder="e.g. Promoted to Next Class"
+                          className="h-8 text-xs border-stone-300 bg-white"
                         />
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {[
+                            "Promoted to Next Class",
+                            "Promoted with Grace",
+                            "Excellent academic achievement.",
+                            "Needs improvement in next session.",
+                          ].map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setEditingTerm((t: any) => ({ ...t, remarksFinal: s }))}
+                              className="text-[9px] px-2 py-0.5 rounded bg-white hover:bg-stone-100 border border-stone-300 text-stone-700 font-medium transition-colors shadow-2xs"
+                            >
+                              + {s}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     {marksData.termResult && (marksData.termResult.status === "PUBLISHED" || marksData.termResult.status === "LOCKED") && (
@@ -1234,25 +1771,19 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 <Button variant="outline" onClick={() => setShowMarksEntry(false)}>Cancel</Button>
 
                 <Button
-                  onClick={() => {
-                    setEditingTerm((t: any) => ({ ...t, status: "DRAFT" }));
-                    setTimeout(saveMarks, 100);
-                  }}
+                  onClick={() => saveMarks(ResultStatus.DRAFT)}
                   disabled={marksSaving}
-                  className="bg-stone-750 hover:bg-indigo-600 text-grey font-bold"
+                  className="bg-stone-700 hover:bg-stone-800 text-white font-bold"
                 >
                   {marksSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Draft"}
                 </Button>
 
                 <Button
-                  onClick={() => {
-                    setEditingTerm((t: any) => ({ ...t, status: "COMPLETED" }));
-                    setTimeout(saveMarks, 100);
-                  }}
+                  onClick={() => saveMarks(ResultStatus.PUBLISHED)}
                   disabled={marksSaving}
-                  className="bg-indigo-650 hover:bg-indigo-600 text-grey font-bold"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                 >
-                  {marksSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save & Complete"}
+                  {marksSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save & Publish"}
                 </Button>
               </div>
             </div>
@@ -1395,34 +1926,76 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     ))}
                   </select>
                 </div>
-                <div className="h-[380px] overflow-y-auto border border-stone-200 rounded-xl divide-y divide-stone-100 p-2">
-                  {subjectsList.map((sub) => (
-                    <div key={sub.id} className="py-2.5 px-3 flex items-center justify-between hover:bg-stone-50/50">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={!!classAssignments[sub.id]}
-                          onChange={(e) => setClassAssignments(prev => ({ ...prev, [sub.id]: e.target.checked }))}
-                          className="w-4 h-4 rounded text-indigo-650"
-                        />
-                        <div>
-                          <p className="font-semibold text-stone-850">{sub.name}</p>
-                          <p className="text-[10px] text-stone-400 font-mono">{sub.code} · {sub.subjectType}</p>
-                        </div>
-                      </div>
-                      {classAssignments[sub.id] && (
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="checkbox"
-                            checked={!!classOptional[sub.id]}
-                            onChange={(e) => setClassOptional(prev => ({ ...prev, [sub.id]: e.target.checked }))}
-                            className="w-3.5 h-3.5 rounded text-stone-500"
-                          />
-                          <span className="text-[10px] text-stone-500 font-medium">Optional Subject</span>
-                        </div>
-                      )}
+                <div className="h-[380px] overflow-y-auto border border-stone-200 rounded-xl divide-y divide-stone-100 p-2 space-y-3">
+                  {/* Scholastic Subjects */}
+                  <div>
+                    <div className="px-2 py-1 bg-stone-100/70 rounded text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-1">
+                      Scholastic Subjects (Marks & Evaluation)
                     </div>
-                  ))}
+                    <div className="divide-y divide-stone-100">
+                      {subjectsList.filter(s => s.subjectType === "SCHOLASTIC").map((sub) => (
+                        <div key={sub.id} className="py-2.5 px-3 flex items-center justify-between hover:bg-stone-50/50">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!classAssignments[sub.id]}
+                              onChange={(e) => setClassAssignments(prev => ({ ...prev, [sub.id]: e.target.checked }))}
+                              className="w-4 h-4 rounded text-indigo-650"
+                            />
+                            <div>
+                              <p className="font-semibold text-stone-850">{sub.name}</p>
+                              <p className="text-[10px] text-stone-400 font-mono">{sub.code} · Scholastic</p>
+                            </div>
+                          </div>
+                          {classAssignments[sub.id] && (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="checkbox"
+                                checked={!!classOptional[sub.id]}
+                                onChange={(e) => setClassOptional(prev => ({ ...prev, [sub.id]: e.target.checked }))}
+                                className="w-3.5 h-3.5 rounded text-stone-500"
+                              />
+                              <span className="text-[10px] text-stone-500 font-medium">Optional Subject</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Additional Subjects (G.K and DRAW / Arts) */}
+                  <div className="pt-2">
+                    <div className="px-2 py-1 bg-indigo-50/70 rounded text-[10px] font-bold text-indigo-800 uppercase tracking-wider mb-1 flex items-center justify-between">
+                      <span>Additional Subjects (Grade Only · G.K & DRAW)</span>
+                      <span className="text-[9px] font-normal lowercase tracking-normal text-indigo-600">not meant for all classes</span>
+                    </div>
+                    <p className="text-[10px] text-stone-400 px-2 mb-1.5 leading-snug">
+                      Enable these additional subjects only for classes that take them (e.g. NUR, LKG, UKG, Class 1). They carry Term 1 & Term 2 grades without affecting scholastic totals.
+                    </p>
+                    <div className="divide-y divide-stone-100 border border-indigo-100 rounded-lg bg-indigo-50/20">
+                      {subjectsList.filter(s => s.subjectType === "CO_SCHOLASTIC" || s.name.toUpperCase().includes("GK") || s.name.toUpperCase().includes("DRAW")).map((sub) => (
+                        <div key={sub.id} className="py-2.5 px-3 flex items-center justify-between hover:bg-indigo-50/40">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!classAssignments[sub.id]}
+                              onChange={(e) => setClassAssignments(prev => ({ ...prev, [sub.id]: e.target.checked }))}
+                              className="w-4 h-4 rounded text-indigo-650"
+                            />
+                            <div>
+                              <p className="font-bold text-stone-900">{sub.name}</p>
+                              <p className="text-[10px] text-indigo-600 font-mono font-medium">{sub.code} · Grade-Only Assessment</p>
+                            </div>
+                          </div>
+                          {classAssignments[sub.id] && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                              Enabled for Class
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1591,6 +2164,138 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
           </div>
         </div>
       )}
+      {/* ══ BULK PUBLISH CONFIRMATION MODAL ════════════════════════════════ */}
+      {mounted && showBulkPublishModal && createPortal(
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200 flex flex-col text-xs text-stone-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200 shrink-0">
+                <Send className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-stone-900">Bulk Publish Results</h3>
+                <p className="text-xs text-stone-500">Finalize & publish results for all students in this class</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2 mb-5">
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Session:</span>
+                <span className="font-bold text-stone-900">{sessions.find(s => s.id === sessionId)?.name || "Current"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Class:</span>
+                <span className="font-bold text-stone-900">{classes.find(c => c.id === classId)?.name || "—"}</span>
+              </div>
+              {sectionId && (
+                <div className="flex justify-between">
+                  <span className="text-stone-500 font-medium">Section:</span>
+                  <span className="font-bold text-stone-900">
+                    {classes.find(c => c.id === classId)?.sections.find(s => s.id === sectionId)?.name || "All"}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-stone-200 pt-2 mt-2">
+                <span className="text-stone-500 font-medium">Students in View:</span>
+                <span className="font-extrabold text-emerald-700">{students.length} students</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] leading-relaxed mb-5">
+              <p className="font-semibold">Note on Publication:</p>
+              This will mark all student results with marks as <strong>PUBLISHED</strong>. Published results will become immediately visible in the student profile for parents and students to view and download.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isBulkPublishing}
+                onClick={() => setShowBulkPublishModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={isBulkPublishing || students.length === 0}
+                onClick={handleBulkPublish}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5"
+              >
+                {isBulkPublishing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Publish Results
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ══ BULK UNPUBLISH CONFIRMATION MODAL ══════════════════════════════ */}
+      {mounted && showBulkUnpublishModal && createPortal(
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200 flex flex-col text-xs text-stone-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200 shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-stone-900">Bulk Unpublish Results</h3>
+                <p className="text-xs text-stone-500">Revert published results back to Draft status</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 space-y-2 mb-5">
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Session:</span>
+                <span className="font-bold text-stone-900">{sessions.find(s => s.id === sessionId)?.name || "Current"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500 font-medium">Class:</span>
+                <span className="font-bold text-stone-900">{classes.find(c => c.id === classId)?.name || "—"}</span>
+              </div>
+              {sectionId && (
+                <div className="flex justify-between">
+                  <span className="text-stone-500 font-medium">Section:</span>
+                  <span className="font-bold text-stone-900">
+                    {classes.find(c => c.id === classId)?.sections.find(s => s.id === sectionId)?.name || "All"}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-stone-200 pt-2 mt-2">
+                <span className="text-stone-500 font-medium">Students in View:</span>
+                <span className="font-extrabold text-rose-700">{students.length} students</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] leading-relaxed mb-5">
+              <p className="font-semibold">Note on Unpublishing:</p>
+              This will revert results for students in this class back to <strong>DRAFT</strong> status. Students and parents will not be able to view them until re-published. Entered marks remain safely saved.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isBulkPublishing}
+                onClick={() => setShowBulkUnpublishModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={isBulkPublishing || students.length === 0}
+                onClick={handleBulkUnpublish}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5"
+              >
+                {isBulkPublishing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Unpublish Results
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* ══ REPORT CARD PREVIEW MODAL (A4 LANDSCAPE PRINTABLE) ══════════════════════ */}
       {mounted && showReportPreview && createPortal(
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-0 md:p-6 overflow-hidden print-modal-backdrop">
@@ -1602,40 +2307,171 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                 <h3 className="font-extrabold text-stone-900 text-sm">Report Card Preview</h3>
                 <p className="text-stone-500 text-xs mt-0.5 font-medium">Verify card layout and details before printing or saving.</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {/* Optional Subject Quick Toggles */}
+                {previewData?.subjects?.some((s: any) => s.isOptional) && (
+                  <div className="flex items-center gap-1.5 bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs">
+                    <span className="text-stone-500 font-semibold text-[11px]">Optional:</span>
+                    {previewData.subjects.filter((s: any) => s.isOptional).map((s: any) => {
+                      const isDeselected = previewExcludedSubjectIds.includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setPreviewExcludedSubjectIds(prev =>
+                              prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id]
+                            );
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer",
+                            isDeselected
+                              ? "bg-rose-50 text-rose-700 border-rose-300 line-through opacity-75"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-300"
+                          )}
+                          title={isDeselected ? `Click to include ${s.name} in report` : `Click to deselect ${s.name} from report`}
+                        >
+                          {s.name} {isDeselected ? "✗" : "✓"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <Button variant="outline" size="sm" onClick={() => setShowReportPreview(false)}>Close</Button>
 
-                {previewData && (previewData.termResult?.status === "DRAFT" || previewData.termResult?.status === "COMPLETED") && (
-                  <Button
-                    size="sm"
-                    onClick={async () => {
-                      setPublishLoading(true);
-                      try {
-                        await saveStudentMarksAction({
-                          studentId: previewData.student.id,
-                          sessionId,
-                          marks: previewData.markEntries.map((m: any) => ({
-                            examSubjectId: m.examSubjectId,
-                            marksObtained: m.marksObtained,
-                          })),
-                          termDetail: {
-                            status: "PUBLISHED",
-                          },
-                        });
-                        toast.success("Result published successfully");
-                        setShowReportPreview(false);
-                        loadStudents();
-                      } catch (err: any) {
-                        toast.error(err.message || "Failed to publish result");
-                      } finally {
-                        setPublishLoading(false);
-                      }
-                    }}
-                    disabled={publishLoading}
-                    className="bg-indigo-650 hover:bg-indigo-600 text-grey-500 font-bold h-8 text-xs"
-                  >
-                    Publish Result
-                  </Button>
+                {previewData && (
+                  <>
+                    {(previewData.termResult?.status === "PUBLISHED" || previewData.termResult?.status === "COMPLETED") ? (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            setPublishLoading(true);
+                            try {
+                              const res = await unpublishStudentResultAction(previewData.student.id, sessionId);
+                              if (!res.success) {
+                                toast.error(res.error || "Failed to unpublish result");
+                                return;
+                              }
+                              toast.success("Result unpublished (reverted to Draft)");
+                              const updated = await getStudentMarksDataAction(previewData.student.id, sessionId);
+                              setPreviewData(updated);
+                              loadStudents();
+                            } catch (err: any) {
+                              toast.error(err.message || "Failed to unpublish result");
+                            } finally {
+                              setPublishLoading(false);
+                            }
+                          }}
+                          disabled={publishLoading}
+                          className="bg-amber-600 hover:bg-amber-700 text-white font-bold h-8 text-xs flex items-center gap-1.5"
+                        >
+                          {publishLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          <RotateCcw className="w-3.5 h-3.5" /> Unpublish Result
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            setPublishLoading(true);
+                            try {
+                              let textRemark = "";
+                              if (previewData.termResult?.principalRemarks?.startsWith("{")) {
+                                try {
+                                  textRemark = JSON.parse(previewData.termResult.principalRemarks).text || "";
+                                } catch {}
+                              } else {
+                                textRemark = previewData.termResult?.principalRemarks || "";
+                              }
+
+                              const res = await saveStudentMarksAction({
+                                studentId: previewData.student.id,
+                                sessionId,
+                                marks: previewData.markEntries.map((m: any) => ({
+                                  examSubjectId: m.examSubjectId,
+                                  marksObtained: m.marksObtained,
+                                })),
+                                termDetail: {
+                                  status: ResultStatus.PUBLISHED,
+                                  principalRemarks: JSON.stringify({
+                                    excludedSubjectIds: previewExcludedSubjectIds,
+                                    text: textRemark,
+                                  }),
+                                },
+                              });
+                              if (!res.success) {
+                                toast.error(res.error || "Failed to update report card");
+                                return;
+                              }
+                              toast.success("Report card updated successfully");
+                              const updated = await getStudentMarksDataAction(previewData.student.id, sessionId);
+                              setPreviewData(updated);
+                              loadStudents();
+                            } catch (err: any) {
+                              toast.error(err.message || "Failed to update report card");
+                            } finally {
+                              setPublishLoading(false);
+                            }
+                          }}
+                          disabled={publishLoading}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-8 text-xs flex items-center gap-1.5"
+                        >
+                          {publishLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          <Save className="w-3.5 h-3.5" /> Save Changes
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          setPublishLoading(true);
+                          try {
+                            let textRemark = "";
+                            if (previewData.termResult?.principalRemarks?.startsWith("{")) {
+                              try {
+                                textRemark = JSON.parse(previewData.termResult.principalRemarks).text || "";
+                              } catch {}
+                            } else {
+                              textRemark = previewData.termResult?.principalRemarks || "";
+                            }
+
+                            const res = await saveStudentMarksAction({
+                              studentId: previewData.student.id,
+                              sessionId,
+                              marks: previewData.markEntries.map((m: any) => ({
+                                examSubjectId: m.examSubjectId,
+                                marksObtained: m.marksObtained,
+                              })),
+                              termDetail: {
+                                status: ResultStatus.PUBLISHED,
+                                principalRemarks: JSON.stringify({
+                                  excludedSubjectIds: previewExcludedSubjectIds,
+                                  text: textRemark,
+                                }),
+                              },
+                            });
+                            if (!res.success) {
+                              toast.error(res.error || "Failed to publish result");
+                              return;
+                            }
+                            toast.success("Result published successfully");
+                            const updated = await getStudentMarksDataAction(previewData.student.id, sessionId);
+                            setPreviewData(updated);
+                            loadStudents();
+                          } catch (err: any) {
+                            toast.error(err.message || "Failed to publish result");
+                          } finally {
+                            setPublishLoading(false);
+                          }
+                        }}
+                        disabled={publishLoading}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-8 text-xs flex items-center gap-1.5"
+                      >
+                        {publishLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        <Send className="w-3.5 h-3.5" /> Publish Result
+                      </Button>
+                    )}
+                  </>
                 )}
 
                 <Button
@@ -1663,10 +2499,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   -webkit-print-color-adjust: exact !important;
                   print-color-adjust: exact !important;
                 }
-                body > *:not(.print-modal-backdrop) {
+                body > *:not(.print-modal-backdrop):not(:has(.print-modal-backdrop)) {
                   display: none !important;
                 }
-                .no-print {
+                .no-print, .no-print * {
                   display: none !important;
                 }
                 .print-modal-backdrop {
@@ -1703,24 +2539,30 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   height: auto !important;
                   max-height: none !important;
                 }
-                #report-card-print {
+                #report-card-print,
+                [id^="report-card-print"] {
                   border: none !important;
                   box-shadow: none !important;
                   margin: 0 auto !important;
-                  padding: 5mm !important;
-                  width: 100% !important;
-                  max-width: 100% !important;
+                  padding: 0 !important;
+                  width: 297mm !important;
+                  max-width: 297mm !important;
                   height: auto !important;
+                  max-height: 205mm !important;
                   box-sizing: border-box !important;
                   background: white !important;
                   color: black !important;
-                  page-break-after: always !important;
-                  break-after: page !important;
+                  display: block !important;
+                  overflow: hidden !important;
+                  page-break-after: avoid !important;
+                  break-after: avoid !important;
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
                 }
               }
               @page {
                 size: A4 landscape;
-                margin: 5mm;
+                margin: 0;
               }
             ` }} />
 
@@ -1729,7 +2571,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
               {previewLoading ? (
                 <div className="flex items-center justify-center h-48 text-stone-400 gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Generating card...</div>
               ) : previewData ? (
-                renderReportCard(previewData)
+                <ReportCard data={previewData} excludedSubjectIds={previewExcludedSubjectIds} />
               ) : null}
             </div>
 
@@ -1781,10 +2623,10 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   -webkit-print-color-adjust: exact !important;
                   print-color-adjust: exact !important;
                 }
-                body > *:not(.print-modal-backdrop) {
+                body > *:not(.print-modal-backdrop):not(:has(.print-modal-backdrop)) {
                   display: none !important;
                 }
-                .no-print {
+                .no-print, .no-print * {
                   display: none !important;
                 }
                 .print-modal-backdrop {
@@ -1821,24 +2663,36 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   height: auto !important;
                   max-height: none !important;
                 }
-                #report-card-print {
+                #report-card-print,
+                [id^="report-card-print"] {
                   border: none !important;
                   box-shadow: none !important;
                   margin: 0 auto !important;
-                  padding: 5mm !important;
-                  width: 100% !important;
-                  max-width: 100% !important;
+                  padding: 0 !important;
+                  width: 297mm !important;
+                  max-width: 297mm !important;
                   height: auto !important;
+                  max-height: 205mm !important;
                   box-sizing: border-box !important;
                   background: white !important;
                   color: black !important;
+                  display: block !important;
+                  overflow: hidden !important;
+                  page-break-inside: avoid !important;
+                  break-inside: avoid !important;
+                }
+                [id^="report-card-print"]:not(:last-child) {
                   page-break-after: always !important;
                   break-after: page !important;
+                }
+                [id^="report-card-print"]:last-child {
+                  page-break-after: avoid !important;
+                  break-after: avoid !important;
                 }
               }
               @page {
                 size: A4 landscape;
-                margin: 5mm;
+                margin: 0;
               }
             ` }} />
 
@@ -1846,7 +2700,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
             <div className="flex-1 overflow-y-auto p-8 bg-stone-100 flex flex-col items-center gap-8 print-modal-scroll">
               {multiReportData.map((data, index) => (
                 <Fragment key={data.student.id}>
-                  {renderReportCard(data)}
+                  <ReportCard data={data} id={`report-card-print-${index}`} />
                   {index < multiReportData.length - 1 && <div className="page-break w-full h-1 bg-stone-200 border-t border-dashed border-stone-300 no-print" />}
                 </Fragment>
               ))}
@@ -2062,7 +2916,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                       <Button
                         onClick={handleDownloadTemplate}
                         disabled={isTemplateLoading}
-                        className="bg-indigo-650 hover:bg-indigo-600 text-grey-500 font-bold h-9 px-6 text-xs w-full"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-9 px-6 text-xs w-full"
                       >
                         {isTemplateLoading && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
                         Download Template
@@ -2098,7 +2952,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                   <div className="border-2 border-dashed border-stone-300 rounded-2xl p-8 bg-stone-50 hover:bg-stone-100/50 transition flex flex-col items-center justify-center min-h-[200px]">
                     {isImportValidating ? (
                       <div className="space-y-3">
-                        <Loader2 className="w-10 h-10 animate-spin text-indigo-650 mx-auto" />
+                        <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mx-auto" />
                         <div>
                           <p className="font-bold text-stone-700">Validating worksheets...</p>
                           <p className="text-[10px] text-stone-450">Cross-checking student IDs, absent statuses (AB), and marks limit checks</p>
@@ -2107,7 +2961,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                     ) : (
                       <div className="space-y-4">
                         <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mx-auto">
-                          <Upload className="w-6 h-6 text-indigo-650" />
+                          <Upload className="w-6 h-6 text-indigo-600" />
                         </div>
                         <div>
                           <p className="font-bold text-stone-700">Select filled Excel document</p>
@@ -2122,7 +2976,7 @@ export function ResultsClient({ sessions, classes, globalSubjects, examTypes, cu
                         />
                         <label
                           htmlFor="excel-marks-upload-input"
-                          className="inline-flex h-9 px-4 rounded-lg bg-indigo-650 hover:bg-indigo-600 text-grey-600 font-bold text-xs items-center cursor-pointer select-none"
+                          className="inline-flex h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs items-center cursor-pointer select-none"
                         >
                           Choose File
                         </label>
@@ -2702,305 +3556,7 @@ function getCalculatedTotalsForData(data: any) {
 }
 
 // ── Reusable helper to render report cards in landscape WYSIWYG mode ──
-function renderReportCard(data: any) {
+function renderReportCard(data: any, excludedIds?: string[]) {
   if (!data) return null;
-  const cardCalc = getCalculatedTotalsForData(data);
-  return (
-    <div id="report-card-print" className="bg-white p-8 w-full max-w-[297mm] min-h-[210mm] shadow-md flex flex-col justify-between font-serif text-black text-xs select-none">
-
-      {/* Master Table Container representing the exact printed layout */}
-      <table className="w-full border-collapse border-2 border-black text-center text-[10px] font-bold text-black">
-        <tbody>
-          {/* 1. School Header Row */}
-          <tr>
-            <td colSpan={16} className="p-4 border-b-2 border-black">
-              <div className="flex items-center justify-between">
-                {/* Logo */}
-                {data.schoolBranding?.logoDocumentId ? (
-                  <div className="w-16 h-16 border border-black flex items-center justify-center bg-white shrink-0 overflow-hidden relative">
-                    <img
-                      src={`/api/documents/${data.schoolBranding.logoDocumentId}`}
-                      alt="School Logo"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-16 h-16 border border-black flex items-center justify-center text-[8px] uppercase tracking-tighter shrink-0 select-none text-center font-sans">
-                    VPS LOGO
-                  </div>
-                )}
-                {/* School details */}
-                <div className="flex-1 text-center pl-12 pr-12">
-                  <h2 className="text-xl font-extrabold tracking-wide font-serif leading-none uppercase">
-                    {data.schoolBranding?.schoolName || "VIDYANJALI PUBLIC SCHOOL"}
-                  </h2>
-                  <p className="text-[10px] font-bold mt-1.5">
-                    {data.schoolBranding?.address || "Karhera Mohan Nagar,Ghaziabad"}
-                  </p>
-                  <h3 className="text-[11px] font-extrabold uppercase mt-1">
-                    Annual Assessment Report 2025-26
-                  </h3>
-                </div>
-                {/* Student Photo */}
-                {data.student.photoUrl ? (
-                  <div className="w-16 h-20 border border-black flex items-center justify-center bg-stone-50 shrink-0 overflow-hidden relative">
-                    <img
-                      src={data.student.photoUrl}
-                      alt="Student Photo"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-16 h-20 shrink-0"></div>
-                )}
-              </div>
-            </td>
-          </tr>
-
-          {/* 2. Student Info Row */}
-          <tr className="border-b border-black text-left text-[10px]">
-            <td colSpan={5} className="py-2 px-2 border-r border-black">
-              <span>Name: </span><span className="font-extrabold font-sans uppercase">{data.student.fullName}</span>
-            </td>
-            <td colSpan={4} className="py-2 px-2 border-r border-black">
-              <span>CLASS: </span><span className="font-extrabold font-sans uppercase">{data.student.classSection.split("-")[0] || "—"}</span>
-            </td>
-            <td colSpan={2} className="py-2 px-2 border-r border-black">
-              <span>SEC: </span><span className="font-extrabold font-sans uppercase">{data.student.classSection.split("-")[1] || "—"}</span>
-            </td>
-            <td colSpan={5} className="py-2 px-2">
-              <span>DATE OF RESULT - </span><span className="font-extrabold font-sans">{data.termResult?.resultDate ? new Date(data.termResult.resultDate).toLocaleDateString("en-GB") : "14 / 03 / 2026"}</span>
-            </td>
-          </tr>
-
-          {/* Student Info Row 2: Roll No, Admission No, Attendance details */}
-          <tr className="border-b-2 border-black text-left text-[10px]">
-            <td colSpan={3} className="py-2 px-2 border-r border-black">
-              <span>ROLL NO: </span><span className="font-extrabold font-sans">{data.student.rollNo || "—"}</span>
-            </td>
-            <td colSpan={3} className="py-2 px-2 border-r border-black">
-              <span>ADM NO: </span><span className="font-extrabold font-sans uppercase">{data.student.admissionNo || "—"}</span>
-            </td>
-            <td colSpan={3} className="py-2 px-2 border-r border-black">
-              <span>WORKING DAYS: </span><span className="font-extrabold font-sans">{data.termResult?.workingDays ?? "—"}</span>
-            </td>
-            <td colSpan={3} className="py-2 px-2 border-r border-black">
-              <span>PRESENT DAYS: </span><span className="font-extrabold font-sans">{data.termResult?.presentDays ?? "—"}</span>
-            </td>
-            <td colSpan={4} className="py-2 px-2">
-              <span>ATTENDANCE %: </span>
-              <span className="font-extrabold font-sans">
-                {data.termResult?.workingDays && data.termResult?.presentDays && Number(data.termResult.workingDays) > 0
-                  ? `${Math.round((Number(data.termResult.presentDays) / Number(data.termResult.workingDays)) * 100)}%`
-                  : "—"}
-              </span>
-            </td>
-          </tr>
-
-          {/* 3. Main Assessment Column Headers */}
-          <tr className="border-b border-black text-[9px] uppercase">
-            <th rowSpan={2} className="py-2.5 border-r border-black w-8">S.No.</th>
-            <th rowSpan={2} className="py-2.5 px-2 text-left border-r border-black w-36">SUBJECTS</th>
-            <th colSpan={5} className="py-1 border-r border-black">FIRST TERM EVALUATION</th>
-            <th colSpan={5} className="py-1 border-r border-black">SECOND TERM EVALUATION</th>
-            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br />(1st<br />Term)</th>
-            <th rowSpan={2} className="py-2.5 border-r border-black w-12 text-[8px] leading-tight">Total<br />(2nd<br />Term)</th>
-            <th rowSpan={2} className="py-2.5 border-r border-black w-14 text-[8px] leading-tight">FINAL TOTAL<br />(1st Term +<br />2nd Term)</th>
-            <th rowSpan={2} className="py-2.5 w-12 text-[8px] leading-tight">FINAL<br />GRADES</th>
-          </tr>
-
-          {/* Sub-headers row */}
-          <tr className="border-b border-black text-[8px] text-stone-700">
-            {/* T1 */}
-            <th className="py-1 border-r border-black w-8">UT-I</th>
-            <th className="py-1 border-r border-black w-8">UT-II</th>
-            <th className="py-1 border-r border-black w-10">HLY</th>
-            <th className="py-1 border-r border-black w-10">TOTAL</th>
-            <th className="py-1 border-r border-black w-8">GRADE</th>
-            {/* T2 */}
-            <th className="py-1 border-r border-black w-8">UT-III</th>
-            <th className="py-1 border-r border-black w-8">UT-IV</th>
-            <th className="py-1 border-r border-black w-10">Annual</th>
-            <th className="py-1 border-r border-black w-10">TOTAL</th>
-            <th className="py-1 border-r border-black w-8">GRADE</th>
-          </tr>
-
-          {/* 4. Subject Marks Rows */}
-          {data.subjects.map((sub: any, idx: number) => {
-            const t1Exams = data.exams.filter((e: any) => e.term === 1);
-            const t2Exams = data.exams.filter((e: any) => e.term === 2);
-
-            let t1Total = 0;
-            let t1Max = 0;
-            let t2Total = 0;
-            let t2Max = 0;
-
-            t1Exams.forEach((ex: any) => {
-              const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
-              if (es) {
-                const entry = data.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
-                t1Total += entry?.marksObtained ?? 0;
-                t1Max += es.maxMarks;
-              }
-            });
-
-            t2Exams.forEach((ex: any) => {
-              const es = ex.subjects.find((s: any) => s.subjectId === sub.id);
-              if (es) {
-                const entry = data.markEntries.find((me: any) => me.examSubjectId === es.examSubjectId);
-                t2Total += entry?.marksObtained ?? 0;
-                t2Max += es.maxMarks;
-              }
-            });
-
-            const grandTotal = t1Total + t2Total;
-            const grandMax = t1Max + t2Max;
-
-            const getGrade = (val: number, max: number) => {
-              if (max === 0) return "—";
-              const pct = (val / max) * 100;
-              if (pct >= 90) return "A1";
-              if (pct >= 80) return "A2";
-              if (pct >= 70) return "B1";
-              if (pct >= 60) return "B2";
-              if (pct >= 50) return "C1";
-              if (pct >= 40) return "C2";
-              if (pct >= 33) return "D";
-              return "E";
-            };
-
-            const getExamMark = (name: string) => {
-              const ex = data.exams.find((e: any) => e.name === name);
-              const es = ex?.subjects.find((s: any) => s.subjectId === sub.id);
-              const me = data.markEntries.find((m: any) => m.examSubjectId === es?.examSubjectId);
-              return me ? String(me.marksObtained) : "—";
-            };
-
-            return (
-              <tr key={sub.id} className="border-b border-black text-black">
-                <td className="py-2 border-r border-black">{idx + 1}</td>
-                <td className="py-2 px-2 text-left font-bold border-r border-black">{sub.name}</td>
-                {/* T1 */}
-                <td className="py-2 border-r border-black">{getExamMark("UT-I")}</td>
-                <td className="py-2 border-r border-black">{getExamMark("UT-II")}</td>
-                <td className="py-2 border-r border-black">{getExamMark("Half Yearly")}</td>
-                <td className="py-2 border-r border-black font-bold">{t1Max > 0 ? t1Total : "—"}</td>
-                <td className="py-2 border-r border-black font-bold">{getGrade(t1Total, t1Max)}</td>
-                {/* T2 */}
-                <td className="py-2 border-r border-black">{getExamMark("UT-III")}</td>
-                <td className="py-2 border-r border-black">{getExamMark("UT-IV")}</td>
-                <td className="py-2 border-r border-black">{getExamMark("Annual")}</td>
-                <td className="py-2 border-r border-black font-bold">{t2Max > 0 ? t2Total : "—"}</td>
-                <td className="py-2 border-r border-black font-bold">{getGrade(t2Total, t2Max)}</td>
-                {/* Final columns */}
-                <td className="py-2 border-r border-black font-bold">{t1Max > 0 ? t1Total : "—"}</td>
-                <td className="py-2 border-r border-black font-bold">{t2Max > 0 ? t2Total : "—"}</td>
-                <td className="py-2 border-r border-black font-black">{grandMax > 0 ? grandTotal : "—"}</td>
-                <td className="py-2 font-black">{getGrade(grandTotal, grandMax)}</td>
-              </tr>
-            );
-          })}
-
-          {/* 5. Grand Total Row */}
-          <tr className="border-b border-black text-black">
-            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">Grand Total</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
-            <td className="border-r border-black font-bold">{cardCalc?.grandTotal}</td>
-            <td className="border-r border-black font-black">{cardCalc?.grandTotal}</td>
-            <td>&nbsp;</td>
-          </tr>
-
-          {/* 6. Percentage Row */}
-          <tr className="border-b border-black text-black">
-            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">Percentage</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
-            <td className="border-r border-black font-bold">{cardCalc?.percentage}</td>
-            <td className="border-r border-black font-black">{cardCalc?.percentage}</td>
-            <td className="font-bold">{cardCalc?.finalGrade}</td>
-          </tr>
-
-
-
-          {/* 8. Art & Activity Row */}
-          <tr className="border-b border-black text-black">
-            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">ART & ACTIVITY</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold uppercase">{data.termResult?.artGrade || "—"}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold uppercase">{data.termResult?.artGrade || "—"}</td>
-            <td colSpan={6}>&nbsp;</td>
-          </tr>
-
-          {/* 9. GK Row */}
-          <tr className="border-b border-black text-black">
-            <td colSpan={2} className="py-1 px-2 text-left border-r border-black">GK</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold uppercase">{data.termResult?.gkGrade || "—"}</td>
-            <td className="border-r border-black">&nbsp;</td>
-            <td colSpan={3} className="border-r border-black">&nbsp;</td>
-            <td className="border-r border-black font-bold uppercase">{data.termResult?.gkGrade || "—"}</td>
-            <td colSpan={2} className="border-r border-black">&nbsp;</td>
-            <td colSpan={2} className="border-r border-black font-bold text-center">RESULT</td>
-            <td className="font-extrabold uppercase text-center">{data.termResult?.resultOutcome || "PASS"}</td>
-          </tr>
-
-          {/* 10. Remarks row header */}
-          <tr className="border-b border-black text-[9px] uppercase">
-            <td colSpan={2} className="py-1.5 border-r border-black">REMARKS</td>
-            <td colSpan={5} className="py-1.5 border-r border-black">MID TERM EVALUATION</td>
-            <td colSpan={5} className="py-1.5 border-r border-black">FINAL TERM EVALUATION</td>
-            <td colSpan={4} className="py-1.5 font-bold uppercase text-center">RANK</td>
-          </tr>
-
-          {/* Promoted row */}
-          <tr className="border-b border-black">
-            <td colSpan={12} className="py-1 px-2 border-r border-black text-center font-extrabold uppercase tracking-wide">
-              {data.termResult?.remarksFinal ? "PROMOTED WITH GRACE" : "PROMOTED WITH GRACE"}
-            </td>
-            <td colSpan={4} className="py-1 font-bold text-center">
-              {data.termResult?.rank ? `${data.termResult.rank}` : "NA"}
-            </td>
-          </tr>
-
-          {/* 11. Comments layout box */}
-          <tr className="border-b-2 border-black text-left font-normal text-[9.5px]">
-            <td colSpan={7} className="py-6 px-3 border-r border-black align-top leading-relaxed w-1/2">
-              <span className="font-sans text-stone-800">{data.termResult?.remarksMid || "Dear put some extra efforts to do studies .You can achieve your goal"}</span>
-            </td>
-            <td colSpan={9} className="py-6 px-3 align-top leading-relaxed w-1/2">
-              <span className="font-sans text-stone-800">{data.termResult?.remarksFinal || "Dear put some extra efforts to do studies .You can achieve your goal"}</span>
-            </td>
-          </tr>
-
-          {/* 12. Signatures Row */}
-          <tr className="text-center font-bold text-[9px] uppercase">
-            <td colSpan={5} className="py-6 px-2 border-r border-black valign-bottom">
-              <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">CLASS TEACHER SIGNATURE</div>
-            </td>
-            <td colSpan={6} className="py-6 px-2 border-r border-black valign-bottom">
-              <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">PARENTS SIGNATURE</div>
-            </td>
-            <td colSpan={5} className="py-6 px-2 valign-bottom">
-              <div className="border-t border-stone-300 pt-1 mt-6 w-3/4 mx-auto">PRINCIPAL SIGNATURE</div>
-            </td>
-          </tr>
-
-        </tbody>
-      </table>
-
-    </div>
-  );
+  return <ReportCard data={data} excludedSubjectIds={excludedIds} />;
 }

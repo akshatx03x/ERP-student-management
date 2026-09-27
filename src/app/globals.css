@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;0,900;1,700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -84,8 +85,8 @@ body {
 
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 5mm;
+    size: auto;
+    margin: 4mm;
   }
 
   html, body {
@@ -117,10 +118,10 @@ body {
   }
 
   /* 2. When printing a target container or modal, hide surrounding screen siblings */
-  body:has(.fee-receipt-print-wrapper) > *:not(:has(.fee-receipt-print-wrapper)),
-  body:has(.printable-area) > *:not(:has(.printable-area)),
-  body:has(.print-preview-area) > *:not(:has(.print-preview-area)),
-  body:has(.print-modal-backdrop) > *:not(:has(.print-modal-backdrop)) {
+  body:has(.fee-receipt-print-wrapper) > *:not(.fee-receipt-print-wrapper):not(:has(.fee-receipt-print-wrapper)),
+  body:has(.printable-area) > *:not(.printable-area):not(:has(.printable-area)),
+  body:has(.print-preview-area) > *:not(.print-preview-area):not(:has(.print-preview-area)),
+  body:has(.print-modal-backdrop) > *:not(.print-modal-backdrop):not(:has(.print-modal-backdrop)) {
     display: none !important;
   }
 
@@ -151,8 +152,7 @@ body {
 
   .fee-receipt-print-wrapper,
   .printable-area,
-  .print-preview-area,
-  #report-card-print {
+  .print-preview-area {
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -167,6 +167,28 @@ body {
     overflow: visible !important;
     height: auto !important;
     max-height: none !important;
+  }
+
+  #report-card-print,
+  [id^="report-card-print"] {
+    position: static !important;
+    width: 100% !important;
+    max-width: 297mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    overflow: hidden !important;
+    height: auto !important;
+    max-height: 205mm !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   /* 4. Ensure accordions and hidden printable content are visible on print */

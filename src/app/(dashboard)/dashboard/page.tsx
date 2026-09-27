@@ -4,7 +4,6 @@ import { isPrincipal } from "@/server/auth/session";
 import { prisma } from "@/server/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/states";
-import { BackupPanel } from "@/components/shared/backup-panel";
 import { unstable_cache } from "next/cache";
 import { SessionFilter } from "./session-filter";
 
@@ -192,32 +191,8 @@ export default async function DashboardPage({
   const stats = await fetchCachedStats(schoolId, selectedSessionId);
   const { students, collected, pending } = stats;
 
-  // Load last backup info for the Principal's dashboard (non-blocking)
   const principalView = isPrincipal(user.role);
-  let lastBackup = null;
-  if (principalView) {
-    try {
-      const { getBackupProvider } = await import("@/server/providers/backup.provider");
-      const provider = getBackupProvider();
-      const backups = await provider.listBackups();
-      if (backups.length > 0) {
-        const b = backups[0]!;
-        lastBackup = {
-          id: b.id,
-          filename: b.filename,
-          sizeBytes: b.sizeBytes,
-          createdAt: b.createdAt.toISOString(),
-          schoolName: b.schoolName,
-          erpVersion: b.erpVersion,
-          backupFormatVersion: b.backupFormatVersion,
-          sha256: b.sha256,
-          ...(b.label ? { label: b.label } : {}),
-        };
-      }
-    } catch {
-      // Non-critical — don't fail the dashboard
-    }
-  }
+
 
   return (
     <div className="space-y-6">
@@ -267,17 +242,6 @@ export default async function DashboardPage({
           description="Add families and students when you are ready. Counts stay at zero until real data exists."
         />
       ) : null}
-
-      {/* Administrative Tools — visible only to Principal */}
-      {principalView && (
-        <div className="space-y-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-700">Administrative Tools</h2>
-            <p className="text-xs text-slate-400 mt-0.5">System-level operations. Only visible to the Principal.</p>
-          </div>
-          <BackupPanel isPrincipal={true} lastBackup={lastBackup} />
-        </div>
-      )}
     </div>
   );
 }

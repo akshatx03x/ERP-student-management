@@ -13,23 +13,28 @@ export default async function StudentDetailsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ from?: string; returnTo?: string; returnLabel?: string }>;
+  searchParams?: Promise<{ from?: string; returnTo?: string; returnLabel?: string; sessionId?: string }>;
 }) {
   const { id } = await params;
-  const { from, returnTo, returnLabel } = (await searchParams) || {};
+  const { from, returnTo, returnLabel, sessionId } = (await searchParams) || {};
   const { user } = await requirePermission("student.view");
   const schoolId = schoolIdFromUser(user);
 
   const student = await getStudent(id).catch(() => null);
   if (!student) notFound();
 
-  // Fetch academic session and marks for the current session
-  const currentSession = await prisma.academicSession.findFirst({
-    where: { schoolId, isCurrent: true },
-  });
+  // Robust session resolution: searchParams -> student's active enrollment -> isCurrent session
+  const activeSessionId = sessionId || student.enrollments?.[0]?.sessionId;
+  const currentSession = activeSessionId
+    ? await prisma.academicSession.findUnique({ where: { id: activeSessionId } })
+    : await prisma.academicSession.findFirst({ where: { schoolId, isCurrent: true } });
 
-  const marksData = currentSession
-    ? await getStudentMarksData(student.id, currentSession.id).catch(() => null)
+  const effectiveSessionId = currentSession?.id || activeSessionId;
+  const marksData = effectiveSessionId
+    ? await getStudentMarksData(student.id, effectiveSessionId).catch((e) => {
+        console.error("[StudentDetailsPage] Error fetching marksData:", e);
+        return null;
+      })
     : null;
 
   const query = new URLSearchParams();

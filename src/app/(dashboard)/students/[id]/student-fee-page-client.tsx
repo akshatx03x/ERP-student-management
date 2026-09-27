@@ -10,7 +10,7 @@ import { getReceiptAction } from "@/server/actions/fee.actions";
 import { toast } from "sonner";
 import {
   Edit3, Eye, Users, ArrowLeft,
-  Receipt, Tag, RotateCcw, AlertCircle, Printer, Download, X, CheckSquare, Square
+  Receipt, Tag, RotateCcw, AlertCircle, Printer, Download, X, CheckSquare, Square, Award
 } from "lucide-react";
 import { IdCardPrintButton } from "./id-card-print-button";
 import { IDCardModal } from "@/components/students/id-card-modal";
@@ -325,6 +325,8 @@ export function StudentFeePageClient({
   if (from) detailsQuery.set("from", from);
   if (returnTo) detailsQuery.set("returnTo", returnTo);
   if (returnLabel) detailsQuery.set("returnLabel", returnLabel);
+  const activeSessionParam = selectedSessionId ?? (enrollments.find(e => e.status === "ACTIVE")?.sessionId || enrollments[0]?.sessionId);
+  if (activeSessionParam) detailsQuery.set("sessionId", activeSessionParam);
   const detailsHref = `/students/${student.id}/details${detailsQuery.toString() ? `?${detailsQuery.toString()}` : ""}`;
 
   return (
@@ -381,13 +383,29 @@ export function StudentFeePageClient({
             </div>
           )}
 
-          {!isStudentSelf && (
+          {isStudentSelf ? (
             <div className="flex items-center gap-2">
+              <Link
+                href={detailsHref}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors shadow-xs"
+              >
+                <Award className="w-3.5 h-3.5" /> View Academic Results & Profile
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                href={detailsHref}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors shadow-xs"
+                title="View student's Annual Report Card and Academic Results"
+              >
+                <Award className="w-3.5 h-3.5" /> Academic Results
+              </Link>
               <Link
                 href={detailsHref}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors shadow-xs"
               >
-                <Eye className="w-3.5 h-3.5" /> View More
+                <Eye className="w-3.5 h-3.5" /> View Details
               </Link>
               <Link
                 href={`/students/${student.id}/edit`}

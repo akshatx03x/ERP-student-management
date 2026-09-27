@@ -11,10 +11,44 @@ export async function listGlobalSubjects() {
   const { user } = await requirePermission("subject.view");
   const schoolId = schoolIdFromUser(user);
 
-  return prisma.subject.findMany({
+  const existing = await prisma.subject.findMany({
     where: { schoolId },
     orderBy: { displayOrder: "asc" },
   });
+
+  const hasGk = existing.some(s => s.code === "GK" || s.name.toUpperCase() === "G.K");
+  const hasDraw = existing.some(s => s.code === "DRAW" || s.name.toUpperCase() === "DRAW");
+
+  if (!hasGk || !hasDraw) {
+    if (!hasGk) {
+      await prisma.subject.create({
+        data: {
+          schoolId,
+          name: "G.K",
+          code: "GK",
+          subjectType: SubjectType.CO_SCHOLASTIC,
+          displayOrder: 98,
+        },
+      }).catch(() => null);
+    }
+    if (!hasDraw) {
+      await prisma.subject.create({
+        data: {
+          schoolId,
+          name: "DRAW",
+          code: "DRAW",
+          subjectType: SubjectType.CO_SCHOLASTIC,
+          displayOrder: 99,
+        },
+      }).catch(() => null);
+    }
+    return prisma.subject.findMany({
+      where: { schoolId },
+      orderBy: { displayOrder: "asc" },
+    });
+  }
+
+  return existing;
 }
 
 export async function createGlobalSubject(input: {
@@ -577,7 +611,17 @@ export async function getClassResultsOverview(filters: {
 }
 
 export async function getStudentMarksData(studentId: string, sessionId: string) {
-  const { user } = await requirePermission("marks.view");
+  let user: any;
+  try {
+    const res = await requirePermission("marks.view");
+    user = res.user;
+  } catch {
+    const res = await requirePermission("result.view");
+    user = res.user;
+    if (user.role === "STUDENT" && user.studentId !== studentId) {
+      throw new Error("Unauthorized to view marks for another student");
+    }
+  }
   const schoolId = schoolIdFromUser(user);
 
   const student = await prisma.student.findFirst({
@@ -641,7 +685,16 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
     where: { schoolId },
   });
 
+  const academicSession = await prisma.academicSession.findUnique({
+    where: { id: sessionId },
+    select: { name: true },
+  });
+
+  const termResult = student.termResults[0] ?? null;
+  const isPublished = termResult?.status === ResultStatus.COMPLETED || (termResult?.status as any) === "PUBLISHED";
+
   return {
+    sessionName: academicSession?.name || "2025-26",
     student: {
       id: student.id,
       fullName: student.fullName,
@@ -651,11 +704,17 @@ export async function getStudentMarksData(studentId: string, sessionId: string) 
       photoUrl: student.photoUrl ?? null,
     },
     schoolBranding: branding ? {
-      schoolName: branding.schoolName,
-      address: branding.address,
+      schoolName: branding.schoolName || "VIDYANJALI PUBLIC SCHOOL",
+      address: branding.address && branding.address !== "XYZ" ? branding.address : "Karhera Mohan Nagar, Ghaziabad",
       phone: branding.phone,
       logoDocumentId: branding.logoDocumentId,
-    } : null,
+    } : {
+      schoolName: "VIDYANJALI PUBLIC SCHOOL",
+      address: "Karhera Mohan Nagar, Ghaziabad",
+      phone: null,
+      logoDocumentId: null,
+    },
+    isPublished,
     subjects: classSubjects.map((cs) => ({
       id: cs.subject.id,
       name: cs.subject.name,
@@ -724,10 +783,8 @@ export async function saveStudentMarks(input: {
     },
   });
 
-  const isAuditRequired = existingTerm && (existingTerm.status === "PUBLISHED" || existingTerm.status === "LOCKED");
-  if (isAuditRequired && !input.reason?.trim()) {
-    throw new Error("Reason for modification is required for published or locked results.");
-  }
+  const isAuditRequired = existingTerm && (existingTerm.status === ResultStatus.COMPLETED as any || (existingTerm.status as any) === "PUBLISHED" || (existingTerm.status as any) === "LOCKED");
+  const auditReason = input.reason?.trim() || "Result updated";
 
   return prisma.$transaction(async (tx) => {
     // Collect previous values for audit log
@@ -745,13 +802,19 @@ export async function saveStudentMarks(input: {
     for (const m of input.marks) {
       const examSubject = await tx.examSubject.findUnique({
         where: { id: m.examSubjectId },
-        include: { exam: true },
+        include: { exam: true, subject: true },
       });
       if (!examSubject) throw new Error(`Exam subject ${m.examSubjectId} not found`);
 
       const maxMarks = decimalToNumber(examSubject.maxMarks);
+      const subName = examSubject.subject?.name || "Subject";
+      const examName = examSubject.exam?.name || "Exam";
+
       if (m.marksObtained > maxMarks) {
-        throw new Error(`Marks cannot exceed ${maxMarks} for subject`);
+        throw new Error(`Marks for ${subName} (${examName}) cannot exceed ${maxMarks}. Entered: ${m.marksObtained}`);
+      }
+      if (m.marksObtained < 0) {
+        throw new Error(`Marks for ${subName} (${examName}) cannot be negative. Entered: ${m.marksObtained}`);
       }
 
       // Check if entry already exists
@@ -765,7 +828,6 @@ export async function saveStudentMarks(input: {
       });
 
       // Simple grading: Resolve grade based on percentage using gradeScale if present
-      const percent = maxMarks > 0 ? (m.marksObtained / maxMarks) * 105 : 0; // standard percent
       const scales = await tx.gradeScale.findMany({
         where: { schoolId },
         orderBy: { minPercent: "desc" },
@@ -806,6 +868,10 @@ export async function saveStudentMarks(input: {
     // 2. Save Term details
     let termResultId = existingTerm?.id;
     if (input.termDetail) {
+      const safeResultDate = input.termDetail.resultDate && !isNaN(new Date(input.termDetail.resultDate).getTime())
+        ? new Date(input.termDetail.resultDate)
+        : null;
+
       const termRes = await tx.studentTermResult.upsert({
         where: {
           studentId_sessionId: {
@@ -825,7 +891,7 @@ export async function saveStudentMarks(input: {
           gkGrade: input.termDetail.gkGrade ?? null,
           artGrade: input.termDetail.artGrade ?? null,
           rank: input.termDetail.rank ?? null,
-          resultDate: input.termDetail.resultDate ?? null,
+          resultDate: safeResultDate,
           status: input.termDetail.status ?? ResultStatus.DRAFT,
         },
         update: {
@@ -838,7 +904,7 @@ export async function saveStudentMarks(input: {
           gkGrade: input.termDetail.gkGrade ?? null,
           artGrade: input.termDetail.artGrade ?? null,
           rank: input.termDetail.rank ?? null,
-          resultDate: input.termDetail.resultDate ?? null,
+          resultDate: safeResultDate,
           status: input.termDetail.status ?? undefined,
         },
       });
@@ -858,7 +924,7 @@ export async function saveStudentMarks(input: {
         data: {
           resultId: termResultId,
           editedById: user.id,
-          reason: input.reason || "Modified",
+          reason: auditReason,
           changes: {
             prevMarks: prevMarks.map((pm) => ({ esId: pm.examSubjectId, val: decimalToNumber(pm.marksObtained) })),
             newMarks: updatedMarks.map((um) => ({ esId: um.examSubjectId, val: decimalToNumber(um.marksObtained) })),
@@ -1456,3 +1522,208 @@ export async function importClassMarks(input: {
     failed: 0,
   };
 }
+
+export async function bulkPublishClassResults(input: {
+  classId: string;
+  sectionId?: string | null;
+  sessionId: string;
+}) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: {
+      classId: input.classId,
+      ...(input.sectionId && input.sectionId !== "ALL" ? { sectionId: input.sectionId } : {}),
+      sessionId: input.sessionId,
+      student: { schoolId, status: "ACTIVE" },
+    },
+    include: {
+      student: {
+        include: {
+          termResults: { where: { sessionId: input.sessionId } },
+          markEntries: {
+            where: { examSubject: { exam: { sessionId: input.sessionId } } },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  return prisma.$transaction(async (tx) => {
+    let publishedCount = 0;
+    const now = new Date();
+
+    for (const enr of enrollments) {
+      const existing = enr.student.termResults[0];
+      // Publish student if they have existing marks or an existing term result
+      if (existing || enr.student.markEntries.length > 0) {
+        await tx.studentTermResult.upsert({
+          where: {
+            studentId_sessionId: {
+              studentId: enr.student.id,
+              sessionId: input.sessionId,
+            },
+          },
+          create: {
+            studentId: enr.student.id,
+            sessionId: input.sessionId,
+            status: ResultStatus.PUBLISHED,
+            resultOutcome: ResultOutcome.PASS,
+            resultDate: now,
+          },
+          update: {
+            status: ResultStatus.PUBLISHED,
+            resultOutcome: existing?.resultOutcome || ResultOutcome.PASS,
+            resultDate: existing?.resultDate || now,
+          },
+        });
+        publishedCount++;
+      }
+    }
+
+    await writeAuditLog({
+      schoolId,
+      userId: user.id,
+      action: "update",
+      module: "result",
+      entityType: "ClassResultsBulkPublish",
+      entityId: input.classId,
+      newValue: { classId: input.classId, sectionId: input.sectionId, publishedCount },
+    }, tx);
+
+    return { success: true, count: publishedCount };
+  });
+}
+
+export async function bulkUnpublishClassResults(input: {
+  classId: string;
+  sectionId?: string | null;
+  sessionId: string;
+}) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  const enrollments = await prisma.studentEnrollment.findMany({
+    where: {
+      classId: input.classId,
+      ...(input.sectionId && input.sectionId !== "ALL" ? { sectionId: input.sectionId } : {}),
+      sessionId: input.sessionId,
+      student: { schoolId, status: "ACTIVE" },
+    },
+    select: { studentId: true },
+  });
+
+  const studentIds = enrollments.map((e) => e.studentId);
+  if (studentIds.length === 0) {
+    return { success: true, count: 0 };
+  }
+
+  const res = await prisma.studentTermResult.updateMany({
+    where: {
+      studentId: { in: studentIds },
+      sessionId: input.sessionId,
+    },
+    data: {
+      status: ResultStatus.DRAFT,
+    },
+  });
+
+  await writeAuditLog({
+    schoolId,
+    userId: user.id,
+    action: "update",
+    module: "result",
+    entityType: "ClassResultsBulkUnpublish",
+    entityId: input.classId,
+    newValue: { classId: input.classId, sectionId: input.sectionId, unpublishedCount: res.count },
+  });
+
+  return { success: true, count: res.count };
+}
+
+export async function publishStudentResult(studentId: string, sessionId: string) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, schoolId },
+  });
+  if (!student) throw new Error("Student not found");
+
+  const existing = await prisma.studentTermResult.findUnique({
+    where: {
+      studentId_sessionId: {
+        studentId,
+        sessionId,
+      },
+    },
+  });
+
+  const now = new Date();
+  const updated = await prisma.studentTermResult.upsert({
+    where: {
+      studentId_sessionId: {
+        studentId,
+        sessionId,
+      },
+    },
+    create: {
+      studentId,
+      sessionId,
+      status: ResultStatus.PUBLISHED,
+      resultOutcome: ResultOutcome.PASS,
+      resultDate: now,
+    },
+    update: {
+      status: ResultStatus.PUBLISHED,
+      resultDate: existing?.resultDate || now,
+    },
+  });
+
+  await writeAuditLog({
+    schoolId,
+    userId: user.id,
+    action: "update",
+    module: "result",
+    entityType: "StudentResultPublish",
+    entityId: studentId,
+    newValue: { status: ResultStatus.PUBLISHED },
+  });
+
+  return { success: true, termResult: updated };
+}
+
+export async function unpublishStudentResult(studentId: string, sessionId: string) {
+  const { user } = await requirePermission("marks.create");
+  const schoolId = schoolIdFromUser(user);
+
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, schoolId },
+  });
+  if (!student) throw new Error("Student not found");
+
+  const updated = await prisma.studentTermResult.updateMany({
+    where: {
+      studentId,
+      sessionId,
+    },
+    data: {
+      status: ResultStatus.DRAFT,
+    },
+  });
+
+  await writeAuditLog({
+    schoolId,
+    userId: user.id,
+    action: "update",
+    module: "result",
+    entityType: "StudentResultUnpublish",
+    entityId: studentId,
+    newValue: { status: ResultStatus.DRAFT },
+  });
+
+  return { success: true, count: updated.count };
+}
+
