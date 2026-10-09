@@ -196,7 +196,7 @@ export async function generateReceiptNumberInTx(
       orderBy: { receiptNumber: "desc" },
       select: { receiptNumber: true },
     });
-    const startVal = Math.max(10000, maxPayment?.receiptNumber ?? 10000);
+    const startVal = Math.max(0, maxPayment?.receiptNumber ?? 0);
     await tx.systemCounter.create({
       data: { id: counterId, value: startVal },
     });

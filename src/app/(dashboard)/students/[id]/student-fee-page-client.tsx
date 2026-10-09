@@ -316,9 +316,14 @@ export function StudentFeePageClient({
     parentUrl = backUrl;
   } else if (returnTo) {
     backUrl = returnTo;
-    backLabel = returnLabel || "Back";
-    parentLabel = returnLabel || "Back";
+    backLabel = returnLabel || "Back to Active Students";
+    parentLabel = "Active Students";
     parentUrl = returnTo;
+  } else {
+    backUrl = "/students";
+    backLabel = "Back to Active Students";
+    parentLabel = "Active Students";
+    parentUrl = "/students";
   }
 
   const detailsQuery = new URLSearchParams();
@@ -650,9 +655,10 @@ export function StudentFeePageClient({
               <button
                 type="button"
                 onClick={() => setIsIDCardModalOpen(true)}
-                className="text-xs font-bold text-indigo-650 hover:bg-indigo-50/50 border border-indigo-200 rounded-lg py-2.5 transition-colors w-full text-center block"
+                className="text-xs font-bold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100/80 border border-indigo-200 rounded-lg py-2.5 px-3 transition-colors w-full text-center flex items-center justify-center gap-2 shadow-2xs cursor-pointer"
               >
-                Preview Digital ID Card
+                <span className="text-xl leading-none">🪪</span>
+                <span>Preview Digital ID Card</span>
               </button>
             </div>
           </div>

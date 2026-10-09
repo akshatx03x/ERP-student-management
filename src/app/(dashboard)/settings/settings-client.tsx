@@ -28,7 +28,7 @@ import { changePrincipalPinAction } from "@/server/actions/pin-settings.actions"
 import { authClient } from "@/lib/auth-client";
 import { ImageUploadOverlay } from "@/components/shared/image-upload-overlay";
 import { getFriendlyErrorMessage } from "@/lib/action-client";
-import { KeyRound, Lock } from "lucide-react";
+import { KeyRound, Lock, AlertCircle } from "lucide-react";
 import type { PermissionGroup, PermissionPreset, PermissionKey } from "@/config/permissions";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -319,6 +319,7 @@ export function SettingsClient({
   // ── Staff State ───────────────────────────────────────────────────────────
 
   const [showAddStaff, setShowAddStaff] = useState(false);
+  const [addStaffError, setAddStaffError] = useState<string | null>(null);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [addStaffForm, setAddStaffForm] = useState({
     employeeCode: "",
@@ -338,6 +339,7 @@ export function SettingsClient({
   // ── User Management State ─────────────────────────────────────────────────
 
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
   const [createUserForm, setCreateUserForm] = useState({
     name: "",
     email: "",
@@ -349,11 +351,13 @@ export function SettingsClient({
 
   // Reset Password Modal
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   // Edit Credentials Modal
   const [editCredentialsTarget, setEditCredentialsTarget] = useState<UserRow | null>(null);
+  const [editCredentialsError, setEditCredentialsError] = useState<string | null>(null);
   const [editLoginId, setEditLoginId] = useState("");
 
   const generateSecurePassword = useCallback(() => {
@@ -508,22 +512,76 @@ export function SettingsClient({
 
   function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
+    setCreateUserError(null);
+
+    const name = createUserForm.name.trim();
+    const email = createUserForm.email.trim();
+    const pwd = createUserForm.password;
+
+    if (!name) {
+      const msg = "Please enter the user's full name.";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    if (!email) {
+      const msg = "Please enter an email address.";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    if (pwd.length < 8) {
+      const msg = "Password must be at least 8 characters long";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[A-Z]/.test(pwd)) {
+      const msg = "Password must contain at least one uppercase letter (A-Z)";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[a-z]/.test(pwd)) {
+      const msg = "Password must contain at least one lowercase letter (a-z)";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[0-9]/.test(pwd)) {
+      const msg = "Password must contain at least one number (0-9)";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) {
+      const msg = "Password must contain at least one special character (!@#$%^&*...)";
+      setCreateUserError(msg);
+      toast.error(msg);
+      return;
+    }
+
     startTransition(async () => {
       try {
         await createUserAction({
-          name: createUserForm.name.trim(),
-          email: createUserForm.email.trim(),
-          password: createUserForm.password,
+          name,
+          email,
+          password: pwd,
           designation: createUserForm.designation.trim(),
           role: createUserForm.role,
           presetId: createUserForm.presetId || undefined,
         });
-        toast.success(`User "${createUserForm.name}" created successfully`);
+        toast.success(`User "${name}" created successfully`);
         setShowCreateUser(false);
+        setCreateUserError(null);
         setCreateUserForm({ name: "", email: "", password: "", designation: "", role: "TEACHER", presetId: "" });
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to create user");
+        const msg = e instanceof Error ? e.message : "Failed to create user";
+        setCreateUserError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -531,14 +589,51 @@ export function SettingsClient({
   function handleResetPassword(e: React.FormEvent) {
     e.preventDefault();
     if (!resetTarget) return;
+    setResetPasswordError(null);
+
+    const pwd = newPassword;
+    if (pwd.length < 8) {
+      const msg = "Password must be at least 8 characters long";
+      setResetPasswordError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[A-Z]/.test(pwd)) {
+      const msg = "Password must contain at least one uppercase letter (A-Z)";
+      setResetPasswordError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[a-z]/.test(pwd)) {
+      const msg = "Password must contain at least one lowercase letter (a-z)";
+      setResetPasswordError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[0-9]/.test(pwd)) {
+      const msg = "Password must contain at least one number (0-9)";
+      setResetPasswordError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) {
+      const msg = "Password must contain at least one special character (!@#$%^&*...)";
+      setResetPasswordError(msg);
+      toast.error(msg);
+      return;
+    }
+
     startTransition(async () => {
       try {
         await resetUserPasswordAction({ userId: resetTarget.id, password: newPassword });
         toast.success(`Password reset for ${resetTarget.name}`);
         setResetTarget(null);
+        setResetPasswordError(null);
         setNewPassword("");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to reset password");
+        const msg = e instanceof Error ? e.message : "Failed to reset password";
+        setResetPasswordError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -546,6 +641,7 @@ export function SettingsClient({
   function handleUpdateCredentials(e: React.FormEvent) {
     e.preventDefault();
     if (!editCredentialsTarget) return;
+    setEditCredentialsError(null);
     startTransition(async () => {
       try {
         await updateUserCredentialsAction({
@@ -554,10 +650,13 @@ export function SettingsClient({
         });
         toast.success(`Login ID updated for ${editCredentialsTarget.name}`);
         setEditCredentialsTarget(null);
+        setEditCredentialsError(null);
         setEditLoginId("");
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to update login ID");
+        const msg = e instanceof Error ? e.message : "Failed to update login ID";
+        setEditCredentialsError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -599,8 +698,11 @@ export function SettingsClient({
   // Staff actions
   const handleAddStaff = (e: React.FormEvent) => {
     e.preventDefault();
+    setAddStaffError(null);
     if (!addStaffForm.employeeCode.trim() || !addStaffForm.fullName.trim() || !addStaffForm.phone.trim()) {
-      toast.error("Employee code, full name, and mobile number are required");
+      const msg = "Employee code, full name, and mobile number are required";
+      setAddStaffError(msg);
+      toast.error(msg);
       return;
     }
     startTransition(async () => {
@@ -615,10 +717,13 @@ export function SettingsClient({
         });
         toast.success("Staff profile created");
         setShowAddStaff(false);
+        setAddStaffError(null);
         setAddStaffForm({ employeeCode: "", fullName: "", phone: "", designation: "", role: "TEACHER", createLogin: false });
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to create staff member");
+        const msg = e instanceof Error ? e.message : "Failed to create staff member";
+        setAddStaffError(msg);
+        toast.error(msg);
       }
     });
   };
@@ -990,18 +1095,37 @@ export function SettingsClient({
             {showAddStaff && (
               <form onSubmit={handleAddStaff} className="space-y-4 border p-4 rounded-xl bg-stone-50/50">
                 <h4 className="text-xs uppercase font-extrabold text-stone-500 tracking-wider">Register New Staff User</h4>
+                {addStaffError && (
+                  <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-800 shadow-sm animate-in fade-in">
+                    <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-rose-900 leading-tight">Unable to register staff</p>
+                      <p className="text-xs text-rose-700 mt-1 leading-relaxed">{addStaffError}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAddStaffError(null)}
+                      className="text-rose-400 hover:text-rose-700 p-0.5 rounded transition"
+                      aria-label="Dismiss error"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1">
                     <Label htmlFor="employeeCode" className="text-xs">Employee Code</Label>
-                    <Input id="employeeCode" placeholder="e.g. EMP-01" value={addStaffForm.employeeCode} onChange={(e) => setAddStaffForm((f) => ({ ...f, employeeCode: e.target.value }))} className="h-9 text-xs" required />
+                    <Input id="employeeCode" placeholder="e.g. EMP-01" value={addStaffForm.employeeCode} onChange={(e) => { setAddStaffForm((f) => ({ ...f, employeeCode: e.target.value })); if (addStaffError) setAddStaffError(null); }} className="h-9 text-xs" required />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="fullName" className="text-xs">Full Name</Label>
-                    <Input id="fullName" placeholder="e.g. Jane Doe" value={addStaffForm.fullName} onChange={(e) => setAddStaffForm((f) => ({ ...f, fullName: e.target.value }))} className="h-9 text-xs" required />
+                    <Input id="fullName" placeholder="e.g. Jane Doe" value={addStaffForm.fullName} onChange={(e) => { setAddStaffForm((f) => ({ ...f, fullName: e.target.value })); if (addStaffError) setAddStaffError(null); }} className="h-9 text-xs" required />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="phone" className="text-xs">Mobile Number</Label>
-                    <Input id="phone" placeholder="e.g. 9999988888" value={addStaffForm.phone} onChange={(e) => setAddStaffForm((f) => ({ ...f, phone: e.target.value }))} className="h-9 text-xs" required />
+                    <Input id="phone" placeholder="e.g. 9999988888" value={addStaffForm.phone} onChange={(e) => { setAddStaffForm((f) => ({ ...f, phone: e.target.value })); if (addStaffError) setAddStaffError(null); }} className="h-9 text-xs" required />
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -1022,7 +1146,7 @@ export function SettingsClient({
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 text-xs pt-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShowAddStaff(false)}>Cancel</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setShowAddStaff(false); setAddStaffError(null); }}>Cancel</Button>
                   <Button type="submit" size="sm" disabled={pending} className="bg-stone-900 text-white">
                     {pending ? "Saving..." : "Save Profile"}
                   </Button>
@@ -1243,16 +1367,61 @@ export function SettingsClient({
 
       {/* ── MODAL: CREATE USER ───────────────────────────────────────────── */}
       {showCreateUser && (
-        <Modal title="Create New User" onClose={() => setShowCreateUser(false)}>
+        <Modal
+          title="Create New User"
+          onClose={() => {
+            setShowCreateUser(false);
+            setCreateUserError(null);
+          }}
+        >
           <form onSubmit={handleCreateUser} className="space-y-4">
+            {createUserError && (
+              <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-800 shadow-sm animate-in fade-in slide-in-from-top-1">
+                <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-rose-900 leading-tight">Unable to create user</p>
+                  <p className="text-xs text-rose-700 mt-1 leading-relaxed">{createUserError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateUserError(null)}
+                  className="text-rose-400 hover:text-rose-700 p-0.5 rounded transition"
+                  aria-label="Dismiss error"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="cu-name">Full Name *</Label>
-                <Input id="cu-name" required value={createUserForm.name} onChange={(e) => setCreateUserForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Priya Sharma" />
+                <Input
+                  id="cu-name"
+                  required
+                  value={createUserForm.name}
+                  onChange={(e) => {
+                    setCreateUserForm((f) => ({ ...f, name: e.target.value }));
+                    if (createUserError) setCreateUserError(null);
+                  }}
+                  placeholder="e.g. Priya Sharma"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cu-email">Email Address *</Label>
-                <Input id="cu-email" type="email" required value={createUserForm.email} onChange={(e) => setCreateUserForm((f) => ({ ...f, email: e.target.value }))} placeholder="priya@school.edu.in" />
+                <Input
+                  id="cu-email"
+                  type="email"
+                  required
+                  value={createUserForm.email}
+                  onChange={(e) => {
+                    setCreateUserForm((f) => ({ ...f, email: e.target.value }));
+                    if (createUserError) setCreateUserError(null);
+                  }}
+                  placeholder="priya@school.edu.in"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cu-role">Role *</Label>
@@ -1269,7 +1438,12 @@ export function SettingsClient({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cu-designation">Designation</Label>
-                <Input id="cu-designation" value={createUserForm.designation} onChange={(e) => setCreateUserForm((f) => ({ ...f, designation: e.target.value }))} placeholder="e.g. Science Teacher" />
+                <Input
+                  id="cu-designation"
+                  value={createUserForm.designation}
+                  onChange={(e) => setCreateUserForm((f) => ({ ...f, designation: e.target.value }))}
+                  placeholder="e.g. Science Teacher"
+                />
               </div>
             </div>
 
@@ -1296,7 +1470,7 @@ export function SettingsClient({
               )}
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label htmlFor="cu-password">Password *</Label>
                 <button
@@ -1305,6 +1479,7 @@ export function SettingsClient({
                     const pass = generateSecurePassword();
                     setCreateUserForm((f) => ({ ...f, password: pass }));
                     setShowPassword(true);
+                    if (createUserError) setCreateUserError(null);
                     toast.success("Generated secure password!");
                   }}
                   className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
@@ -1317,24 +1492,65 @@ export function SettingsClient({
                   id="cu-password"
                   type={showPassword ? "text" : "password"}
                   required
-                  minLength={8}
                   value={createUserForm.password}
-                  onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
+                  onChange={(e) => {
+                    setCreateUserForm((f) => ({ ...f, password: e.target.value }));
+                    if (createUserError) setCreateUserError(null);
+                  }}
                   placeholder="Min. 8 characters, include uppercase, number & symbol"
+                  className={createUserError && createUserError.toLowerCase().includes("password") ? "border-rose-400 focus-visible:ring-rose-300" : ""}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 text-xs font-medium"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
-              <p className="text-[11px] text-stone-500">Must contain uppercase, lowercase, number and special character</p>
+
+              {/* Password Requirement Checklist */}
+              {createUserForm.password.length > 0 ? (
+                <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                  <span className={`inline-flex items-center gap-1 ${createUserForm.password.length >= 8 ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${createUserForm.password.length >= 8 ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    8+ characters
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${/[A-Z]/.test(createUserForm.password) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[A-Z]/.test(createUserForm.password) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Uppercase (A-Z)
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${/[a-z]/.test(createUserForm.password) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[a-z]/.test(createUserForm.password) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Lowercase (a-z)
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${/[0-9]/.test(createUserForm.password) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[0-9]/.test(createUserForm.password) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Number (0-9)
+                  </span>
+                  <span className={`inline-flex items-center gap-1 col-span-2 ${/[!@#$%^&*(),.?":{}|<>]/.test(createUserForm.password) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[!@#$%^&*(),.?":{}|<>]/.test(createUserForm.password) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Special character (!@#$%^&*...)
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-stone-500">
+                  Must contain at least 8 characters with uppercase, lowercase, number and special character
+                </p>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button type="button" variant="outline" onClick={() => setShowCreateUser(false)}>Cancel</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCreateUser(false);
+                  setCreateUserError(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={pending} className="bg-stone-900 text-white">
                 {pending ? "Creating..." : "Create User"}
               </Button>
@@ -1345,13 +1561,40 @@ export function SettingsClient({
 
       {/* ── MODAL: RESET PASSWORD ─────────────────────────────────────────── */}
       {resetTarget && (
-        <Modal title={`Reset Password — ${resetTarget.name}`} onClose={() => setResetTarget(null)}>
+        <Modal
+          title={`Reset Password — ${resetTarget.name}`}
+          onClose={() => {
+            setResetTarget(null);
+            setResetPasswordError(null);
+          }}
+        >
           <form onSubmit={handleResetPassword} className="space-y-4">
             <p className="text-sm text-stone-600">
               Enter a new password for <strong>{resetTarget.name}</strong> ({resetTarget.email}).
               The user will be able to log in with this password immediately.
             </p>
-            <div className="space-y-1.5">
+
+            {resetPasswordError && (
+              <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-800 shadow-sm animate-in fade-in slide-in-from-top-1">
+                <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-rose-900 leading-tight">Unable to reset password</p>
+                  <p className="text-xs text-rose-700 mt-1 leading-relaxed">{resetPasswordError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordError(null)}
+                  className="text-rose-400 hover:text-rose-700 p-0.5 rounded transition"
+                  aria-label="Dismiss error"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label htmlFor="rp-password">New Password *</Label>
                 <button
@@ -1360,6 +1603,7 @@ export function SettingsClient({
                     const pass = generateSecurePassword();
                     setNewPassword(pass);
                     setShowPassword(true);
+                    if (resetPasswordError) setResetPasswordError(null);
                     toast.success("Generated secure password!");
                   }}
                   className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
@@ -1372,23 +1616,64 @@ export function SettingsClient({
                   id="rp-password"
                   type={showPassword ? "text" : "password"}
                   required
-                  minLength={8}
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (resetPasswordError) setResetPasswordError(null);
+                  }}
                   placeholder="Min. 8 characters"
+                  className={resetPasswordError && resetPasswordError.toLowerCase().includes("password") ? "border-rose-400 focus-visible:ring-rose-300" : ""}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 text-xs font-medium"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
-              <p className="text-[11px] text-stone-500">Must contain uppercase, lowercase, number and special character</p>
+
+              {/* Password Requirement Checklist */}
+              {newPassword.length > 0 ? (
+                <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                  <span className={`inline-flex items-center gap-1 ${newPassword.length >= 8 ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${newPassword.length >= 8 ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    8+ characters
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${/[A-Z]/.test(newPassword) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[A-Z]/.test(newPassword) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Uppercase (A-Z)
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${/[a-z]/.test(newPassword) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[a-z]/.test(newPassword) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Lowercase (a-z)
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${/[0-9]/.test(newPassword) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[0-9]/.test(newPassword) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Number (0-9)
+                  </span>
+                  <span className={`inline-flex items-center gap-1 col-span-2 ${/[!@#$%^&*(),.?":{}|<>]/.test(newPassword) ? "text-emerald-700 font-medium" : "text-stone-500"}`}>
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${/[!@#$%^&*(),.?":{}|<>]/.test(newPassword) ? "bg-emerald-600" : "bg-stone-300"}`} />
+                    Special character (!@#$%^&*...)
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-stone-500">
+                  Must contain at least 8 characters with uppercase, lowercase, number and special character
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button type="button" variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setResetTarget(null);
+                  setResetPasswordError(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={pending} className="bg-rose-600 hover:bg-rose-700 text-white">
                 {pending ? "Resetting..." : "Reset Password"}
               </Button>
@@ -1399,18 +1684,48 @@ export function SettingsClient({
 
       {/* ── MODAL: CHANGE LOGIN ID ─────────────────────────────────────────── */}
       {editCredentialsTarget && (
-        <Modal title={`Change Login ID — ${editCredentialsTarget.name}`} onClose={() => setEditCredentialsTarget(null)}>
+        <Modal
+          title={`Change Login ID — ${editCredentialsTarget.name}`}
+          onClose={() => {
+            setEditCredentialsTarget(null);
+            setEditCredentialsError(null);
+          }}
+        >
           <form onSubmit={handleUpdateCredentials} className="space-y-4">
             <p className="text-sm text-stone-600">
               Enter the new Login ID for <strong>{editCredentialsTarget.name}</strong>.
             </p>
+
+            {editCredentialsError && (
+              <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-800 shadow-sm animate-in fade-in slide-in-from-top-1">
+                <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-rose-900 leading-tight">Unable to update Login ID</p>
+                  <p className="text-xs text-rose-700 mt-1 leading-relaxed">{editCredentialsError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditCredentialsError(null)}
+                  className="text-rose-400 hover:text-rose-700 p-0.5 rounded transition"
+                  aria-label="Dismiss error"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="ec-loginid">Login ID *</Label>
               <Input
                 id="ec-loginid"
                 required
                 value={editLoginId}
-                onChange={(e) => setEditLoginId(e.target.value)}
+                onChange={(e) => {
+                  setEditLoginId(e.target.value);
+                  if (editCredentialsError) setEditCredentialsError(null);
+                }}
                 placeholder="e.g. employee.code"
               />
               <p className="text-[11px] text-stone-500">
@@ -1418,7 +1733,16 @@ export function SettingsClient({
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button type="button" variant="outline" onClick={() => setEditCredentialsTarget(null)}>Cancel</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditCredentialsTarget(null);
+                  setEditCredentialsError(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={pending} className="bg-stone-900 text-white">
                 {pending ? "Saving..." : "Change Login ID"}
               </Button>

@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${ibmPlexSans.variable} ${cinzel.variable} ${cinzelDecorative.variable} font-sans antialiased`}>
         <Providers>
           {children}
-          <Toaster richColors position="top-right" />
+          <Toaster richColors position="top-right" closeButton />
         </Providers>
       </body>
     </html>

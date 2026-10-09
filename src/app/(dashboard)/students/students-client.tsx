@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 import {
   deleteStudentAction,
   exportStudentsAction,
@@ -53,6 +53,7 @@ type SessionRow = {
 
 export function StudentsClient({
   students,
+  totalCount,
   initialSearch,
   canDelete,
   currentUserStudentId,
@@ -63,6 +64,7 @@ export function StudentsClient({
   initialSessionId,
 }: {
   students: StudentRow[];
+  totalCount?: number;
   initialSearch: string;
   canDelete: boolean;
   currentUserStudentId?: string;
@@ -89,8 +91,60 @@ export function StudentsClient({
     errors: Array<{ row: number; message: string }>;
   } | null>(null);
 
+  // Synchronize state with incoming props (e.g., when browser history navigation or router params change)
+  useEffect(() => {
+    setSearch(initialSearch);
+    setSelectedSessionId(initialSessionId);
+    setSelectedClassId(initialClassId);
+    setSelectedSectionId((initialClassId === "ALL" || initialClassId === "") ? "" : initialSectionId);
+  }, [initialSearch, initialSessionId, initialClassId, initialSectionId]);
+
+  // Restore filters from sessionStorage if arriving at /students with NO query params
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!initialClassId && !initialSearch.trim()) {
+      try {
+        const raw = sessionStorage.getItem("erp_students_filters");
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.classId || saved.search?.trim()) {
+            applyFilters(
+              saved.search || "",
+              saved.sessionId || initialSessionId,
+              saved.classId || "",
+              saved.sectionId || ""
+            );
+          }
+        }
+      } catch {}
+    }
+  }, []);
+
+  // Save active filters whenever they change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (selectedClassId || search.trim()) {
+      try {
+        sessionStorage.setItem(
+          "erp_students_filters",
+          JSON.stringify({
+            search,
+            sessionId: selectedSessionId,
+            classId: selectedClassId,
+            sectionId: selectedSectionId,
+          })
+        );
+      } catch {}
+    }
+  }, [search, selectedSessionId, selectedClassId, selectedSectionId]);
+
+  const isInitialMount = useRef(true);
   // Debounced search: fire server fetch 350ms after user stops typing
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       applyFilters(search, selectedSessionId, selectedClassId, selectedSectionId);
@@ -118,6 +172,28 @@ export function StudentsClient({
       );
     });
   }, [students, search]);
+
+  const hasFilters = Boolean(
+    search.trim() ||
+    (selectedSessionId && selectedClassId && selectedClassId !== "")
+  );
+
+  const currentTotal = useMemo(() => {
+    if (!hasFilters) return 0;
+    if (search.trim() && displayedStudents.length !== students.length) {
+      return displayedStudents.length;
+    }
+    return totalCount !== undefined ? totalCount : displayedStudents.length;
+  }, [hasFilters, search, displayedStudents.length, students.length, totalCount]);
+
+  const currentFiltersQuery = useMemo(() => {
+    const p = new URLSearchParams();
+    if (search.trim()) p.set("q", search.trim());
+    if (selectedSessionId) p.set("sessionId", selectedSessionId);
+    if (selectedClassId) p.set("classId", selectedClassId);
+    if (selectedSectionId) p.set("sectionId", selectedSectionId);
+    return p.toString() ? `/students?${p.toString()}` : "/students";
+  }, [search, selectedSessionId, selectedClassId, selectedSectionId]);
 
   const applyFilters = (searchVal: string, sessionIdVal: string, classIdVal: string, sectionIdVal: string) => {
     const params = new URLSearchParams();
@@ -654,7 +730,7 @@ export function StudentsClient({
                       }}
                       onClick={() => {
                         setShowRecommendations(false);
-                        router.push(`/students/${s.id}`);
+                        router.push(`/students/${s.id}?returnTo=${encodeURIComponent(currentFiltersQuery)}&returnLabel=${encodeURIComponent("Back to Active Students")}`);
                       }}
                       className="p-2.5 hover:bg-stone-100 cursor-pointer text-left transition-colors"
                     >
@@ -694,6 +770,9 @@ export function StudentsClient({
               variant="ghost"
               disabled={pending}
               onClick={() => {
+                try {
+                  sessionStorage.removeItem("erp_students_filters");
+                } catch {}
                 setSearch("");
                 setSelectedClassId("ALL");
                 setSelectedSectionId("");
@@ -709,6 +788,19 @@ export function StudentsClient({
 
 
         <div className="flex items-center gap-2">
+          <div
+            title="Total students matching selected filters"
+            className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-card text-sm shadow-xs select-none"
+          >
+            <Users className={cn("w-4 h-4 text-muted-foreground", pending && "animate-pulse")} />
+            <span className="text-muted-foreground text-xs font-medium whitespace-nowrap">
+              Total Students:
+            </span>
+            <Badge variant="secondary" className="px-2 py-0.5 text-base font-bold font-mono leading-none">
+              {currentTotal}
+            </Badge>
+          </div>
+
           <Button
             type="button"
             variant="outline"
@@ -825,7 +917,10 @@ export function StudentsClient({
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end items-center gap-3">
-                            <Link href={`/students/${s.id}`} className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline">
+                            <Link
+                              href={`/students/${s.id}?returnTo=${encodeURIComponent(currentFiltersQuery)}&returnLabel=${encodeURIComponent("Back to Active Students")}`}
+                              className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline"
+                            >
                               View
                             </Link>
                             {canDelete && s.id !== currentUserStudentId && (
@@ -1369,6 +1464,7 @@ export function StudentsClient({
           classes={classes}
           sessions={sessions}
           initialSessionId={selectedSessionId}
+          initialClassId={selectedClassId}
         />
       )}
       {isBulkReceiptOpen && (

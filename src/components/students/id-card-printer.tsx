@@ -14,14 +14,13 @@ function getPrintIframe(id = "erp-isolated-id-card-iframe"): HTMLIFrameElement {
     iframe = document.createElement("iframe");
     iframe.id = id;
     iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "0";
     iframe.style.width = "297mm";
     iframe.style.height = "210mm";
     iframe.style.border = "none";
-    iframe.style.opacity = "0";
+    iframe.style.opacity = "0.01";
     iframe.style.pointerEvents = "none";
-    iframe.style.zIndex = "-9999";
     document.body.appendChild(iframe);
   }
   return iframe;
@@ -57,8 +56,8 @@ export async function printSingleIDCard(
         ${styles}
         <style>
           @page {
-            size: 53.25mm 86mm !important;
-            margin: 0 !important;
+            size: A4 portrait !important;
+            margin: 10mm !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -71,17 +70,18 @@ export async function printSingleIDCard(
             font-family: Arial, Helvetica, sans-serif !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: flex-start !important;
-            padding-top: 0 !important;
+            display: block !important;
+            text-align: left !important;
             line-height: normal !important;
           }
           .id-card-single-canvas {
             width: ${CARD_WIDTH_MM}mm !important;
             height: ${CARD_HEIGHT_MM}mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            display: inline-block !important;
           }
           .no-print {
             display: none !important;
@@ -242,23 +242,21 @@ export async function printBulkIDCards(
 }
 
 /**
- * Downloads a single ID card as a high-resolution 52mm x 84mm PDF using html2canvas.
+ * Downloads a single ID card as a high-resolution 53.25mm x 86mm PDF using html-to-image.
  */
 export async function downloadSingleIDCardPDF(
   student: StudentProps,
   branding: BrandingProps | null,
   selectedSessionId: string
 ): Promise<void> {
-  const html2canvas = (await import("html2canvas")).default;
-
   const container = document.createElement("div");
   container.style.position = "fixed";
-  container.style.left = "0";
+  container.style.left = "-9999px";
   container.style.top = "0";
   container.style.width = `${CARD_WIDTH_MM}mm`;
   container.style.height = `${CARD_HEIGHT_MM}mm`;
   container.style.background = "#ffffff";
-  container.style.zIndex = "-9999";
+  container.style.opacity = "0.01";
   container.style.pointerEvents = "none";
   document.body.appendChild(container);
 
@@ -280,21 +278,37 @@ export async function downloadSingleIDCardPDF(
     });
 
     const cardEl = (container.firstElementChild as HTMLElement) || container;
-    const canvas = await html2canvas(cardEl, {
-      scale: 4, // 4x supersampling for ultra-crisp physical print quality
-      useCORS: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-    });
+    let imgData = "";
 
-    const imgData = canvas.toDataURL("image/png");
+    try {
+      const { toPng } = await import("html-to-image");
+      imgData = await toPng(cardEl, {
+        pixelRatio: 3,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+    } catch (imgErr) {
+      console.warn("html-to-image fallback to html2canvas:", imgErr);
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(cardEl, {
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      imgData = canvas.toDataURL("image/png");
+    }
+
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: [CARD_WIDTH_MM, CARD_HEIGHT_MM],
+      format: "a4",
     });
 
-    pdf.addImage(imgData, "PNG", 0, 0, CARD_WIDTH_MM, CARD_HEIGHT_MM, undefined, "NONE");
+    // Top-left aligned with 10mm margin matching the print layout dimensions (53.25mm x 86mm)
+    const marginX = 10;
+    const marginY = 10;
+    pdf.addImage(imgData, "PNG", marginX, marginY, CARD_WIDTH_MM, CARD_HEIGHT_MM, undefined, "FAST");
     const cleanName = student.fullName.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
     pdf.save(`ID-Card-${cleanName}.pdf`);
   } finally {
@@ -305,7 +319,7 @@ export async function downloadSingleIDCardPDF(
 
 /**
  * Downloads bulk ID cards in LANDSCAPE A4 PDF with exactly 10 cards per page.
- * (5 columns x 2 rows, 5.2cm x 8.4cm per card).
+ * (5 columns x 2 rows, 5.3cm x 8.6cm per card).
  */
 export async function downloadBulkIDCardsPDF(
   students: StudentProps[],
@@ -316,8 +330,6 @@ export async function downloadBulkIDCardsPDF(
 ): Promise<void> {
   if (students.length === 0) return;
 
-  const html2canvas = (await import("html2canvas")).default;
-
   // A4 Landscape: 297mm width x 210mm height
   const pdf = new jsPDF({
     orientation: "landscape",
@@ -327,12 +339,12 @@ export async function downloadBulkIDCardsPDF(
 
   const container = document.createElement("div");
   container.style.position = "fixed";
-  container.style.left = "0";
+  container.style.left = "-9999px";
   container.style.top = "0";
   container.style.width = `${CARD_WIDTH_MM}mm`;
   container.style.height = `${CARD_HEIGHT_MM}mm`;
   container.style.background = "#ffffff";
-  container.style.zIndex = "-9999";
+  container.style.opacity = "0.01";
   container.style.pointerEvents = "none";
   document.body.appendChild(container);
 
@@ -375,15 +387,28 @@ export async function downloadBulkIDCardsPDF(
       });
 
       const cardEl = (container.firstElementChild as HTMLElement) || container;
-      const canvas = await html2canvas(cardEl, {
-        scale: 4, // 4x supersampling
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-      });
+      let imgData = "";
 
-      const imgData = canvas.toDataURL("image/png");
-      pdf.addImage(imgData, "PNG", xPos, yPos, CARD_WIDTH_MM, CARD_HEIGHT_MM, undefined, "NONE");
+      try {
+        const { toPng } = await import("html-to-image");
+        imgData = await toPng(cardEl, {
+          pixelRatio: 3,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+        });
+      } catch (imgErr) {
+        console.warn("html-to-image fallback to html2canvas:", imgErr);
+        const html2canvas = (await import("html2canvas")).default;
+        const canvas = await html2canvas(cardEl, {
+          scale: 3,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+        });
+        imgData = canvas.toDataURL("image/png");
+      }
+
+      pdf.addImage(imgData, "PNG", xPos, yPos, CARD_WIDTH_MM, CARD_HEIGHT_MM, undefined, "FAST");
 
       if (onProgress) {
         onProgress(i + 1, students.length);

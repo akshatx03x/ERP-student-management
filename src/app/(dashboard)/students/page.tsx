@@ -58,6 +58,7 @@ export default async function StudentsPage({
       />
       <StudentsClient
         students={students.items}
+        totalCount={students.total}
         initialSearch={params.q ?? ""}
         canDelete={canDelete}
         currentUserStudentId={user.studentId ?? undefined}

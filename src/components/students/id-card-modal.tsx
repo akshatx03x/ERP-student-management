@@ -22,7 +22,7 @@ export function IDCardModal({
   branding,
   selectedSessionId,
 }: IDCardModalProps) {
-  const [zoom, setZoom] = useState<number>(1.5);
+  const [zoom, setZoom] = useState<number>(1);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -154,107 +154,12 @@ export function BulkReceiptModal({
         return;
       }
 
-      // Use hidden iframe to avoid browser popup blockers and guarantee print preview
-      let iframe = document.getElementById("bulk-print-receipt-iframe") as HTMLIFrameElement;
-      if (!iframe) {
-        iframe = document.createElement("iframe");
-        iframe.id = "bulk-print-receipt-iframe";
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "210mm";
-        iframe.style.height = "297mm";
-        iframe.style.border = "0";
-        iframe.style.opacity = "0";
-        iframe.style.pointerEvents = "none";
-        iframe.style.zIndex = "-9999";
-        document.body.appendChild(iframe);
-      }
-
-      const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (!doc) {
-        toast.error("Unable to initialize print preview");
-        return;
-      }
-
-      const styles = Array.from(document.querySelectorAll("style, link[rel='stylesheet']"))
-        .map((el) => el.outerHTML)
-        .join("\n");
-
-      doc.open();
-      doc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Bulk Fee Receipts Print</title>
-            ${styles}
-            <style>
-              @page {
-                size: A4 portrait;
-                margin: 5mm;
-              }
-              body {
-                background: #ffffff !important;
-                color: #000000 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                font-family: system-ui, -apple-system, sans-serif;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              #print-root, .fee-receipt-print-wrapper, .printable-area {
-                display: block !important;
-                visibility: visible !important;
-                width: 100% !important;
-              }
-              .receipt-page {
-                page-break-inside: avoid;
-                break-inside: avoid;
-                page-break-after: always;
-                break-after: page;
-                margin-bottom: 4mm;
-              }
-              @media print {
-                .no-print { display: none !important; }
-              }
-            </style>
-          </head>
-          <body>
-            <div id="print-root" class="fee-receipt-print-wrapper printable-area"></div>
-          </body>
-        </html>
-      `);
-      doc.close();
-
-      // Render React components into print window
-      const container = doc.getElementById("print-root");
-      if (container) {
-        const ReactDOM = (await import("react-dom/client")).default;
-        const root = ReactDOM.createRoot(container);
-        root.render(
-          <div style={{ display: "flex", flexDirection: "column", gap: "4mm" }}>
-            {res.receipts.map((r, idx) => (
-              <div key={idx} className="receipt-page" style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "stretch", width: "100%", maxWidth: "195mm", backgroundColor: "#ffffff" }}>
-                <SingleFeeReceipt data={r.snapshot as any} copyType="SCHOOL COPY" isSideBySide={true} />
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "3%" }}>
-                  <div style={{ height: "100%", borderLeft: "2px dashed #a8a29e" }} />
-                </div>
-                <SingleFeeReceipt data={r.snapshot as any} copyType="PARENT COPY" isSideBySide={true} />
-              </div>
-            ))}
-          </div>
-        );
-
-        setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          setIsGeneratingPrint(false);
-        }, 600);
-      } else {
-        setIsGeneratingPrint(false);
-      }
+      const { printBulkReceipts } = await import("@/components/fees/receipt-printer");
+      await printBulkReceipts(res.receipts.map((r: any) => r.snapshot));
     } catch (e) {
+      console.error(e);
       toast.error("Failed to generate bulk print layout");
+    } finally {
       setIsGeneratingPrint(false);
     }
   };
@@ -273,16 +178,18 @@ export function BulkReceiptModal({
         return;
       }
 
-      // Create hidden container to render receipts into HTML canvas
+      // Create hidden container to render receipts
       const renderContainer = document.createElement("div");
-      renderContainer.style.position = "absolute";
+      renderContainer.style.position = "fixed";
       renderContainer.style.left = "-9999px";
-      renderContainer.style.top = "-9999px";
+      renderContainer.style.top = "0";
       renderContainer.style.width = "210mm";
+      renderContainer.style.opacity = "0.01";
+      renderContainer.style.pointerEvents = "none";
       document.body.appendChild(renderContainer);
 
-      const html2canvas = (await import("html2canvas")).default;
       const ReactDOM = (await import("react-dom/client")).default;
+      const { jsPDF } = await import("jspdf");
 
       const pdf = new jsPDF({
         orientation: "portrait",
@@ -290,7 +197,13 @@ export function BulkReceiptModal({
         format: "a4",
       });
 
-      // Batch receipts into pages with maximum 3 receipts per physical page
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 4;
+      const availableWidth = pdfWidth - margin * 2;
+      const availableHeight = pdfHeight - margin * 2;
+
+      // Group exactly up to 3 receipts per physical A4 page
       const maxReceiptsPerPage = 3;
       const totalPages = Math.ceil(res.receipts.length / maxReceiptsPerPage);
 
@@ -303,53 +216,149 @@ export function BulkReceiptModal({
         );
 
         renderContainer.innerHTML = "";
+
         const pageWrapper = document.createElement("div");
         pageWrapper.style.width = "195mm";
         pageWrapper.style.backgroundColor = "#ffffff";
-        pageWrapper.style.padding = "4mm";
         pageWrapper.style.boxSizing = "border-box";
+        pageWrapper.style.display = "flex";
+        pageWrapper.style.flexDirection = "column";
+        pageWrapper.style.gap = "2mm";
         renderContainer.appendChild(pageWrapper);
 
         const root = ReactDOM.createRoot(pageWrapper);
         root.render(
-          <div style={{ display: "flex", flexDirection: "column", gap: "4mm", width: "100%", backgroundColor: "#ffffff" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2mm", width: "100%", backgroundColor: "#ffffff" }}>
             {pageReceipts.map((item, idx) => (
-              <div key={idx} style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "stretch", width: "100%", backgroundColor: "#ffffff" }}>
-                <SingleFeeReceipt data={item.snapshot as any} copyType="SCHOOL COPY" isSideBySide={true} />
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "3%" }}>
-                  <div style={{ height: "100%", borderLeft: "2px dashed #a8a29e" }} />
+              <React.Fragment key={idx}>
+                {idx > 0 && (
+                  <div
+                    style={{
+                      borderTop: "1.5px dashed #a8a29e",
+                      width: "100%",
+                      margin: "0.5mm 0",
+                    }}
+                  />
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "stretch",
+                    width: "100%",
+                    backgroundColor: "#ffffff",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <SingleFeeReceipt data={item.snapshot as any} copyType="SCHOOL COPY" isSideBySide={true} />
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "3%",
+                      userSelect: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: "100%",
+                        borderLeft: "2px dashed #a8a29e",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          writingMode: "vertical-rl",
+                          textTransform: "uppercase",
+                          fontSize: "7.5px",
+                          fontWeight: 800,
+                          color: "#78716c",
+                          letterSpacing: "2px",
+                          backgroundColor: "#ffffff",
+                          padding: "8px 0",
+                        }}
+                      >
+                        - - CUT HERE - -
+                      </span>
+                    </div>
+                  </div>
+                  <SingleFeeReceipt data={item.snapshot as any} copyType="PARENT COPY" isSideBySide={true} />
                 </div>
-                <SingleFeeReceipt data={item.snapshot as any} copyType="PARENT COPY" isSideBySide={true} />
-              </div>
+              </React.Fragment>
             ))}
           </div>
         );
 
-        // Wait for React render cycle
-        await new Promise((r) => setTimeout(r, 150));
+        // Wait for React rendering
+        await new Promise((r) => setTimeout(r, 120));
 
-        const canvas = await html2canvas(pageWrapper, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-        });
+        let imgData = "";
+        let imgWidth = 0;
+        let imgHeight = 0;
 
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        try {
+          const { toPng } = await import("html-to-image");
+          imgData = await toPng(pageWrapper, {
+            pixelRatio: 2,
+            backgroundColor: "#ffffff",
+            cacheBust: true,
+          });
 
-        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+          const img = new Image();
+          img.src = imgData;
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+          imgWidth = img.width;
+          imgHeight = img.height;
+        } catch (imgErr) {
+          console.warn("html-to-image fallback to html2canvas:", imgErr);
+          const html2canvas = (await import("html2canvas")).default;
+          const canvas = await html2canvas(pageWrapper, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            scrollX: 0,
+            scrollY: 0,
+            logging: false,
+          });
+          imgData = canvas.toDataURL("image/png");
+          imgWidth = canvas.width;
+          imgHeight = canvas.height;
+        }
+
+        // Maintain aspect ratio and guarantee all 3 receipts fit within A4 height
+        let renderWidth = availableWidth;
+        let renderHeight = (imgHeight * availableWidth) / imgWidth;
+
+        if (renderHeight > availableHeight) {
+          renderHeight = availableHeight;
+          renderWidth = (imgWidth * availableHeight) / imgHeight;
+        }
+
+        const xOffset = margin + (availableWidth - renderWidth) / 2;
+        const yOffset = margin + (availableHeight - renderHeight) / 2;
+
+        pdf.addImage(imgData, "PNG", xOffset, yOffset, renderWidth, renderHeight);
         root.unmount();
       }
 
       document.body.removeChild(renderContainer);
+
       const selectedClass = classes.find((c) => c.id === selectedClassId);
       const selectedSession = sessions.find((s) => s.id === selectedSessionId);
       const classSlug = selectedClass ? selectedClass.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "All_Classes";
       const sessionSlug = selectedSession ? selectedSession.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "Session";
       const dateStr = new Date().toISOString().split("T")[0];
-      const fileName = `Fee_Receipts_${classSlug}_${sessionSlug}_${dateStr}.pdf`;
+      const fileName = `Bulk_Fee_Receipts_${classSlug}_${sessionSlug}_${dateStr}.pdf`;
 
       pdf.save(fileName);
       toast.success(`Bulk receipts saved as ${fileName}`);

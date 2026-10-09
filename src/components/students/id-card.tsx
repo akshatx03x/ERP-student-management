@@ -173,21 +173,27 @@ export function IDCard({
       {/* ── TOP: SCHOOL HEADER ── */}
       <div
         style={{
-          padding: "1.5mm 1mm 0.6mm 1mm",
+          padding: "1.2mm 1mm 0.8mm 1mm",
           textAlign: "center",
           backgroundColor: "#ffffff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         {/* School Name */}
         <div
           style={{
-            fontSize: "11px",
+            fontSize: "10.5px",
             fontWeight: 900,
             color: "#1a365d",
             letterSpacing: "0.2px",
             lineHeight: "1.2",
-            textTransform: "none",
-            marginBottom: "0.4mm",
+            marginBottom: "0.3mm",
+            width: "100%",
           }}
         >
           {schoolName}
@@ -196,15 +202,16 @@ export function IDCard({
         {/* 3-Line Address & Phone Block */}
         <div
           style={{
-            fontSize: "7.2px",
+            fontSize: "6.8px",
             fontWeight: 600,
             color: "#1e293b",
-            lineHeight: "1.35",
+            lineHeight: "1.25",
+            width: "100%",
           }}
         >
-          <div style={{ lineHeight: "1.35", marginBottom: "0.2mm" }}>Balram Dwar, Karhera, Mohan Nagar,</div>
-          <div style={{ lineHeight: "1.35", marginBottom: "0.2mm" }}>Ghaziabad (Uttar Pradesh)</div>
-          <div style={{ fontWeight: 700, lineHeight: "1.35" }}>{schoolPhone}</div>
+          <div>Balram Dwar, Karhera, Mohan Nagar,</div>
+          <div>Ghaziabad (Uttar Pradesh)</div>
+          <div style={{ fontWeight: 700, marginTop: "0.2mm" }}>{schoolPhone}</div>
         </div>
       </div>
 
@@ -212,27 +219,30 @@ export function IDCard({
       <div
         style={{
           width: "100%",
-          height: "5.5mm",
+          height: "5.2mm",
           backgroundColor: "#1a365d",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           padding: "0 1.5mm",
           boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         <span
           style={{
-            fontSize: "9.8px",
+            fontSize: "9.5px",
             fontWeight: 900,
             color: "#ffffff",
             textTransform: "uppercase",
-            letterSpacing: "0.5px",
+            letterSpacing: "0.4px",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            lineHeight: "normal",
-            display: "inline-block",
+            lineHeight: "1.2",
+            textAlign: "center",
+            display: "block",
+            width: "100%",
           }}
         >
           {student.fullName}
@@ -246,9 +256,10 @@ export function IDCard({
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0.8mm 3.5mm 0.5mm 3.5mm",
-          height: "22mm",
+          padding: "0.6mm 3.5mm 0.4mm 3.5mm",
+          height: "21.5mm",
           boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         {/* Left: School Crest Logo */}
@@ -324,74 +335,94 @@ export function IDCard({
         </div>
       </div>
 
-      {/* ── STUDENT INFORMATION SECTION (Clean background, no overlay) ── */}
+      {/* ── STUDENT INFORMATION SECTION (Aligned table, zero clipping) ── */}
       <div
         style={{
           position: "relative",
           flex: 1,
-          padding: "0.8mm 3.5mm 0.8mm 3.5mm",
+          padding: "0.6mm 3.5mm 0.6mm 3.5mm",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
           boxSizing: "border-box",
-          minHeight: "33mm",
           backgroundColor: "#ffffff",
         }}
       >
-        {/* 6 Aligned Data Rows */}
-        <div
+        <table
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "1.1mm",
-            fontSize: "9px",
+            width: "100%",
+            tableLayout: "fixed",
+            borderCollapse: "collapse",
+            borderSpacing: 0,
+            fontSize: "8.2px",
             lineHeight: "1.25",
           }}
         >
-          <IDCardRow
-            label="F/Name"
-            value={formatHonorific(student.family?.fatherName, "Mr.")}
-          />
-          <IDCardRow
-            label="M/Name"
-            value={formatHonorific(student.family?.motherName, "Mrs.")}
-          />
-          <IDCardRow
-            label="Grade"
-            value={gradeName}
-          />
-          <IDCardRow
-            label="D.O.B."
-            value={formatDate(student.dateOfBirth)}
-          />
-          <IDCardRow
-            label="Phone"
-            value={student.family?.primaryPhone || "—"}
-          />
-          <IDCardRow
-            label="Address"
-            value={fullAddress}
-          />
-        </div>
+          <tbody>
+            <tr>
+              <td style={{ width: "13.5mm", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", padding: "0.35mm 0", verticalAlign: "middle" }}>F/Name</td>
+              <td style={{ width: "2mm", fontWeight: 800, color: "#0f172a", textAlign: "center", padding: "0.35mm 0", verticalAlign: "middle" }}>:</td>
+              <td style={{ fontWeight: 700, color: "#000000", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0.35mm 0 0.35mm 1mm", verticalAlign: "middle" }} title={formatHonorific(student.family?.fatherName, "Mr.")}>
+                {formatHonorific(student.family?.fatherName, "Mr.")}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ width: "13.5mm", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", padding: "0.35mm 0", verticalAlign: "middle" }}>M/Name</td>
+              <td style={{ width: "2mm", fontWeight: 800, color: "#0f172a", textAlign: "center", padding: "0.35mm 0", verticalAlign: "middle" }}>:</td>
+              <td style={{ fontWeight: 700, color: "#000000", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0.35mm 0 0.35mm 1mm", verticalAlign: "middle" }} title={formatHonorific(student.family?.motherName, "Mrs.")}>
+                {formatHonorific(student.family?.motherName, "Mrs.")}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ width: "13.5mm", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", padding: "0.35mm 0", verticalAlign: "middle" }}>Grade</td>
+              <td style={{ width: "2mm", fontWeight: 800, color: "#0f172a", textAlign: "center", padding: "0.35mm 0", verticalAlign: "middle" }}>:</td>
+              <td style={{ fontWeight: 700, color: "#000000", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0.35mm 0 0.35mm 1mm", verticalAlign: "middle" }} title={gradeName}>
+                {gradeName}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ width: "13.5mm", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", padding: "0.35mm 0", verticalAlign: "middle" }}>D.O.B.</td>
+              <td style={{ width: "2mm", fontWeight: 800, color: "#0f172a", textAlign: "center", padding: "0.35mm 0", verticalAlign: "middle" }}>:</td>
+              <td style={{ fontWeight: 700, color: "#000000", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0.35mm 0 0.35mm 1mm", verticalAlign: "middle" }} title={formatDate(student.dateOfBirth)}>
+                {formatDate(student.dateOfBirth)}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ width: "13.5mm", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", padding: "0.35mm 0", verticalAlign: "middle" }}>Phone</td>
+              <td style={{ width: "2mm", fontWeight: 800, color: "#0f172a", textAlign: "center", padding: "0.35mm 0", verticalAlign: "middle" }}>:</td>
+              <td style={{ fontWeight: 700, color: "#000000", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0.35mm 0 0.35mm 1mm", verticalAlign: "middle" }} title={student.family?.primaryPhone || "—"}>
+                {student.family?.primaryPhone || "—"}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ width: "13.5mm", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap", padding: "0.35mm 0", verticalAlign: "middle" }}>Address</td>
+              <td style={{ width: "2mm", fontWeight: 800, color: "#0f172a", textAlign: "center", padding: "0.35mm 0", verticalAlign: "middle" }}>:</td>
+              <td style={{ fontWeight: 700, color: "#000000", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "0.35mm 0 0.35mm 1mm", verticalAlign: "middle" }} title={fullAddress}>
+                {fullAddress}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       {/* ── BOTTOM FOOTER BAR ── */}
       <div
         style={{
           width: "100%",
-          height: "4.8mm",
+          height: "4.5mm",
           backgroundColor: "#1a365d",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 3.5mm",
           boxSizing: "border-box",
+          flexShrink: 0,
         }}
       >
         {/* Session (Left) */}
         <span
           style={{
-            fontSize: "7.8px",
+            fontSize: "7.5px",
             fontWeight: 800,
             color: "#ffffff",
             letterSpacing: "0.3px",
@@ -404,7 +435,7 @@ export function IDCard({
         {/* Principal Sign. (Right) */}
         <span
           style={{
-            fontSize: "7.8px",
+            fontSize: "7.5px",
             fontWeight: 700,
             color: "#ffffff",
             letterSpacing: "0.2px",
@@ -413,68 +444,6 @@ export function IDCard({
         >
           Principal Sign.
         </span>
-      </div>
-    </div>
-  );
-}
-
-// ── Single Aligned Information Row ──────────────────────────────────────────
-
-function IDCardRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        width: "100%",
-        lineHeight: "1.2",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Label */}
-      <div
-        style={{
-          width: "13.5mm",
-          flexShrink: 0,
-          fontWeight: 800,
-          color: "#0f172a",
-          fontSize: "8.5px",
-          lineHeight: "1.2",
-        }}
-      >
-        {label}
-      </div>
-
-      {/* Colon */}
-      <div
-        style={{
-          width: "2mm",
-          flexShrink: 0,
-          fontWeight: 800,
-          textAlign: "center",
-          color: "#0f172a",
-          fontSize: "8.5px",
-          lineHeight: "1.2",
-        }}
-      >
-        :
-      </div>
-
-      {/* Value */}
-      <div
-        style={{
-          flex: 1,
-          fontWeight: 700,
-          color: "#000000",
-          fontSize: "8.5px",
-          lineHeight: "1.2",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-        title={value}
-      >
-        {value}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SingleFeeReceipt, FeeReceiptData } from "./fee-receipt-single";
+import { SingleFeeReceipt, FeeReceiptData, getReceiptFileName } from "./fee-receipt-single";
 import { printReceipt } from "./receipt-printer";
 
 interface FeeReceiptPrintableProps {
@@ -16,14 +16,43 @@ export function FeeReceiptPrintable({ data }: FeeReceiptPrintableProps) {
     if (!receiptRef.current) return;
     setIsDownloading(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
 
-      const canvas = await html2canvas(receiptRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-      });
+      let imgData = "";
+      let imgWidth = 0;
+      let imgHeight = 0;
+
+      try {
+        const { toPng } = await import("html-to-image");
+        imgData = await toPng(receiptRef.current, {
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+        });
+
+        const img = new Image();
+        img.src = imgData;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        imgWidth = img.width;
+        imgHeight = img.height;
+      } catch (imgErr) {
+        console.warn("html-to-image fallback to html2canvas:", imgErr);
+        const html2canvas = (await import("html2canvas")).default;
+        const canvas = await html2canvas(receiptRef.current, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          scrollX: 0,
+          scrollY: 0,
+          logging: false,
+        });
+        imgData = canvas.toDataURL("image/png");
+        imgWidth = canvas.width;
+        imgHeight = canvas.height;
+      }
 
       const pdf = new jsPDF({
         orientation: "portrait",
@@ -31,22 +60,14 @@ export function FeeReceiptPrintable({ data }: FeeReceiptPrintableProps) {
         format: "a4",
       });
 
-      const imgData = canvas.toDataURL("image/jpeg", 0.98);
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const margin = 5;
       const printableWidth = pdfWidth - margin * 2;
-      const printableHeight = (canvas.height * printableWidth) / canvas.width;
+      const printableHeight = (imgHeight * printableWidth) / imgWidth;
 
-      pdf.addImage(imgData, "JPEG", margin, margin, printableWidth, printableHeight);
+      pdf.addImage(imgData, "PNG", margin, margin, printableWidth, printableHeight);
 
-      const firstAlloc = data.allocations?.[0];
-      const studentName = firstAlloc?.studentName || (data as any).studentName || "Student";
-      const admNo = firstAlloc?.admissionNo ? `_Adm_${firstAlloc.admissionNo.replace(/[^a-zA-Z0-9_-]/g, "_")}` : "";
-      const studentNameSlug = studentName.replace(/[^a-zA-Z0-9_-]/g, "_");
-      const receiptSlug = String(data.receiptNumber || data.receiptNo || "Receipt").replace(/[^a-zA-Z0-9_-]/g, "_");
-      const dateStr = data.paidAt ? new Date(data.paidAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-      const fileName = `Fee_Receipt_${studentNameSlug}${admNo}_#${receiptSlug}_${dateStr}.pdf`;
-
+      const fileName = getReceiptFileName(data, ".pdf");
       pdf.save(fileName);
     } catch (e) {
       console.error("PDF download fallback to print:", e);
@@ -135,7 +156,7 @@ export function FeeReceiptPrintable({ data }: FeeReceiptPrintableProps) {
                 padding: "8px 0",
               }}
             >
-              ✂ CUT HERE ✂
+              - - CUT HERE - -
             </span>
           </div>
         </div>
@@ -159,10 +180,6 @@ export function FeeReceiptPrintable({ data }: FeeReceiptPrintableProps) {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          /* Hide all screen elements on the page by default */
-          body * {
-            visibility: hidden !important;
-          }
           /* Show ONLY the fee receipt printable wrapper and all its contents */
           .fee-receipt-print-wrapper,
           .fee-receipt-print-wrapper * {
@@ -175,7 +192,7 @@ export function FeeReceiptPrintable({ data }: FeeReceiptPrintableProps) {
           }
           /* Position printable wrapper at top-left of physical A4 page */
           .fee-receipt-print-wrapper {
-            position: fixed !important;
+            position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
@@ -183,7 +200,6 @@ export function FeeReceiptPrintable({ data }: FeeReceiptPrintableProps) {
             background-color: #ffffff !important;
             padding: 0 !important;
             margin: 0 !important;
-            z-index: 9999999 !important;
             box-shadow: none !important;
             border: none !important;
           }

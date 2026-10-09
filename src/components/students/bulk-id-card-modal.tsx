@@ -31,6 +31,7 @@ interface BulkIDCardModalProps {
   classes: ClassRow[];
   sessions: SessionRow[];
   initialSessionId: string;
+  initialClassId?: string;
 }
 
 type StudentItem = {
@@ -43,6 +44,10 @@ type StudentItem = {
     motherName: string | null;
     primaryPhone?: string | null;
   } | null;
+  enrollments?: Array<{
+    class?: { id: string; name: string } | null;
+    section?: { id: string; name: string } | null;
+  }>;
 };
 
 export function BulkIDCardModal({
@@ -51,9 +56,10 @@ export function BulkIDCardModal({
   classes,
   sessions,
   initialSessionId,
+  initialClassId = "",
 }: BulkIDCardModalProps) {
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionId);
-  const [selectedClassId, setSelectedClassId] = useState("");
+  const [selectedClassId, setSelectedClassId] = useState(initialClassId);
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -89,16 +95,36 @@ export function BulkIDCardModal({
       return;
     }
 
+    const isAllClasses = selectedClassId === "ALL";
+
     startTransition(async () => {
       try {
-        const res = await listStudentsAction({
+        const firstRes = await listStudentsAction({
           sessionId: selectedSessionId,
-          classId: selectedClassId,
-          sectionId: selectedSectionId || undefined,
+          classId: isAllClasses ? undefined : selectedClassId,
+          sectionId: isAllClasses ? undefined : (selectedSectionId || undefined),
           pageSize: 500,
         });
-        setStudents(res.items as StudentItem[]);
-        setSelectedStudentIds(new Set(res.items.map((s) => s.id)));
+
+        let allItems = (firstRes.items as unknown as StudentItem[]) || [];
+        let currentPage = 1;
+
+        // In case total exceeds 500, fetch remaining pages
+        while (allItems.length < firstRes.total) {
+          currentPage++;
+          const nextRes = await listStudentsAction({
+            sessionId: selectedSessionId,
+            classId: isAllClasses ? undefined : selectedClassId,
+            sectionId: isAllClasses ? undefined : (selectedSectionId || undefined),
+            page: currentPage,
+            pageSize: 500,
+          });
+          if (!nextRes.items || nextRes.items.length === 0) break;
+          allItems = allItems.concat(nextRes.items as unknown as StudentItem[]);
+        }
+
+        setStudents(allItems);
+        setSelectedStudentIds(new Set(allItems.map((s) => s.id)));
       } catch {
         toast.error("Failed to load students for selection");
       }
@@ -108,10 +134,15 @@ export function BulkIDCardModal({
   const filteredStudents = students.filter((s) => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
+    const enrollment = s.enrollments?.[0];
+    const className = enrollment?.class?.name?.toLowerCase() ?? "";
+    const sectionName = enrollment?.section?.name?.toLowerCase() ?? "";
     return (
       s.fullName.toLowerCase().includes(q) ||
       s.admissionNo.toLowerCase().includes(q) ||
-      s.family?.fatherName?.toLowerCase().includes(q)
+      s.family?.fatherName?.toLowerCase().includes(q) ||
+      className.includes(q) ||
+      sectionName.includes(q)
     );
   });
 
@@ -189,11 +220,16 @@ export function BulkIDCardModal({
     setDownloadProgress("0 / " + selectedStudentIds.size);
     try {
       const res = await getStudentIdCardDataAction(Array.from(selectedStudentIds));
+      const classSlug = selectedClassId === "ALL"
+        ? "All_Classes"
+        : (classes.find((c) => c.id === selectedClassId)?.name.replace(/[^a-zA-Z0-9-_]/g, "_") || "id_cards");
+      const dateStr = new Date().toISOString().split("T")[0];
+
       await downloadBulkIDCardsPDF(
         res.students as unknown as StudentProps[],
         res.branding as unknown as BrandingProps,
         selectedSessionId,
-        `bulk_id_cards_${new Date().toISOString().split("T")[0]}.pdf`,
+        `bulk_id_cards_${classSlug}_${dateStr}.pdf`,
         (current, total) => {
           setDownloadProgress(`${current} / ${total}`);
         }
@@ -291,6 +327,7 @@ export function BulkIDCardModal({
                   className="w-full h-9 rounded-lg border border-stone-250 bg-stone-50 px-3 text-stone-700 font-medium"
                 >
                   <option value="">Select Class</option>
+                  <option value="ALL">All Classes</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -304,15 +341,16 @@ export function BulkIDCardModal({
                 <select
                   value={selectedSectionId}
                   onChange={(e) => setSelectedSectionId(e.target.value)}
-                  disabled={!selectedClassId}
+                  disabled={!selectedClassId || selectedClassId === "ALL"}
                   className="w-full h-9 rounded-lg border border-stone-250 bg-stone-50 px-3 text-stone-700 font-medium disabled:opacity-50"
                 >
                   <option value="">All Sections</option>
-                  {activeSections.map((sec) => (
-                    <option key={sec.id} value={sec.id}>
-                      {sec.name}
-                    </option>
-                  ))}
+                  {selectedClassId !== "ALL" &&
+                    activeSections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.name}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -358,34 +396,41 @@ export function BulkIDCardModal({
                       No active students found matching filters.
                     </div>
                   ) : (
-                    filteredStudents.map((s) => (
-                      <div
-                        key={s.id}
-                        onClick={() => handleToggleStudent(s.id)}
-                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50/50 cursor-pointer transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStudentIds.has(s.id)}
-                          onChange={() => handleToggleStudent(s.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-stone-300"
-                        />
-                        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-stone-50 text-xs font-bold text-stone-500 shadow-2xs">
-                          {s.photoUrl ? (
-                            <img src={s.photoUrl} alt={s.fullName} className="h-full w-full object-cover" />
-                          ) : (
-                            s.fullName.charAt(0).toUpperCase()
-                          )}
+                    filteredStudents.map((s) => {
+                      const enrollment = s.enrollments?.[0];
+                      const classSection = enrollment?.class?.name
+                        ? `${enrollment.class.name}${enrollment?.section?.name ? ` (${enrollment.section.name})` : ""}`
+                        : null;
+
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => handleToggleStudent(s.id)}
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-stone-50/50 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedStudentIds.has(s.id)}
+                            onChange={() => handleToggleStudent(s.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-stone-300"
+                          />
+                          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-stone-50 text-xs font-bold text-stone-500 shadow-2xs">
+                            {s.photoUrl ? (
+                              <img src={s.photoUrl} alt={s.fullName} className="h-full w-full object-cover" />
+                            ) : (
+                              s.fullName.charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-stone-800 text-sm truncate">{s.fullName}</p>
+                            <p className="text-stone-450 text-[11px] font-mono">
+                              {classSection ? `${classSection} • ` : ""}Adm: {s.admissionNo} • Father: {s.family?.fatherName || "—"}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-stone-800 text-sm truncate">{s.fullName}</p>
-                          <p className="text-stone-450 text-[11px] font-mono">
-                            Adm: {s.admissionNo} • Father: {s.family?.fatherName || "—"}
-                          </p>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
