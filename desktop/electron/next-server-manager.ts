@@ -3,6 +3,7 @@ import http from "http";
 import path from "path";
 import fs from "fs";
 import { app } from "electron";
+import { findVacantPort, isPortVacant } from "./port-finder";
 
 export type ServerState = "stopped" | "starting" | "running";
 
@@ -123,29 +124,31 @@ export function startNextServer(config: ServerManagerConfig): Promise<string> {
 
   activeStartPromise = (async () => {
     try {
-      const port = config.port;
-      const serverUrl = `http://127.0.0.1:${port}`;
-
-      // Reset process tracking state
-      serverProcessExited = false;
-      serverExitCode = null;
-      serverExitSignal = null;
-      stderrBuffer = [];
-
-      // If port is occupied by an external/orphaned process and we don't own it, attempt to kill or handle it
-      const alreadyActive = await isServerReady(port, 0);
-      if (alreadyActive && !serverProcess) {
-        logServerManager(`Port ${port} is occupied by an orphaned process. Terminating orphaned process...`);
-        try {
-          const { execSync } = require("child_process");
-          if (process.platform === "win32") {
-            execSync(`for /f "tokens=5" %a in ('netstat -aon ^| findstr :${port} ^| findstr LISTENING') do taskkill /F /PID %a`, { stdio: "ignore" });
-          }
-        } catch (e: any) {
-          logServerManager(`Failed to kill process on port ${port}: ${e.message}`, true);
+      let port = config.port;
+      if (!(await isPortVacant(port))) {
+        // First check if port is actually our own orphaned instance returning health check
+        const alreadyActive = await isServerReady(port, 0);
+        if (alreadyActive && !serverProcess) {
+          logServerManager(`Port ${port} has an active ERP server. Terminating old process...`);
+          try {
+            const { execSync } = require("child_process");
+            if (process.platform === "win32") {
+              execSync(`for /f "tokens=5" %a in ('netstat -aon ^| findstr :${port} ^| findstr LISTENING') do taskkill /F /PID %a`, { stdio: "ignore" });
+            }
+          } catch {}
+          await new Promise((r) => setTimeout(r, 1000));
         }
-        await new Promise((r) => setTimeout(r, 1000));
+
+        // If still occupied by external process, switch to another vacant port (3000, 5000, 8000)
+        if (!(await isPortVacant(port))) {
+          logServerManager(`Port ${port} is occupied. Automatically selecting another vacant port...`);
+          port = await findVacantPort([3000, 5000, 8000]);
+          config.port = port;
+          logServerManager(`Switched to vacant port: ${port}`);
+        }
       }
+
+      const serverUrl = `http://127.0.0.1:${port}`;
 
       // Check if child process is already spawned and running
       if (serverProcess && !serverProcess.killed && serverProcess.exitCode === null) {

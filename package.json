@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "dev:cloud": "APP_MODE=cloud next dev --turbopack",
-    "dev:offline": "APP_MODE=offline next dev --turbopack",
+    "dev": "node scripts/dev.js",
+    "dev:cloud": "node scripts/dev.js --cloud",
+    "dev:offline": "node scripts/dev.js --offline",
     "build": "node -e \"const p=require('path'),f=require('fs'),r=p.resolve(__dirname),n=p.join(r,'.next');try{if(f.existsSync(n))f.rmSync(n,{recursive:true,force:true,maxRetries:5,retryDelay:200});}catch(e){}\" && next build && node scripts/post-build.js",
     "start": "next start",
     "lint": "eslint",

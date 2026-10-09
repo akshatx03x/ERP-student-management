@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Clock,
   HelpCircle,
+  Save,
 } from "lucide-react";
 
 type ClassRow = { id: string; name: string; sections: Array<{ id: string; name: string }> };
@@ -96,8 +97,7 @@ export function AttendanceClient({
   // Check if selected date's month is locked
   const isCurrentDateLocked = useMemo(() => {
     if (!date) return false;
-    const d = new Date(date);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = date.slice(0, 7);
     return lockedMonths.has(key);
   }, [date, lockedMonths]);
 
@@ -131,30 +131,23 @@ export function AttendanceClient({
     return days.sort();
   }, [currentSession, holidays]);
 
-  // 2. Student attendance summary details
+  // 2. Student attendance summary details (calculated from actual saved session records)
   const studentSummaries = useMemo(() => {
     if (rows.length === 0) return [];
-    
-    const currentDateKey = new Date(date).toISOString().slice(0, 10);
-    
-    // Unique dates in session records (excluding the current date)
-    const pastDates = new Set(
-      sessionRecords
-        .map(r => new Date(r.date).toISOString().slice(0, 10))
-        .filter(d => d !== currentDateKey)
+
+    // Distinct dates on which attendance has been recorded for this section & session
+    const markedDates = new Set(
+      sessionRecords.map((r) => new Date(r.date).toISOString().slice(0, 10))
     );
-    const totalWorkingDays = pastDates.size + 1; // +1 for the current day
+    const totalDays = markedDates.size;
 
     return rows.map((student) => {
-      const studentRecs = sessionRecords.filter(
-        (r) => r.studentId === student.studentId && new Date(r.date).toISOString().slice(0, 10) !== currentDateKey
-      );
-      
+      const studentRecs = sessionRecords.filter((r) => r.studentId === student.studentId);
+
       let present = 0;
       let absent = 0;
       let leave = 0;
 
-      // 1. Add past records
       studentRecs.forEach((r) => {
         if (r.status === "PRESENT" || r.status === "LATE") {
           present += 1;
@@ -168,20 +161,6 @@ export function AttendanceClient({
         }
       });
 
-      // 2. Add current active row status from screen state
-      const currentStatus = student.status;
-      if (currentStatus === "PRESENT" || currentStatus === "LATE") {
-        present += 1;
-      } else if (currentStatus === "ABSENT") {
-        absent += 1;
-      } else if (currentStatus === "EXCUSED") {
-        leave += 1;
-      } else if (currentStatus === "HALF_DAY") {
-        present += 0.5;
-        absent += 0.5;
-      }
-
-      const totalDays = totalWorkingDays;
       const percentage = totalDays > 0 ? Math.round(((present + leave) / totalDays) * 100) : 0;
 
       return {
@@ -196,7 +175,7 @@ export function AttendanceClient({
         percentage,
       };
     });
-  }, [rows, sessionRecords, date]);
+  }, [rows, sessionRecords]);
 
   // Calendar rendering helper
   const calendarDays = useMemo(() => {
@@ -241,12 +220,18 @@ export function AttendanceClient({
   }, [calendarYear, calendarMonth, holidays, sessionRecords]);
 
   // Load roster
-  function load() {
+  function loadRoster(
+    targetDate: string = date,
+    targetSectionId: string = sectionId,
+    targetSessionId: string = sessionId,
+    showToast = true
+  ) {
+    if (!targetSessionId || !targetSectionId || !targetDate) return;
     startTransition(async () => {
       try {
         const [dailyData, sessionData] = await Promise.all([
-          listAttendanceAction({ sessionId, sectionId, date: new Date(date) }),
-          getSectionSessionRecordsAction(sessionId, sectionId),
+          listAttendanceAction({ sessionId: targetSessionId, sectionId: targetSectionId, date: new Date(targetDate) }),
+          getSectionSessionRecordsAction(targetSessionId, targetSectionId),
         ]);
 
         setRows(
@@ -262,11 +247,17 @@ export function AttendanceClient({
 
         setSessionRecords(sessionData);
         setIsLoaded(true);
-        toast.success("Attendance roster loaded successfully.");
+        if (showToast) {
+          toast.success("Attendance roster loaded successfully.");
+        }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to load roster");
       }
     });
+  }
+
+  function load() {
+    loadRoster(date, sectionId, sessionId, true);
   }
 
   // Save attendance
@@ -285,8 +276,22 @@ export function AttendanceClient({
         });
         toast.success("Attendance saved successfully");
         
-        // Refresh local session database records
-        const freshRecords = await getSectionSessionRecordsAction(sessionId, sectionId);
+        // Refresh local session database records AND daily rows to sync
+        const [dailyData, freshRecords] = await Promise.all([
+          listAttendanceAction({ sessionId, sectionId, date: new Date(date) }),
+          getSectionSessionRecordsAction(sessionId, sectionId),
+        ]);
+
+        setRows(
+          dailyData.map((r) => ({
+            studentId: r.student.id,
+            fullName: r.student.fullName,
+            admissionNo: r.student.admissionNo,
+            rollNo: r.rollNo ?? "—",
+            status: r.attendance?.status ?? "PRESENT",
+            remarks: r.attendance?.remarks ?? "",
+          }))
+        );
         setSessionRecords(freshRecords);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to save attendance");
@@ -391,9 +396,13 @@ export function AttendanceClient({
               <Select
                 value={classId}
                 onChange={(e) => {
-                  setClassId(e.target.value);
-                  const next = classes.find((c) => c.id === e.target.value)?.sections[0]?.id ?? "";
-                  setSectionId(next);
+                  const newClassId = e.target.value;
+                  setClassId(newClassId);
+                  const nextSectionId = classes.find((c) => c.id === newClassId)?.sections[0]?.id ?? "";
+                  setSectionId(nextSectionId);
+                  if (isLoaded && nextSectionId) {
+                    loadRoster(date, nextSectionId, sessionId, false);
+                  }
                 }}
               >
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -401,13 +410,32 @@ export function AttendanceClient({
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-slate-600">Section</label>
-              <Select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
+              <Select
+                value={sectionId}
+                onChange={(e) => {
+                  const newSectionId = e.target.value;
+                  setSectionId(newSectionId);
+                  if (isLoaded && newSectionId) {
+                    loadRoster(date, newSectionId, sessionId, false);
+                  }
+                }}
+              >
                 {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-slate-600">Date Picker</label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (isLoaded && newDate) {
+                    loadRoster(newDate, sectionId, sessionId, false);
+                  }
+                }}
+              />
             </div>
           </div>
           
@@ -531,6 +559,16 @@ export function AttendanceClient({
                 <Button type="button" size="sm" variant="outline" disabled={isCurrentDateLocked} onClick={load} className="text-xs text-slate-600 border-slate-200 hover:bg-slate-50">
                   Reset
                 </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={pending || isCurrentDateLocked}
+                  onClick={save}
+                  className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold border-emerald-600 shadow-sm cursor-pointer"
+                >
+                  <Save className={cn("mr-1.5 h-3.5 w-3.5", pending && "animate-spin")} />
+                  Save Attendance
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -596,6 +634,21 @@ export function AttendanceClient({
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs text-slate-500 font-medium">
+                  {rows.length} students in roster • Click save to record today&apos;s status
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={pending || isCurrentDateLocked}
+                  onClick={save}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
+                >
+                  <Save className={cn("mr-1.5 h-3.5 w-3.5", pending && "animate-spin")} />
+                  Save Attendance
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -690,6 +743,9 @@ export function AttendanceClient({
                       onClick={() => {
                         if (!dayData.isSunday) {
                           setDate(dayData.dateStr);
+                          if (isLoaded) {
+                            loadRoster(dayData.dateStr, sectionId, sessionId, false);
+                          }
                           toast.info(`Switched date filter to ${dayData.dateStr}`);
                         }
                       }}

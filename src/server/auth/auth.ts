@@ -5,7 +5,7 @@ import { prisma } from "@/server/lib/prisma";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL || "http://127.0.0.1:3000",
+  baseURL: process.env.BETTER_AUTH_URL || (process.env.PORT ? `http://127.0.0.1:${process.env.PORT}` : "http://127.0.0.1:3000"),
   database: prismaAdapter(prisma, {
     provider: "sqlite",
   }),
@@ -72,8 +72,13 @@ export const auth = betterAuth({
   trustedOrigins: [
     process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000",
     process.env.NEXT_PUBLIC_APP_URL ?? "http://127.0.0.1:3000",
+    ...(process.env.PORT ? [`http://127.0.0.1:${process.env.PORT}`, `http://localhost:${process.env.PORT}`] : []),
     "http://127.0.0.1:3000",
     "http://localhost:3000",
+    "http://127.0.0.1:5000",
+    "http://localhost:5000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
   ],
 });
 

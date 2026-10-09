@@ -163,11 +163,20 @@ export function SingleFeeReceipt({ data, copyType, isSideBySide = true }: Single
                 </span>
               </td>
               <td style={{ width: "46%", verticalAlign: "middle", textAlign: "center", padding: "0 2px" }}>
-                <div style={{ fontSize: "13px", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px", color: "#000000", lineHeight: "1.15" }}>
+                <div
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    color: "#000000",
+                    lineHeight: "1.15",
+                    fontFamily: '"Times New Roman", Times, serif',
+                  }}
+                >
                   {data.branding?.schoolName?.toUpperCase() || "VIDYANJALI"}
                 </div>
-                <div style={{ fontSize: "8.5px", fontWeight: 700, fontStyle: "italic", color: "#1c1917", letterSpacing: "0.3px", marginTop: "1px", lineHeight: "1.15" }}>
-                  Public School
+                <div style={{ fontSize: "8.5px", fontWeight: 700, fontStyle: "italic", color: "#1c1917", letterSpacing: "0.3px", marginTop: "1px", lineHeight: "1.15" }}> 
                 </div>
               </td>
               <td style={{ width: "27%", verticalAlign: "middle", textAlign: "right", padding: "0" }}>

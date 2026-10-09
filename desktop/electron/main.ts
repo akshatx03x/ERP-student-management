@@ -7,6 +7,7 @@ import { checkSqliteDatabaseIntegrity, acquireSingleInstanceLock, releaseSingleI
 import { runPendingPrismaMigrations } from "./migration-runner";
 import { startNextServer, stopNextServer } from "./next-server-manager";
 import { ensureWritableDirectoriesExist, getOrCreateDesktopAuthSecret, getPortableBaseDirectory } from "./paths";
+import { findVacantPort, isPortVacant } from "./port-finder";
 
 // Set up Prisma engine paths for packaged runtime
 if (app.isPackaged) {
@@ -228,8 +229,20 @@ async function bootstrapDesktopApp(): Promise<void> {
   }
 
   process.env.APP_MODE = "offline";
-  process.env.BETTER_AUTH_URL = process.env.BETTER_AUTH_URL || "http://127.0.0.1:3000";
-  process.env.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000";
+
+  updateSplashProgress("Checking network port availability...", 15);
+  const preferredPort = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+  let port: number;
+  if (preferredPort && (await isPortVacant(preferredPort))) {
+    port = preferredPort;
+  } else {
+    port = await findVacantPort([3000, 5000, 8000]);
+  }
+  process.env.PORT = String(port);
+
+  const serverUrl = `http://127.0.0.1:${port}`;
+  process.env.BETTER_AUTH_URL = process.env.BETTER_AUTH_URL || serverUrl;
+  process.env.NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL || serverUrl;
 
   if (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.trim() === "") {
     const desktopSecret = getOrCreateDesktopAuthSecret(writablePaths.configDir);
@@ -237,6 +250,7 @@ async function bootstrapDesktopApp(): Promise<void> {
   }
 
   logMain(`[Better Auth Env]
+    PORT: "${process.env.PORT}"
     BETTER_AUTH_URL: "${process.env.BETTER_AUTH_URL}"
     NEXT_PUBLIC_APP_URL: "${process.env.NEXT_PUBLIC_APP_URL}"
     BETTER_AUTH_SECRET length: ${process.env.BETTER_AUTH_SECRET ? process.env.BETTER_AUTH_SECRET.length : 0}`);
@@ -314,10 +328,9 @@ async function bootstrapDesktopApp(): Promise<void> {
     return;
   }
 
-  updateSplashProgress("Starting local ERP application server...", 80);
+  updateSplashProgress(`Starting local ERP application server (port ${port})...`, 80);
   try {
-    const port = parseInt(process.env.PORT || "3000", 10);
-    const serverUrl = await startNextServer({
+    const actualServerUrl = await startNextServer({
       rootDir: projectRootDir,
       port,
       appMode: "offline",

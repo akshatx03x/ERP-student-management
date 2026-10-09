@@ -53,22 +53,32 @@ function getBaseDataDirectory(): string {
 }
 
 function resolveDatabaseUrl(): string {
+  const baseDir = getBaseDataDirectory();
+  const isDevelopment = baseDir === process.cwd() && !process.env.OFFLINE_DATA_DIR;
+  const canonicalDbPath = isDevelopment
+    ? path.resolve(baseDir, "prisma", "data", "school.db")
+    : path.resolve(baseDir, "data", "school.db");
+
   const url = process.env.DATABASE_URL?.trim();
   if (url) {
+    const rawPath = url.replace(/^file:\/{0,3}/, "").replace(/^file:/, "");
+    const baseName = path.basename(rawPath).toLowerCase();
+
+    // Guard against pointing active database to a backup or .bak file
+    if (baseName.includes("backup") || rawPath.toLowerCase().includes("backups") || baseName.endsWith(".bak")) {
+      console.warn(`[AppConfig] DATABASE_URL pointed to a backup file (${rawPath}). Safeguarding active database: using canonical path ${canonicalDbPath}`);
+      return `file:${canonicalDbPath}`;
+    }
+
     // If it's an absolute path or non-file URL, return it directly
     if (url.startsWith("file:") && !url.startsWith("file:.") && !url.startsWith("file:./")) {
       return url;
     }
-    if (path.isAbsolute(url.replace(/^file:/, ""))) {
-      return url;
+    if (path.isAbsolute(rawPath)) {
+      return `file:${rawPath}`;
     }
     // If it is a relative file URL, resolve it relative to the correct base directory.
-    // In local development mode (where we don't have Electron running and are not packaged),
-    // relative paths must be resolved relative to the 'prisma' directory so that
-    // Next.js and Prisma CLI align on the exact same database file location.
     const relativePath = url.replace(/^file:/, "").replace(/^\.\//, "").replace(/^\./, "");
-    const baseDir = getBaseDataDirectory();
-    const isDevelopment = baseDir === process.cwd() && !process.env.OFFLINE_DATA_DIR;
     const resolvedPath = path.resolve(
       isDevelopment ? path.join(baseDir, "prisma") : baseDir,
       relativePath
@@ -76,8 +86,7 @@ function resolveDatabaseUrl(): string {
     return `file:${resolvedPath}`;
   }
 
-  const dbPath = path.join(getBaseDataDirectory(), "data", "school.db");
-  return `file:${dbPath}`;
+  return `file:${canonicalDbPath}`;
 }
 
 export const appConfig: AppConfig = {
