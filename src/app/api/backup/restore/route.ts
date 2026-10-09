@@ -63,9 +63,11 @@ export async function POST(request: NextRequest) {
 
   // Validate extension
   const originalName: string = (file as File).name ?? "backup.erpbackup";
-  if (!originalName.endsWith(BACKUP_EXTENSION)) {
+  const isErpBackup = originalName.toLowerCase().endsWith(BACKUP_EXTENSION);
+  const isDb = originalName.toLowerCase().endsWith(".db") || originalName.toLowerCase().endsWith(".sqlite");
+  if (!isErpBackup && !isDb) {
     return NextResponse.json(
-      { error: `Invalid file type. Only ${BACKUP_EXTENSION} files are accepted.` },
+      { error: `Invalid file type. Only ${BACKUP_EXTENSION} and .db database files are accepted.` },
       { status: 400 },
     );
   }
@@ -76,7 +78,8 @@ export async function POST(request: NextRequest) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
-  const uploadTempPath = path.join(tempDir, `upload_${Date.now()}${BACKUP_EXTENSION}`);
+  const ext = isDb ? ".db" : BACKUP_EXTENSION;
+  const uploadTempPath = path.join(tempDir, `upload_${Date.now()}${ext}`);
   try {
     const arrayBuf = await (file as File).arrayBuffer();
     await fs.promises.writeFile(uploadTempPath, Buffer.from(arrayBuf));

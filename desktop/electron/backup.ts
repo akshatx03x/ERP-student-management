@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { loadAppConfig } from "./config";
 import { prisma, ensureSqlitePragmas } from "./prisma";
 
@@ -17,6 +18,37 @@ export interface IBackupProvider {
   restoreBackup(backupIdOrPath: string): Promise<{ success: boolean; message: string }>;
   listBackups(): Promise<BackupMetadata[]>;
   deleteBackup(backupIdOrPath: string): Promise<boolean>;
+}
+
+async function zipExtract(archive: Buffer): Promise<Map<string, Buffer>> {
+  const result = new Map<string, Buffer>();
+  let offset = 0;
+  if (archive.length < 4) return result;
+  const count = archive.readUInt32LE(offset);
+  offset += 4;
+  if (count === 0 || count > 1000000) return result;
+  for (let i = 0; i < count; i++) {
+    if (offset + 4 > archive.length) break;
+    const nameLen = archive.readUInt32LE(offset);
+    offset += 4;
+    if (nameLen > 4096 || offset + nameLen > archive.length) break;
+    const name = archive.subarray(offset, offset + nameLen).toString("utf8");
+    offset += nameLen;
+    if (offset + 8 > archive.length) break;
+    const dataLen = Number(archive.readBigUInt64LE(offset));
+    offset += 8;
+    if (dataLen < 0 || offset + dataLen > archive.length) break;
+    const compressedData = archive.subarray(offset, offset + dataLen);
+    offset += dataLen;
+    const decompressed = await new Promise<Buffer>((resolve, reject) => {
+      zlib.inflate(compressedData, (err, buf) => {
+        if (err) reject(err);
+        else resolve(buf);
+      });
+    });
+    result.set(name, decompressed);
+  }
+  return result;
 }
 
 export class LocalSqliteBackupProvider implements IBackupProvider {
@@ -41,6 +73,9 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
 
     try {
       await ensureSqlitePragmas(prisma);
+      try {
+        await prisma.$queryRawUnsafe("PRAGMA wal_checkpoint(TRUNCATE);");
+      } catch {}
       await prisma.$executeRawUnsafe(`VACUUM INTO '${normalizedPath}';`);
       console.log(`[LocalSqliteBackupProvider] Atomic VACUUM INTO backup created successfully at: ${filePath}`);
     } catch (err: any) {
@@ -80,8 +115,40 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     const walFile = `${targetDbFile}-wal`;
     const shmFile = `${targetDbFile}-shm`;
 
+    let sourceDbToCopy = backupPath;
+    let tempExtractedDb: string | null = null;
+    const extractedUploads: Array<{ name: string; data: Buffer }> = [];
+
     try {
+      // Check if backup is .erpbackup package (starts with count buffer, not SQLite header)
+      const headerBuf = Buffer.alloc(16);
+      const fd = await fs.promises.open(backupPath, "r");
+      try {
+        await fd.read(headerBuf, 0, 16, 0);
+      } finally {
+        await fd.close();
+      }
+
+      if (headerBuf.toString("utf8") !== "SQLite format 3\0") {
+        const raw = await fs.promises.readFile(backupPath);
+        const entries = await zipExtract(raw);
+        const dbBuf = entries.get("database.db");
+        if (!dbBuf) {
+          throw new Error("Invalid .erpbackup archive: database.db not found inside.");
+        }
+        tempExtractedDb = path.join(config.offlinePaths.tempDir, `desktop_restore_${Date.now()}.db`);
+        await fs.promises.writeFile(tempExtractedDb, dbBuf);
+        sourceDbToCopy = tempExtractedDb;
+
+        for (const [name, buf] of entries.entries()) {
+          if (name.startsWith("uploads/")) {
+            extractedUploads.push({ name: name.substring("uploads/".length), data: buf });
+          }
+        }
+      }
+
       await prisma.$disconnect();
+      await new Promise((r) => setTimeout(r, 200));
 
       if (fs.existsSync(walFile)) {
         try { await fs.promises.unlink(walFile); } catch {}
@@ -90,14 +157,26 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         try { await fs.promises.unlink(shmFile); } catch {}
       }
 
-      await fs.promises.copyFile(backupPath, targetDbFile);
+      await fs.promises.copyFile(sourceDbToCopy, targetDbFile);
+
+      // Restore uploads
+      if (extractedUploads.length > 0) {
+        for (const up of extractedUploads) {
+          const dest = path.join(config.offlinePaths.uploadsDir, up.name);
+          const dir = path.dirname(dest);
+          if (!fs.existsSync(dir)) {
+            await fs.promises.mkdir(dir, { recursive: true });
+          }
+          await fs.promises.writeFile(dest, up.data);
+        }
+      }
 
       await prisma.$connect();
       await ensureSqlitePragmas(prisma);
 
       return {
         success: true,
-        message: `Successfully restored database from backup: ${path.basename(backupPath)}`,
+        message: `Successfully restored database and assets from backup: ${path.basename(backupPath)}`,
       };
     } catch (err: any) {
       try {
@@ -107,6 +186,10 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         success: false,
         message: `Failed to restore SQLite database: ${err.message}`,
       };
+    } finally {
+      if (tempExtractedDb && fs.existsSync(tempExtractedDb)) {
+        try { await fs.promises.unlink(tempExtractedDb); } catch {}
+      }
     }
   }
 
@@ -119,7 +202,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     const backups: BackupMetadata[] = [];
 
     for (const file of files) {
-      if (file.endsWith(".db") || file.endsWith(".sqlite") || file.endsWith(".sql")) {
+      if (file.endsWith(".erpbackup") || file.endsWith(".db") || file.endsWith(".sqlite")) {
         const filePath = path.join(this.backupsDir, file);
         const stats = await fs.promises.stat(filePath);
         backups.push({

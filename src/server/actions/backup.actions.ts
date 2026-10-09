@@ -46,6 +46,12 @@ export async function createBackupAction(label?: string) {
     erpVersion: backup.erpVersion,
     backupFormatVersion: backup.backupFormatVersion,
     sha256: backup.sha256,
+    studentCount: backup.studentCount,
+    feeReceiptCount: backup.feeReceiptCount,
+    uploadFilesCount: backup.uploadFilesCount,
+    guardianCount: backup.guardianCount,
+    staffCount: backup.staffCount,
+    attendanceRecordCount: backup.attendanceRecordCount,
     ...(backup.label ? { label: backup.label } : {}),
   };
 }
@@ -65,6 +71,12 @@ export async function listBackupsAction() {
     erpVersion: b.erpVersion,
     backupFormatVersion: b.backupFormatVersion,
     sha256: b.sha256,
+    studentCount: b.studentCount,
+    feeReceiptCount: b.feeReceiptCount,
+    uploadFilesCount: b.uploadFilesCount,
+    guardianCount: b.guardianCount,
+    staffCount: b.staffCount,
+    attendanceRecordCount: b.attendanceRecordCount,
     ...(b.label ? { label: b.label } : {}),
   }));
 }

@@ -10,7 +10,9 @@ export interface ElectronAPI {
   restoreBackup: (backupIdOrPath: string) => Promise<any>;
   onSplashProgress: (callback: (data: { status: string; progress: number }) => void) => void;
   showSaveDialog: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePath?: string }>;
+  showOpenDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePaths: string[] }>;
   saveFile: (options: { targetPath: string; bufferBase64: string }) => Promise<{ success: boolean; filePath: string }>;
+  readFileBuffer: (options: { filePath: string }) => Promise<{ success: boolean; fileName: string; base64: string; size: number }>;
 }
 
 const api: ElectronAPI = {
@@ -23,7 +25,9 @@ const api: ElectronAPI = {
     ipcRenderer.on("splash:progress", (_, data) => callback(data));
   },
   showSaveDialog: (options) => ipcRenderer.invoke("dialog:save-file", options),
+  showOpenDialog: (options) => ipcRenderer.invoke("dialog:open-file", options),
   saveFile: (options) => ipcRenderer.invoke("file:save-buffer", options),
+  readFileBuffer: (options) => ipcRenderer.invoke("file:read-buffer", options),
 };
 
 try {

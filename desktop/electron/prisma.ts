@@ -14,7 +14,7 @@ export const prisma = new PrismaClient({
 
 export async function ensureSqlitePragmas(client: PrismaClient) {
   try {
-    await client.$executeRawUnsafe("PRAGMA journal_mode=WAL;");
+    await client.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
     await client.$executeRawUnsafe("PRAGMA busy_timeout=5000;");
     await client.$executeRawUnsafe("PRAGMA foreign_keys=ON;");
   } catch (err) {

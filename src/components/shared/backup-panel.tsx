@@ -32,6 +32,12 @@ type BackupInfo = {
   backupFormatVersion: number;
   sha256: string;
   label?: string;
+  studentCount?: number;
+  feeReceiptCount?: number;
+  uploadFilesCount?: number;
+  guardianCount?: number;
+  staffCount?: number;
+  attendanceRecordCount?: number;
 };
 
 type ValidationResult = {
@@ -43,6 +49,12 @@ type ValidationResult = {
     backupFormatVersion: number;
     label?: string;
     sha256: string;
+    studentCount?: number;
+    feeReceiptCount?: number;
+    uploadFilesCount?: number;
+    guardianCount?: number;
+    staffCount?: number;
+    attendanceRecordCount?: number;
   };
 };
 
@@ -119,16 +131,20 @@ function BackupInfoCard({ backup }: { backup: BackupInfo }) {
       <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
         <HardDrive className="h-4 w-4 mt-0.5 text-emerald-500 shrink-0" />
         <div>
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Backup Size</p>
+          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Backup Scope</p>
           <p className="text-sm font-semibold text-slate-800 mt-0.5">{formatBytes(backup.sizeBytes)}</p>
-          <p className="text-xs text-slate-500">{backup.schoolName}</p>
+          <p className="text-xs text-slate-500">
+            {typeof backup.studentCount === "number" ? `${backup.studentCount} students` : backup.schoolName}
+            {typeof backup.feeReceiptCount === "number" ? ` · ${backup.feeReceiptCount} receipts` : ""}
+            {typeof backup.uploadFilesCount === "number" ? ` · ${backup.uploadFilesCount} files` : ""}
+          </p>
         </div>
       </div>
       <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
         <Info className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
         <div>
-          <p className="text-sm font-semibold text-slate-800 mt-0.5">ERP Backup v{backup.backupFormatVersion}</p>
-          <p className="text-xs text-slate-500">v{backup.erpVersion}</p>
+          <p className="text-sm font-semibold text-slate-800 mt-0.5">Complete ERP Backup</p>
+          <p className="text-xs text-slate-500">Database + Receipts + Photos/Media</p>
         </div>
       </div>
     </div>
@@ -262,6 +278,24 @@ function ConfirmationDialog({
               <span className="text-slate-500 font-medium">Backup Date</span>
               <span className="text-slate-800 font-semibold">{date} at {time}</span>
             </div>
+            {typeof metadata.studentCount === "number" && (
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-slate-500 font-medium">Students</span>
+                <span className="text-slate-800 font-semibold">{metadata.studentCount} students</span>
+              </div>
+            )}
+            {typeof metadata.feeReceiptCount === "number" && (
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-slate-500 font-medium">Receipts & Fees</span>
+                <span className="text-slate-800 font-semibold">{metadata.feeReceiptCount} receipts</span>
+              </div>
+            )}
+            {typeof metadata.uploadFilesCount === "number" && metadata.uploadFilesCount > 0 && (
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-slate-500 font-medium">Media & Documents</span>
+                <span className="text-emerald-700 font-semibold">{metadata.uploadFilesCount} files included</span>
+              </div>
+            )}
             <div className="flex justify-between px-4 py-2.5">
               <span className="text-slate-500 font-medium">ERP Version</span>
               <span className="text-slate-800 font-semibold">v{metadata.erpVersion}</span>
@@ -278,12 +312,12 @@ function ConfirmationDialog({
             )}
             <div className="flex justify-between gap-4 px-4 py-2.5">
               <span className="text-slate-500 font-medium shrink-0">SHA-256</span>
-              <span className="text-slate-600 font-mono text-xs break-all">{metadata.sha256.slice(0, 32)}…</span>
+              <span className="text-slate-600 font-mono text-xs break-all">{metadata.sha256 ? `${metadata.sha256.slice(0, 32)}…` : "Verified SQLite Header"}</span>
             </div>
           </div>
 
           <p className="text-xs text-slate-500">
-            ✓ Integrity verified &nbsp;·&nbsp; ✓ Format validated &nbsp;·&nbsp; ✓ Atomic restore
+            ✓ Complete backup &nbsp;·&nbsp; ✓ Media & photos restored &nbsp;·&nbsp; ✓ Atomic rollback protection
           </p>
         </div>
 
@@ -460,6 +494,12 @@ export function BackupPanel({
           erpVersion: backup.erpVersion,
           backupFormatVersion: backup.backupFormatVersion,
           sha256: backup.sha256,
+          studentCount: backup.studentCount,
+          feeReceiptCount: backup.feeReceiptCount,
+          uploadFilesCount: backup.uploadFilesCount,
+          guardianCount: backup.guardianCount,
+          staffCount: backup.staffCount,
+          attendanceRecordCount: backup.attendanceRecordCount,
           ...(backup.label ? { label: backup.label } : {}),
         });
 
@@ -586,6 +626,41 @@ export function BackupPanel({
     setRestoreError(null);
   }, []);
 
+  const handleRestoreClick = useCallback(async () => {
+    if (isRestoreBusy || !isPrincipal) return;
+
+    const electronApi = typeof window !== "undefined" ? (window as any).electronAPI : null;
+    if (electronApi?.showOpenDialog && electronApi?.readFileBuffer) {
+      try {
+        const dialogResult = await electronApi.showOpenDialog({
+          filters: [
+            { name: "ERP Backup Files (*.erpbackup, *.db)", extensions: ["erpbackup", "db", "sqlite"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+        });
+
+        if (dialogResult.canceled || !dialogResult.filePaths?.[0]) return;
+
+        const selectedFilePath = dialogResult.filePaths[0];
+        const fileData = await electronApi.readFileBuffer({ filePath: selectedFilePath });
+        if (fileData?.base64) {
+          const binaryStr = atob(fileData.base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const file = new File([bytes], fileData.fileName || "backup.erpbackup");
+          handleFileSelect(file);
+          return;
+        }
+      } catch (err: any) {
+        console.error("Desktop native open dialog failed, falling back to standard input:", err);
+      }
+    }
+
+    fileInputRef.current?.click();
+  }, [isRestoreBusy, isPrincipal, handleFileSelect]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (!isPrincipal) return null;
@@ -618,7 +693,7 @@ export function BackupPanel({
                 Backup & Restore
               </CardTitle>
               <p className="text-xs text-slate-500 mt-0.5">
-                Disaster recovery · Principal access only
+                Complete system snapshot · Principal access only
               </p>
             </div>
           </div>
@@ -642,12 +717,12 @@ export function BackupPanel({
               {isBackupBusy ? BACKUP_STEP_LABELS[backupStep] : "Backup ERP"}
             </Button>
 
-            {/* Restore Button — triggers file input */}
+            {/* Restore Button — triggers native dialog or file input */}
             <Button
               id="restore-erp-btn"
               variant="outline"
               disabled={isRestoreBusy || restoreStep === "done"}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handleRestoreClick}
               className="border-slate-300 text-slate-700 hover:bg-slate-50"
             >
               {isRestoreBusy ? (
@@ -666,7 +741,7 @@ export function BackupPanel({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".erpbackup"
+              accept=".erpbackup,.db,.sqlite"
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
             />
@@ -707,8 +782,7 @@ export function BackupPanel({
           {/* Safety note */}
           {!compact && (
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Backups include all school data, students, fees, attendance, results, and settings.
-              Restore is transactional — it either succeeds completely or rolls back automatically.
+              Backups include everything: students, fees, receipts, attendance, ID cards, exams, settings, and all uploaded photos and documents. Restore is transactional with automatic safety rollback.
             </p>
           )}
         </CardContent>

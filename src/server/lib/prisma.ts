@@ -146,10 +146,10 @@ let isPragmaApplied = false;
 
 export async function ensureSqlitePragmas(client: PrismaClient = globalForPrisma.prismaInstance!): Promise<void> {
   try {
-    await client.$executeRawUnsafe(`PRAGMA foreign_keys = ON;`);
-    await client.$executeRawUnsafe(`PRAGMA journal_mode = WAL;`);
-    await client.$executeRawUnsafe(`PRAGMA synchronous = NORMAL;`);
-    await client.$executeRawUnsafe(`PRAGMA busy_timeout = 5000;`);
+    await client.$queryRawUnsafe(`PRAGMA foreign_keys = ON;`);
+    await client.$queryRawUnsafe(`PRAGMA journal_mode = WAL;`);
+    await client.$queryRawUnsafe(`PRAGMA synchronous = NORMAL;`);
+    await client.$queryRawUnsafe(`PRAGMA busy_timeout = 5000;`);
     isPragmaApplied = true;
     console.log("[Prisma] SQLite production PRAGMA settings applied successfully (foreign_keys=ON, WAL, synchronous=NORMAL, busy_timeout=5000).");
   } catch (err) {

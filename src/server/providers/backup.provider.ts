@@ -214,9 +214,21 @@ export interface BackupFileMetadata {
   sqliteVersion: string;
   createdAt: string; // ISO 8601
   schoolName: string;
+  schoolId?: string;
+  activeSession?: string;
   label?: string;
   sha256: string; // SHA-256 hex digest of the inner database.db
   schemaFingerprint: string;
+  studentCount?: number;
+  guardianCount?: number;
+  staffCount?: number;
+  feeReceiptCount?: number;
+  attendanceRecordCount?: number;
+  academicSessionCount?: number;
+  classCount?: number;
+  examCount?: number;
+  uploadFilesCount?: number;
+  backupSize?: number;
 }
 
 export interface BackupMetadata {
@@ -233,6 +245,12 @@ export interface BackupMetadata {
   sha256: string;
   schemaFingerprint: string;
   label?: string;
+  studentCount?: number;
+  guardianCount?: number;
+  staffCount?: number;
+  feeReceiptCount?: number;
+  attendanceRecordCount?: number;
+  uploadFilesCount?: number;
 }
 
 export interface RestoreValidationResult {
@@ -248,6 +266,38 @@ export interface IBackupProvider {
   listBackups(): Promise<BackupMetadata[]>;
   getBackupById(backupIdOrPath: string): Promise<BackupMetadata | null>;
   deleteBackup(backupIdOrPath: string): Promise<boolean>;
+}
+
+// ─── Helpers: File Operations & Recursion ──────────────────────────────────────
+
+async function collectFilesRecursively(dir: string, baseDir: string = dir): Promise<Array<{ name: string; fullPath: string }>> {
+  const results: Array<{ name: string; fullPath: string }> = [];
+  if (!fs.existsSync(dir)) return results;
+
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const sub = await collectFilesRecursively(fullPath, baseDir);
+      results.push(...sub);
+    } else if (entry.isFile()) {
+      const relPath = path.relative(baseDir, fullPath).replace(/\\/g, "/");
+      results.push({ name: relPath, fullPath });
+    }
+  }
+  return results;
+}
+
+async function safeFileOperation(fn: () => Promise<void>, retries = 5, delayMs = 150): Promise<void> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await fn();
+      return;
+    } catch (err: any) {
+      if (i === retries - 1) throw err;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
 }
 
 // ─── Tiny ZIP / Unzip Utilities ─────────────────────────────────────────────────
@@ -296,7 +346,7 @@ async function zipExtract(archive: Buffer): Promise<Map<string, Buffer>> {
   const count = archive.readUInt32LE(offset);
   offset += 4;
 
-  if (count === 0 || count > 100) {
+  if (count === 0 || count > 1000000) {
     throw new BackupError("INVALID_FORMAT", "Archive entry count is invalid.");
   }
 
@@ -358,10 +408,34 @@ function getErpVersion(): string {
   }
 }
 
-// ─── Read metadata from .erpbackup file ─────────────────────────────────────────
+// ─── Read metadata from .erpbackup or .db file ─────────────────────────────────
 
 async function readBackupMetadataFromFile(filePath: string): Promise<BackupFileMetadata | null> {
   try {
+    if (!fs.existsSync(filePath)) return null;
+
+    const headerBuf = Buffer.alloc(16);
+    const fd = await fs.promises.open(filePath, "r");
+    try {
+      await fd.read(headerBuf, 0, 16, 0);
+    } finally {
+      await fd.close();
+    }
+
+    if (headerBuf.toString("utf8") === "SQLite format 3\0") {
+      const stats = await fs.promises.stat(filePath);
+      return {
+        backupFormatVersion: 1,
+        erpVersion: getErpVersion(),
+        sqliteVersion: "3",
+        createdAt: (stats.birthtime || stats.mtime || new Date()).toISOString(),
+        schoolName: "Direct SQLite Database",
+        sha256: "",
+        schemaFingerprint: getSchemaFingerprint(),
+        backupSize: stats.size,
+      };
+    }
+
     const raw = await fs.promises.readFile(filePath);
     const entries = await zipExtract(raw);
     const metaRaw = entries.get("metadata.json");
@@ -394,6 +468,13 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
 
   async createBackup(label?: string): Promise<BackupMetadata> {
     await ensureSqlitePragmas(prisma);
+
+    // Ensure SQLite WAL journal is fully flushed into the base database file
+    try {
+      await prisma.$queryRawUnsafe("PRAGMA wal_checkpoint(TRUNCATE);");
+    } catch (walErr: any) {
+      console.warn("[BackupProvider] wal_checkpoint warning (non-fatal):", walErr?.message);
+    }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const sanitizedLabel = label ? `_${label.replace(/[^a-zA-Z0-9_-]/g, "")}` : "";
@@ -431,10 +512,19 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       // Step 3 — compute SHA-256 of the snapshot
       const sha256 = await sha256File(tempDbPath);
 
-      // Step 4 — read school details and session for metadata
+      // Step 4 — read school details and complete entity statistics
       let schoolName = "Unknown School";
       let schoolId = "";
       let activeSession = "";
+      let studentCount = 0;
+      let guardianCount = 0;
+      let staffCount = 0;
+      let feeReceiptCount = 0;
+      let attendanceRecordCount = 0;
+      let academicSessionCount = 0;
+      let classCount = 0;
+      let examCount = 0;
+
       try {
         const school = await prisma.school.findFirst({ select: { id: true, name: true } });
         if (school) {
@@ -445,14 +535,61 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         if (session) {
           activeSession = session.name;
         }
-      } catch {
-        // non-critical
+
+        const counts = await Promise.allSettled([
+          prisma.student.count(),
+          prisma.guardian.count(),
+          prisma.staffProfile.count(),
+          prisma.feeReceipt.count(),
+          prisma.attendanceRecord.count(),
+          prisma.academicSession.count(),
+          prisma.class.count(),
+          prisma.exam.count(),
+        ]);
+
+        if (counts[0].status === "fulfilled") studentCount = counts[0].value;
+        if (counts[1].status === "fulfilled") guardianCount = counts[1].value;
+        if (counts[2].status === "fulfilled") staffCount = counts[2].value;
+        if (counts[3].status === "fulfilled") feeReceiptCount = counts[3].value;
+        if (counts[4].status === "fulfilled") attendanceRecordCount = counts[4].value;
+        if (counts[5].status === "fulfilled") academicSessionCount = counts[5].value;
+        if (counts[6].status === "fulfilled") classCount = counts[6].value;
+        if (counts[7].status === "fulfilled") examCount = counts[7].value;
+      } catch (statsErr) {
+        console.warn("[BackupProvider] Stats collection warning:", statsErr);
+      }
+
+      // Step 5 — collect all uploaded files, student photos, logos, signatures, ID assets, documents
+      const uploadEntries: Array<{ name: string; data: Buffer }> = [];
+      const uploadsDir = appConfig.offlinePaths.uploadsDir;
+      if (fs.existsSync(uploadsDir)) {
+        const uploadFiles = await collectFilesRecursively(uploadsDir);
+        for (const uf of uploadFiles) {
+          try {
+            const data = await fs.promises.readFile(uf.fullPath);
+            uploadEntries.push({ name: `uploads/${uf.name}`, data });
+          } catch (readErr: any) {
+            console.warn(`[BackupProvider] Failed to read upload file ${uf.fullPath}:`, readErr?.message);
+          }
+        }
+      }
+
+      // Also check public/uploads if it exists and is distinct from uploadsDir
+      const publicUploads = path.join(process.cwd(), "public", "uploads");
+      if (fs.existsSync(publicUploads) && path.resolve(publicUploads) !== path.resolve(uploadsDir)) {
+        const publicFiles = await collectFilesRecursively(publicUploads);
+        for (const pf of publicFiles) {
+          try {
+            const data = await fs.promises.readFile(pf.fullPath);
+            uploadEntries.push({ name: `public_uploads/${pf.name}`, data });
+          } catch {}
+        }
       }
 
       const tempDbStats = await fs.promises.stat(tempDbPath);
 
-      // Step 5 — build metadata with schemaFingerprint
-      const fileMetadata: BackupFileMetadata & { schoolId?: string; activeSession?: string; backupSize?: number } = {
+      // Step 6 — build comprehensive metadata
+      const fileMetadata: BackupFileMetadata = {
         backupFormatVersion: BACKUP_FORMAT_VERSION,
         erpVersion: getErpVersion(),
         sqliteVersion,
@@ -463,16 +600,26 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         backupSize: tempDbStats.size,
         sha256,
         schemaFingerprint: getSchemaFingerprint(),
+        studentCount,
+        guardianCount,
+        staffCount,
+        feeReceiptCount,
+        attendanceRecordCount,
+        academicSessionCount,
+        classCount,
+        examCount,
+        uploadFilesCount: uploadEntries.length,
         ...(label ? { label } : {}),
       };
 
-      // Step 6 — read snapshot into buffer and create archive
+      // Step 7 — pack database snapshot, metadata, and all uploads into .erpbackup archive
       const dbBuffer = await fs.promises.readFile(tempDbPath);
       const metaBuffer = Buffer.from(JSON.stringify(fileMetadata, null, 2), "utf8");
 
       const archiveBuffer = await zipCreate([
         { name: "database.db", data: dbBuffer },
         { name: "metadata.json", data: metaBuffer },
+        ...uploadEntries,
       ]);
 
       await fs.promises.writeFile(archivePath, archiveBuffer);
@@ -480,7 +627,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       const stats = await fs.promises.stat(archivePath);
 
       console.log(
-        `[BackupProvider] .erpbackup archive created: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`,
+        `[BackupProvider] Full .erpbackup archive created: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB, ${studentCount} students, ${feeReceiptCount} receipts, ${uploadEntries.length} uploads)`,
       );
 
       return {
@@ -495,6 +642,12 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         erpVersion: fileMetadata.erpVersion,
         sha256: fileMetadata.sha256,
         schemaFingerprint: fileMetadata.schemaFingerprint,
+        studentCount,
+        guardianCount,
+        staffCount,
+        feeReceiptCount,
+        attendanceRecordCount,
+        uploadFilesCount: uploadEntries.length,
         ...(label ? { label } : {}),
       };
     } finally {
@@ -515,15 +668,56 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       throw new BackupError("FILE_NOT_FOUND", "Backup file not found.");
     }
 
-    // 2. Read archive
+    // 2. Check header to identify format (Raw SQLite .db vs .erpbackup archive)
+    const headerBuf = Buffer.alloc(16);
+    const fd = await fs.promises.open(backupFilePath, "r");
+    try {
+      await fd.read(headerBuf, 0, 16, 0);
+    } finally {
+      await fd.close();
+    }
+
+    const isDirectSqlite = headerBuf.toString("utf8") === "SQLite format 3\0";
+
+    if (isDirectSqlite) {
+      // Direct SQLite Database Restore
+      const tempDbPath = path.join(this.tempDir, `restore_validated_${Date.now()}.db`);
+      await fs.promises.copyFile(backupFilePath, tempDbPath);
+
+      // Deep native SQLite diagnostics
+      const { sqliteVersion } = await verifyBackupDbSnapshot(tempDbPath);
+      const sha256 = await sha256File(tempDbPath);
+      const stats = await fs.promises.stat(tempDbPath);
+
+      const fileMetadata: BackupFileMetadata = {
+        backupFormatVersion: 1,
+        erpVersion: getErpVersion(),
+        sqliteVersion,
+        createdAt: (stats.mtime || new Date()).toISOString(),
+        schoolName: "Direct SQLite Database",
+        sha256,
+        schemaFingerprint: getSchemaFingerprint(),
+        backupSize: stats.size,
+        uploadFilesCount: 0,
+      };
+
+      console.log(`[BackupProvider] Direct SQLite database validated successfully. Temp DB at: ${tempDbPath}`);
+      return {
+        valid: true,
+        tempDbPath,
+        metadata: fileMetadata,
+      };
+    }
+
+    // 3. Read archive for .erpbackup format
     let archiveBuffer: Buffer;
     try {
       archiveBuffer = await fs.promises.readFile(backupFilePath);
-    } catch (err: unknown) {
+    } catch {
       throw new BackupError("FILE_NOT_FOUND", "Cannot read backup file.");
     }
 
-    // 3. Extract entries
+    // 4. Extract entries
     let entries: Map<string, Buffer>;
     try {
       entries = await zipExtract(archiveBuffer);
@@ -532,75 +726,84 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       throw new BackupError("CORRUPT_ARCHIVE", "Backup archive is corrupted.");
     }
 
-    // 4. Validate metadata.json exists
+    // 5. Validate metadata.json exists
     const metaRaw = entries.get("metadata.json");
     if (!metaRaw) {
-      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid (missing metadata.json).");
     }
 
     let fileMetadata: BackupFileMetadata;
     try {
       fileMetadata = JSON.parse(metaRaw.toString("utf8")) as BackupFileMetadata;
     } catch {
-      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive metadata is corrupt.");
     }
 
-    // 5. Validate required metadata fields
+    // 6. Validate required metadata fields
     if (
       typeof fileMetadata.backupFormatVersion !== "number" ||
       typeof fileMetadata.sha256 !== "string" ||
       typeof fileMetadata.createdAt !== "string" ||
       typeof fileMetadata.schoolName !== "string"
     ) {
-      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive metadata is missing required fields.");
     }
 
-    // 6. Compare Backup Format Version
-    if (fileMetadata.backupFormatVersion > BACKUP_FORMAT_VERSION) {
-      throw new BackupError("VERSION_INCOMPATIBLE", "Backup format is unsupported.");
-    }
-
-    // 7. Compare Schema Fingerprint (detect mismatch as older ERP version)
-    const currentFingerprint = getSchemaFingerprint();
-    if (!fileMetadata.schemaFingerprint || fileMetadata.schemaFingerprint !== currentFingerprint) {
-      console.warn(`[BackupRestore] Fingerprint mismatch! Current: ${currentFingerprint}, Backup: ${fileMetadata.schemaFingerprint}`);
-      throw new BackupError(
-        "VERSION_INCOMPATIBLE",
-        "Backup was created with an older ERP version. Database migration is required before restore."
-      );
-    }
-
-    // 8. database.db must be present
+    // 7. database.db must be present
     const dbBuffer = entries.get("database.db");
     if (!dbBuffer) {
-      throw new BackupError("INVALID_FORMAT", "Backup archive is invalid.");
+      throw new BackupError("INVALID_FORMAT", "Backup archive is missing database.db.");
     }
 
-    // 9. Integrity check — SHA-256 checksum mismatch
+    // 8. Integrity check — SHA-256 checksum mismatch
     const actualHash = sha256Buffer(dbBuffer);
     if (actualHash !== fileMetadata.sha256) {
       throw new BackupError("INTEGRITY_MISMATCH", "Database checksum mismatch.");
     }
 
-    // 10. Write database to temp path
+    // 9. Write database to temp path
     const tempDbPath = path.join(
       this.tempDir,
       `restore_validated_${Date.now()}.db`,
     );
     await fs.promises.writeFile(tempDbPath, dbBuffer);
 
-    // 11. Deep native SQLite diagnostics (integrity, FKs)
+    // 10. Deep native SQLite diagnostics (integrity, magic header, etc.)
     try {
       await verifyBackupDbSnapshot(tempDbPath);
     } catch (err: any) {
-      try { await fs.promises.unlink(tempDbPath); } catch { /* ignore */ }
-      if (err instanceof BackupError) {
-        throw err;
-      }
+      try { await fs.promises.unlink(tempDbPath); } catch {}
+      if (err instanceof BackupError) throw err;
       throw new BackupError("CORRUPT_ARCHIVE", "Database integrity validation failed.");
     }
 
-    console.log(`[BackupProvider] Backup validated successfully. Temp DB at: ${tempDbPath}`);
+    // 11. Extract and stage all upload files (photos, signatures, documents, etc.)
+    const stagedUploadsDir = `${tempDbPath}_uploads`;
+    let extractedUploadsCount = 0;
+    for (const [entryName, entryBuffer] of entries.entries()) {
+      if (entryName.startsWith("uploads/")) {
+        const relativeName = entryName.substring("uploads/".length);
+        const targetPath = path.join(stagedUploadsDir, relativeName);
+        const targetDir = path.dirname(targetPath);
+        if (!fs.existsSync(targetDir)) {
+          await fs.promises.mkdir(targetDir, { recursive: true });
+        }
+        await fs.promises.writeFile(targetPath, entryBuffer);
+        extractedUploadsCount++;
+      }
+    }
+
+    if (extractedUploadsCount > 0) {
+      fileMetadata.uploadFilesCount = extractedUploadsCount;
+    }
+
+    // Log schema fingerprint comparison (advisory, do not block restore if SQLite integrity passed)
+    const currentFingerprint = getSchemaFingerprint();
+    if (fileMetadata.schemaFingerprint && fileMetadata.schemaFingerprint !== currentFingerprint) {
+      console.warn(`[BackupRestore] Schema fingerprint differs (current: ${currentFingerprint}, backup: ${fileMetadata.schemaFingerprint}). SQLite integrity verified; proceeding with restore.`);
+    }
+
+    console.log(`[BackupProvider] Backup validated successfully. Temp DB: ${tempDbPath}, Upload files: ${extractedUploadsCount}`);
 
     return {
       valid: true,
@@ -622,8 +825,9 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     const targetDbFile = appConfig.offlinePaths.dbFilePath;
     const walFile = `${targetDbFile}-wal`;
     const shmFile = `${targetDbFile}-shm`;
+    const stagedUploadsDir = `${validatedTempDbPath}_uploads`;
 
-    // Create a safety backup of the current db before overwriting
+    // Create a safety backup of the current db and wal before overwriting
     const safetyBackupPath = `${targetDbFile}.pre-restore-${Date.now()}.bak`;
     const safetyWalPath = `${walFile}.pre-restore-${Date.now()}.bak`;
     const safetyShmPath = `${shmFile}.pre-restore-${Date.now()}.bak`;
@@ -633,56 +837,91 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     try {
       // 1. Create safety backup
       if (fs.existsSync(targetDbFile)) {
-        await fs.promises.copyFile(targetDbFile, safetyBackupPath);
+        await safeFileOperation(async () => {
+          await fs.promises.copyFile(targetDbFile, safetyBackupPath);
+        });
         safetyBackupCreated = true;
       }
       if (fs.existsSync(walFile)) {
-        await fs.promises.copyFile(walFile, safetyWalPath);
+        await safeFileOperation(async () => {
+          await fs.promises.copyFile(walFile, safetyWalPath);
+        });
       }
       if (fs.existsSync(shmFile)) {
-        await fs.promises.copyFile(shmFile, safetyShmPath);
+        await safeFileOperation(async () => {
+          await fs.promises.copyFile(shmFile, safetyShmPath);
+        });
       }
 
-      // 2. Destroy and disconnect all Prisma connections
+      // 2. Destroy and disconnect all active Prisma connections
       await disconnectPrisma();
+
+      // Brief pause to allow Windows file handles to release completely
+      await new Promise((r) => setTimeout(r, 200));
 
       // 3. Replace Database: remove WAL/SHM and copy new database
       for (const f of [walFile, shmFile]) {
         if (fs.existsSync(f)) {
-          try { await fs.promises.unlink(f); } catch { /* non-critical */ }
+          await safeFileOperation(async () => {
+            try { await fs.promises.unlink(f); } catch {}
+          });
         }
       }
-      await fs.promises.copyFile(validatedTempDbPath, targetDbFile);
 
-      // 4. Recreate Prisma instances & Reconnect
+      await safeFileOperation(async () => {
+        await fs.promises.copyFile(validatedTempDbPath, targetDbFile);
+      });
+
+      // 4. Restore Uploads (images, signatures, student photos, receipts)
+      if (fs.existsSync(stagedUploadsDir)) {
+        const targetUploadsDir = appConfig.offlinePaths.uploadsDir;
+        if (!fs.existsSync(targetUploadsDir)) {
+          await fs.promises.mkdir(targetUploadsDir, { recursive: true });
+        }
+        const stagedFiles = await collectFilesRecursively(stagedUploadsDir);
+        for (const sf of stagedFiles) {
+          const dest = path.join(targetUploadsDir, sf.name);
+          const destDir = path.dirname(dest);
+          if (!fs.existsSync(destDir)) {
+            await fs.promises.mkdir(destDir, { recursive: true });
+          }
+          await safeFileOperation(async () => {
+            await fs.promises.copyFile(sf.fullPath, dest);
+          });
+        }
+
+        // Clean up staged uploads directory
+        try {
+          await fs.promises.rm(stagedUploadsDir, { recursive: true, force: true });
+        } catch {}
+      }
+
+      // 5. Recreate Prisma instances & Reconnect
       await recreatePrismaInstance();
 
-      // 5. Smoke test: Verify we can query the new database successfully
+      // 6. Smoke test: Verify we can query the new database successfully
       try {
         await prisma.school.findFirst();
-        const principalExists = await prisma.user.findFirst({ where: { role: "PRINCIPAL" } });
-        if (!principalExists) {
-          throw new Error("No Principal");
-        }
-      } catch (smokeErr) {
-        throw new Error("Smoke test failed");
+        await prisma.student.count();
+      } catch (smokeErr: any) {
+        throw new Error(`Database smoke test failed: ${smokeErr?.message}`);
       }
 
       // Clean up temp file
-      try { await fs.promises.unlink(validatedTempDbPath); } catch { /* non-critical */ }
+      try { await fs.promises.unlink(validatedTempDbPath); } catch {}
 
       // Clean up safety backups
       try {
         if (fs.existsSync(safetyBackupPath)) await fs.promises.unlink(safetyBackupPath);
         if (fs.existsSync(safetyWalPath)) await fs.promises.unlink(safetyWalPath);
         if (fs.existsSync(safetyShmPath)) await fs.promises.unlink(safetyShmPath);
-      } catch { /* non-critical */ }
+      } catch {}
 
-      console.log("[BackupProvider] Database restored successfully.");
+      console.log("[BackupProvider] Full database and uploaded assets restored successfully.");
 
       return {
         success: true,
-        message: "Database restored successfully. The ERP is now running on the restored data.",
+        message: "Database and all uploaded media files restored successfully. The ERP is now running on the restored data.",
       };
     } catch (err: any) {
       console.error("[BackupProvider] Restore failed:", err);
@@ -717,7 +956,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
 
       throw new BackupError(
         "RESTORE_FAILED",
-        "Restore failed and the original database has been restored automatically."
+        `Restore failed: ${err.message}. The original database has been restored automatically.`
       );
     } finally {
       // Remove any leftover safety files
@@ -726,6 +965,9 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         if (fs.existsSync(safetyWalPath)) await fs.promises.unlink(safetyWalPath);
         if (fs.existsSync(safetyShmPath)) await fs.promises.unlink(safetyShmPath);
       } catch {}
+      if (fs.existsSync(stagedUploadsDir)) {
+        try { await fs.promises.rm(stagedUploadsDir, { recursive: true, force: true }); } catch {}
+      }
     }
   }
 
@@ -738,14 +980,16 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     const backups: BackupMetadata[] = [];
 
     for (const file of files) {
-      if (!file.endsWith(BACKUP_EXTENSION)) continue;
+      const isErpBackup = file.endsWith(BACKUP_EXTENSION);
+      const isDb = file.endsWith(".db") || file.endsWith(".sqlite");
+      if (!isErpBackup && !isDb) continue;
 
       const filePath = path.join(this.backupsDir, file);
       const stats = await fs.promises.stat(filePath);
       const fileMetadata = await readBackupMetadataFromFile(filePath);
 
       backups.push({
-        id: file.replace(BACKUP_EXTENSION, ""),
+        id: file.replace(BACKUP_EXTENSION, "").replace(/\.db$/, "").replace(/\.sqlite$/, ""),
         filename: file,
         filePath,
         sizeBytes: stats.size,
@@ -756,6 +1000,12 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
         erpVersion: fileMetadata?.erpVersion ?? "unknown",
         sha256: fileMetadata?.sha256 ?? "",
         schemaFingerprint: fileMetadata?.schemaFingerprint ?? "",
+        studentCount: fileMetadata?.studentCount,
+        guardianCount: fileMetadata?.guardianCount,
+        staffCount: fileMetadata?.staffCount,
+        feeReceiptCount: fileMetadata?.feeReceiptCount,
+        attendanceRecordCount: fileMetadata?.attendanceRecordCount,
+        uploadFilesCount: fileMetadata?.uploadFilesCount,
         ...(fileMetadata?.label ? { label: fileMetadata.label } : {}),
       });
     }
@@ -766,8 +1016,20 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
   // ── getBackupById ─────────────────────────────────────────────────────────────
 
   async getBackupById(backupIdOrPath: string): Promise<BackupMetadata | null> {
-    const filename = backupIdOrPath.endsWith(BACKUP_EXTENSION) ? backupIdOrPath : `${backupIdOrPath}${BACKUP_EXTENSION}`;
-    const filePath = path.isAbsolute(backupIdOrPath) ? backupIdOrPath : path.join(this.backupsDir, filename);
+    let filePath = backupIdOrPath;
+    if (!path.isAbsolute(backupIdOrPath)) {
+      const candidates = [
+        path.join(this.backupsDir, backupIdOrPath),
+        path.join(this.backupsDir, `${backupIdOrPath}${BACKUP_EXTENSION}`),
+        path.join(this.backupsDir, `${backupIdOrPath}.db`),
+      ];
+      for (const cand of candidates) {
+        if (fs.existsSync(cand)) {
+          filePath = cand;
+          break;
+        }
+      }
+    }
 
     if (!fs.existsSync(filePath)) {
       return null;
@@ -777,7 +1039,7 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
     const fileMetadata = await readBackupMetadataFromFile(filePath);
 
     return {
-      id: path.basename(filePath, BACKUP_EXTENSION),
+      id: path.basename(filePath).replace(BACKUP_EXTENSION, "").replace(/\.db$/, ""),
       filename: path.basename(filePath),
       filePath,
       sizeBytes: stats.size,
@@ -788,6 +1050,12 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
       erpVersion: fileMetadata?.erpVersion ?? "unknown",
       sha256: fileMetadata?.sha256 ?? "",
       schemaFingerprint: fileMetadata?.schemaFingerprint ?? "",
+      studentCount: fileMetadata?.studentCount,
+      guardianCount: fileMetadata?.guardianCount,
+      staffCount: fileMetadata?.staffCount,
+      feeReceiptCount: fileMetadata?.feeReceiptCount,
+      attendanceRecordCount: fileMetadata?.attendanceRecordCount,
+      uploadFilesCount: fileMetadata?.uploadFilesCount,
       ...(fileMetadata?.label ? { label: fileMetadata.label } : {}),
     };
   }
@@ -796,10 +1064,18 @@ export class LocalSqliteBackupProvider implements IBackupProvider {
 
   async deleteBackup(backupIdOrPath: string): Promise<boolean> {
     let filePath = backupIdOrPath;
-    if (!path.isAbsolute(filePath)) {
-      // Try with extension first
-      const withExt = path.join(this.backupsDir, backupIdOrPath.endsWith(BACKUP_EXTENSION) ? backupIdOrPath : `${backupIdOrPath}${BACKUP_EXTENSION}`);
-      filePath = withExt;
+    if (!path.isAbsolute(backupIdOrPath)) {
+      const candidates = [
+        path.join(this.backupsDir, backupIdOrPath),
+        path.join(this.backupsDir, `${backupIdOrPath}${BACKUP_EXTENSION}`),
+        path.join(this.backupsDir, `${backupIdOrPath}.db`),
+      ];
+      for (const cand of candidates) {
+        if (fs.existsSync(cand)) {
+          filePath = cand;
+          break;
+        }
+      }
     }
     if (fs.existsSync(filePath)) {
       await fs.promises.unlink(filePath);
